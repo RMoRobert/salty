@@ -45,43 +45,48 @@ struct RecipeNavigationSplitView: View {
     content: {
         if let sidebarItemId = selectedSidebarItemId {
             if sidebarItemId == recipeLibrary._id {
-                List(selection: $selectedRecipeIDs) {
-                    let recipesToList = (searchString == "") ?
-                    AnyRealmCollection(recipeLibrary.recipes) :
-                    AnyRealmCollection(recipeLibrary.recipes.where({
-                        $0.name.contains(searchString, options: [.caseInsensitive, .diacriticInsensitive])
-                    }))
-                    ForEach (recipesToList, id: \._id) { recipe in
-                        NavigationLink(value: recipe) {
-                            RecipeRowView(recipe:  recipe)
-                        }
-                        .contextMenu {
-                            Button(role: .destructive, action: deleteSelectedRecipes) {
-                                Text("Delete")
+                let recipesToList = (searchString == "") ? AnyRealmCollection(recipeLibrary.recipes) : AnyRealmCollection(recipeLibrary.recipes.where({ $0.name.contains(searchString, options: [.caseInsensitive, .diacriticInsensitive]) }))
+                ScrollViewReader { scrollProxy in
+                    List(selection: $selectedRecipeIDs) {
+                        ForEach (recipesToList.sorted(byKeyPath: "name"), id: \._id) { recipe in
+                            NavigationLink(value: recipe) {
+                                RecipeRowView(recipe:  recipe)
                             }
-                            .keyboardShortcut(.delete, modifiers: [.command])
+                            .contextMenu {
+                                Button(role: .destructive, action: deleteSelectedRecipes) {
+                                    Text("Delete")
+                                }
+                                .keyboardShortcut(.delete, modifiers: [.command])
+                            }
+                        }
+                        .onDelete(perform: $recipeLibrary.recipes.remove)
+                        .onMove(perform: $recipeLibrary.recipes.move)
+                    }
+                    .navigationTitle("Recipes")
+                    .toolbar {
+                        Button(role: .destructive, action: deleteSelectedRecipes) {
+                            Label("Delete Recipe", systemImage: "minus")
+                        }
+                        Button(action: {
+                            let newRecipe = Recipe()
+                            $recipeLibrary.recipes.append(newRecipe)
+                            selectedRecipeIDs.removeAll()
+                            selectedRecipeIDs.insert(newRecipe._id)
+                            withAnimation {
+                                // TODO: Why is this not working?
+                                scrollProxy.scrollTo(newRecipe._id)
+                            }
+                        }) {
+                            Label("New Recipe", systemImage: "plus")
+                        }
+                        Button(action: {
+                            openWindow(id: "import-page")
+                        }) {
+                            Label("Import", systemImage: "square.and.arrow.down.on.square")
                         }
                     }
-                    .onDelete(perform: $recipeLibrary.recipes.remove)
-                    .onMove(perform: $recipeLibrary.recipes.move)
+                    .searchable(text: $searchString)
                 }
-                .navigationTitle("Recipes")
-                .toolbar {
-                    Button(role: .destructive, action: deleteSelectedRecipes) {
-                        Label("Delete Recipe", systemImage: "minus")
-                    }
-                    Button(action: {
-                        $recipeLibrary.recipes.append(Recipe())
-                    }) {
-                        Label("New Recipe", systemImage: "plus")
-                    }
-                    Button(action: {
-                            openWindow(id: "import-page")
-                    }) {
-                        Label("Import", systemImage: "square.and.arrow.down.on.square")
-                    }
-                }
-                .searchable(text: $searchString)
             }
             else if let selectedCategory = recipeLibrary.categories.first(where: { $0._id == sidebarItemId }) {
                 // TODO: Clean up, can share some code w/ above?
