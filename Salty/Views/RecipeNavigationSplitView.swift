@@ -16,6 +16,7 @@ struct RecipeNavigationSplitView: View {
     @State private var selectedRecipeIDs = Set<RealmSwift.ObjectId>()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showEditRecipeView = false
+    @State private var showingEditLibCategoriesSheet = false
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -29,15 +30,21 @@ struct RecipeNavigationSplitView: View {
                         Label(category.name, systemImage: "list.bullet.rectangle")
                             .tag(category._id)
                     }
-                    //                    Button("Edit") {
-                    //
-                    //                    }
-                    //                    .frame(alignment: .trailing)
-                    //                    .buttonStyle(.plain)
-                    //                    .font(.footnote)
+                    //                        Button("Edit") {
+                    //                            showingEditLibCategoriesSheet = true
+                    //                        }
+                    //                        .frame(alignment: .trailing)
+                    //                        .buttonStyle(.plain)
+                    //                        .font(.footnote)
+                    //                        .sheet(isPresented: $showingEditLibCategoriesSheet) {
+                    //                            LibraryCategoriesEditView()
+                    //                                .presentationDetents([.large])
+                    //                        }
                 }
                 Section("Smart Lists") {
+                    //ForEach(recipeLibrary.smartLists.sorted(byKeyPath: "name")) { smartList in
                     Label("Coming Soon!", systemImage: "doc.text.magnifyingglass")
+                    //}
                 }
             }
             //.listStyle(.sidebar)
@@ -158,20 +165,19 @@ struct RecipeNavigationSplitView: View {
     }
     .navigationTitle("Recipes")
     }
-      
+    
     func deleteSelectedRecipes() -> () {
         // TODO: there has to be a better way?
         let ids = selectedRecipeIDs.map { $0 }
-            ids.forEach { theId in
-                if let theIdx = recipeLibrary.recipes.firstIndex(where: {
-                    $0._id == theId
-                }) {
-                    $recipeLibrary.recipes.remove(at: theIdx)
-                }
+        ids.forEach { theId in
+            if let theIdx = recipeLibrary.recipes.firstIndex(where: {
+                $0._id == theId
+            }) {
+                $recipeLibrary.recipes.remove(at: theIdx)
             }
+        }
     }
 }
-    
 
 struct RecipeNavigationSplitView_Preview: PreviewProvider {
     static var previews: some View {

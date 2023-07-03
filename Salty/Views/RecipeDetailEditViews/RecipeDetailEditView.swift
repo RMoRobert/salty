@@ -50,6 +50,7 @@ struct RecipeDetailEditView: View {
                 Text("Information")
                     .font(.headline)
             }
+            Divider()
             
             Section {
                 IngredientsEditView(recipe: recipe)
@@ -60,17 +61,19 @@ struct RecipeDetailEditView: View {
                 Text("Ingredients")
                     .font(.headline)
             }
+            Divider()
         
             Section {
                 DirectionsEditView(recipe: recipe)
                 //DirectionsEditViewOLD(recipe: recipe)
-                    .frame(minHeight: 200)
+                    .frame(minHeight: 350)
                     .padding()
             }
             header: {
                 Text("Directions")
                     .font(.headline)
             }
+            Divider()
         
             Section {
                 NotesEditView(recipe: recipe)
@@ -80,6 +83,7 @@ struct RecipeDetailEditView: View {
                 Text("Notes")
                     .font(.headline)
             }
+            Divider()
         
             Section {
                 PreparationTimesEditView(recipe: recipe)
