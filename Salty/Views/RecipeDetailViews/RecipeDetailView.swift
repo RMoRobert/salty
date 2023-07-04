@@ -48,11 +48,16 @@ struct RecipeDetailView: View {
                                     RatingView(rating: recipe.rating)
                                         .padding(0.25)
                                 }
-                                
-                            }                            
+                            }
+                            else {
+                                    Text("Rating: *(not rated)*")
+                            }
                             if (recipe.difficulty != .notSet) {
-                                RecipeDifficultyView(difficulty: recipe.difficulty)
-                                    .frame(width: 200)
+                                Divider()
+                                HStack{
+                                    Text("Difficulty:")
+                                    RecipeDifficultyView(difficulty: recipe.difficulty)
+                                }
                             }
                         }
                     }
@@ -77,7 +82,7 @@ struct RecipeDetailView: View {
                     }
 //                    header: {
 //                        Text("Preparation Time")
-//                            .font(.headline)
+//                    .font(.title3)
 //                    }
                 }
                 
@@ -96,12 +101,22 @@ struct RecipeDetailView: View {
             
             Section {
                 layoutHorV {
-                    RecipeIngredientView(recipe: recipe)
-                        .frame(minHeight: 50)
-                        .padding()
-                    RecipeDirectionView(recipe: recipe)
-                        .frame(minHeight: 50)
-                        .padding()
+                    VStack{
+                        Text("Ingredients")
+                            .font(.title3)
+                            .padding()
+                        RecipeIngredientView(recipe: recipe)
+                            .frame(minHeight: 50)
+                            .padding()
+                    }
+                    VStack{
+                        Text("Directions")
+                            .font(.title3)
+                            .padding()
+                        RecipeDirectionView(recipe: recipe)
+                            .frame(minHeight: 50)
+                            .padding()
+                    }
                 }
             }
             
@@ -117,7 +132,7 @@ struct RecipeDetailView: View {
                     }
                     header: {
                         Text("Notes")
-                            .font(.headline)
+                            .font(.title3)
                     }
                 }
         }
