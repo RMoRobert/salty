@@ -43,10 +43,16 @@ struct RecipeDetailView: View {
                         
                         layoutHorV {
                             if (recipe.rating != .notSet) {
-                                Text("Rating: \(recipe.rating.stringValue())/5")
-                            }
+                                VStack{
+                                    Text("Rating:")
+                                    RatingView(rating: recipe.rating)
+                                        .padding(0.25)
+                                }
+                                
+                            }                            
                             if (recipe.difficulty != .notSet) {
-                                Text("Difficulty: \(recipe.difficulty.stringValue().localizedCapitalized)")
+                                RecipeDifficultyView(difficulty: recipe.difficulty)
+                                    .frame(width: 200)
                             }
                         }
                     }

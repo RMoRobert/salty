@@ -11,7 +11,8 @@ import RealmSwift
 @main
 struct ContentView: SwiftUI.App {
     let realmConfig = Realm.Configuration(
-        fileURL: FileManager.defaultSaltyLibraryPath
+        fileURL: FileManager.defaultSaltyLibraryPath,
+        schemaVersion: 2
     )
     var body: some Scene {
         // Main view
@@ -38,7 +39,6 @@ struct ContentView: SwiftUI.App {
 }
 
 struct MainVew: View {
-    @State var searchFilter: String = ""
     // Implicitly use the default realm's objects(RecipeLibrary.self)
     @ObservedResults(RecipeLibrary.self) var recipeLibraries
 

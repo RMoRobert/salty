@@ -27,7 +27,7 @@ struct RecipeNavigationSplitView: View {
                 }
                 Section("Categories") {
                     ForEach(recipeLibrary.categories.sorted(byKeyPath: "name")) { category in
-                        Label(category.name, systemImage: "list.bullet.rectangle")
+                        Label(category.name, systemImage: "doc.plaintext")
                             .tag(category._id)
                     }
                     //                        Button("Edit") {
@@ -45,6 +45,19 @@ struct RecipeNavigationSplitView: View {
                     //ForEach(recipeLibrary.smartLists.sorted(byKeyPath: "name")) { smartList in
                     Label("Coming Soon!", systemImage: "doc.text.magnifyingglass")
                     //}
+                }
+                Section("Shopping Lists") {
+                    ForEach(recipeLibrary.shoppingLists.sorted(byKeyPath: "name")) { shoppingList in
+                        Label(shoppingList.name, systemImage: "list.bullet.rectangle")
+                            .tag(shoppingList._id)
+                    }
+                }
+                .contextMenu {
+                    Button(role: .destructive, action: {
+                        addNewShoppingist()
+                    }) {
+                        Text("New List")
+                    }
                 }
             }
             //.listStyle(.sidebar)
@@ -176,6 +189,12 @@ struct RecipeNavigationSplitView: View {
                 $recipeLibrary.recipes.remove(at: theIdx)
             }
         }
+    }
+    
+    func addNewShoppingist() -> () {
+        let sl = ShoppingList()
+        sl.name = "New Shopping List"
+        $recipeLibrary.shoppingLists.append(sl)
     }
 }
 

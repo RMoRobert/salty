@@ -42,8 +42,9 @@ struct DirectionsEditView: View {
                 .onDelete(perform: $recipe.directions.remove)
                 .onMove(perform: $recipe.directions.move)
             }
+            #if os(macOS)
             .listStyle(.inset(alternatesRowBackgrounds: true))
-            
+            #endif
             
             VStack {
                 if shouldShowDetailView(for: selectedDirectionIDs) {

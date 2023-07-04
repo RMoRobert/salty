@@ -16,4 +16,5 @@ final class RecipeLibrary: Object, ObjectKeyIdentifiable {
     /// The collection of Items in this group.
     @Persisted var recipes = List<Recipe>()
     @Persisted var categories = List<Category>()
+    @Persisted var shoppingLists = List<ShoppingList>()
 }

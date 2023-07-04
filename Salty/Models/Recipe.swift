@@ -30,7 +30,7 @@ final class Recipe: EmbeddedObject, ObjectKeyIdentifiable {
     @Persisted var preparationTimes = List<PreparationTime>()
     @Persisted var categories = List<Category>()
     
-    enum Difficulty: Int, PersistableEnum, CaseIterable {
+    enum Difficulty: Int, PersistableEnum, CaseIterable, Identifiable {
         case notSet, easy, somewhatEasy, medium, slightlyDifficult, difficult
         
         // for use with SwiftUI sliders:
@@ -43,6 +43,10 @@ final class Recipe: EmbeddedObject, ObjectKeyIdentifiable {
         }
         var asIndex: Double {
             return Double(self.rawValue)
+        }
+        
+        var id:  Int {
+            return self.rawValue
         }
         
         func stringValue() -> String {
@@ -63,7 +67,8 @@ final class Recipe: EmbeddedObject, ObjectKeyIdentifiable {
         }
     }
     
-    enum Rating: Int, PersistableEnum, CaseIterable {
+    enum Rating: Int, PersistableEnum, CaseIterable, Identifiable {
+        
         case notSet, one, two, three, four, five
         
         // for use with SwiftUI sliders:
@@ -74,6 +79,11 @@ final class Recipe: EmbeddedObject, ObjectKeyIdentifiable {
                 self = .notSet
             }
         }
+        
+        var id:  Int {
+            return self.rawValue
+        }
+        
         var asIndex: Double {
             return Double(self.rawValue)
         }
