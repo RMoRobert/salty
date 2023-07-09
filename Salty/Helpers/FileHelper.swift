@@ -45,16 +45,25 @@ extension FileManager {
             return nil
         }
         var wasStale = false
+        #if os(macOS)
         guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], bookmarkDataIsStale: &wasStale) else {
             print("Unable to resolve databaseLocation")
             return nil
         }
+        #else
+        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
+            print("Unable to resolve databaseLocation")
+            return nil
+        }
+        #endif
         if (wasStale) {
             print("databaseLocation was stale; TODO: update")
             // UserDefaults.standard.set(databaseLocation.absoluteString, forKey: "databaseLocation")
         }
 //        try? FileManager.default.createDirectory(at: databaseLocation, withIntermediateDirectories: true)
+        #if os(macOS)
         databaseLocation.startAccessingSecurityScopedResource()
+        #endif
         // defer { baseURL!.stopAccessingSecurityScopedResource() }
         print("databaseLocation = \(databaseLocation.absoluteString)")
         return databaseLocation

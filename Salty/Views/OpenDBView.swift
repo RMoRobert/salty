@@ -49,14 +49,23 @@ struct OpenDBView: View {
                     // TODO
                     isOpening = true
                     print("Starting database open...")
-                    //folder.startAccessingSecurityScopedResource()
-                    if let urlBookmarkData = try? folder.bookmarkData(options: [.withSecurityScope]) {
-                        
-                        UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
+                    #if os(macOS)
+                    if let urlBookmarkData = try?
+                        folder.bookmarkData(options: [.withSecurityScope]) {
+                         UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
                     }
                     else {
                         print("Unable to save bookmark for database path.")
                     }
+                    #else
+                    if let urlBookmarkData = try?
+                        folder.bookmarkData() {
+                         UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
+                    }
+                    else {
+                        print("Unable to save bookmark for database path.")
+                    }
+                    #endif
                     isOpening = false
                     hasOpened = true
                 }
