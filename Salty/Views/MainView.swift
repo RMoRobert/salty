@@ -10,10 +10,14 @@ import RealmSwift
 
 @main
 struct ContentView: SwiftUI.App {
+    @AppStorage("databaseLocation") var databaseLocation: URL?
+    
     let realmConfig = Realm.Configuration(
-        fileURL: FileManager.defaultSaltyLibraryPath,
+        fileURL: FileManager.saltyLibraryPath,
         schemaVersion: 2
     )
+    
+    
     var body: some Scene {
         // Main view
         WindowGroup {
@@ -32,6 +36,12 @@ struct ContentView: SwiftUI.App {
         // "Import" window
         WindowGroup(id: "import-page") {
             ImportView()
+                .environment(\.realmConfiguration, realmConfig)
+                .frame(idealWidth: 400)
+        }
+        // "Open Database" window
+        WindowGroup(id: "open-db-page") {
+            OpenDBView()
                 .environment(\.realmConfiguration, realmConfig)
                 .frame(idealWidth: 400)
         }

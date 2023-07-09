@@ -137,6 +137,9 @@ struct RecipeDetailView: View {
                 }
         }
         .padding()
+        .onDisappear {
+            print("RecipeDetailView disappeared!")
+        }
 //        .headerProminence(.standard)
 //        .navigationTitle(recipe.name)
     }

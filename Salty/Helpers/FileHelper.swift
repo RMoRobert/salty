@@ -37,26 +37,34 @@ extension FileManager {
             .appendingPathComponent(saltyImageFolderName, isDirectory: true)
     }
 
-//    static var customSaltyLibraryFullPath: URL {
-//        var baseURL: URL?
-//        var wasStale = false
-//        if let recipeDBBookmark = UserDefaults.standard.data(forKey: "RecipeDBBookmark") {
-//            try? baseURL = URL(resolvingBookmarkData: recipeDBBookmark, options: [.withoutUI, .withSecurityScope], bookmarkDataIsStale: &wasStale)
-//            if (wasStale) {
-//                if let baseURL = baseURL {
-//                    UserDefaults.standard.set(baseURL.absoluteString, forKey: "recipeDBPathString")
-//                }
-//            }
-//        }
-//        else {
-//            baseURL = defaultSaltyLibraryDirectory
-//        }
-//        try? FileManager.default.createDirectory(at: baseURL!, withIntermediateDirectories: true)
-//        baseURL!.startAccessingSecurityScopedResource()
-//        defer { baseURL!.stopAccessingSecurityScopedResource() }
-//        print("baseURL = \(baseURL?.absoluteString)")
-//        return baseURL!
-//                .appendingPathComponent(dbFileName)
-//                .appendingPathExtension(dbFileExt)
-//    }
+    static var customSaltyLibraryFullPath: URL? {
+        //return nil;
+        //var wasStale = false
+        guard let bookmarkData = UserDefaults.standard.data(forKey: "databaseLocation") else {
+            print("No databaseLocation; returning")
+            return nil
+        }
+        var wasStale = false
+        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], bookmarkDataIsStale: &wasStale) else {
+            print("Unable to resolve databaseLocation")
+            return nil
+        }
+        if (wasStale) {
+            print("databaseLocation was stale; TODO: update")
+            // UserDefaults.standard.set(databaseLocation.absoluteString, forKey: "databaseLocation")
+        }
+//        try? FileManager.default.createDirectory(at: databaseLocation, withIntermediateDirectories: true)
+        databaseLocation.startAccessingSecurityScopedResource()
+        // defer { baseURL!.stopAccessingSecurityScopedResource() }
+        print("databaseLocation = \(databaseLocation.absoluteString)")
+        return databaseLocation
+                .appendingPathComponent(dbFileName)
+                .appendingPathExtension(dbFileExt)
+    }
+    
+    static var saltyLibraryPath: URL {
+        let path = customSaltyLibraryFullPath ?? defaultSaltyLibraryPath
+        print("Opening database at path: \(path)")
+        return path
+    }
 }

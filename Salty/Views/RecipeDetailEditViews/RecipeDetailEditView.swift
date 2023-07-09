@@ -54,7 +54,7 @@ struct RecipeDetailEditView: View {
             
             Section {
                 IngredientsEditView(recipe: recipe)
-                    .frame(minHeight: 50)
+                    .frame(minHeight: 200)
                     .padding()
             }
             header: {

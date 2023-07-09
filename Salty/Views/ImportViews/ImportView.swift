@@ -23,7 +23,7 @@ struct ImportView: View {
                 else {
                     Text("Import from:")
                 }
-                Button("Choose File") {  showingImportFilePicker.toggle() }
+                Button("Choose File…") {  showingImportFilePicker.toggle() }
                     .fileImporter(
                         isPresented: $showingImportFilePicker,
                         allowedContentTypes: [.data]

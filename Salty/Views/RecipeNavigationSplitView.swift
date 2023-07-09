@@ -84,6 +84,18 @@ struct RecipeNavigationSplitView: View {
                     }
                     .navigationTitle("Recipes")
                     .toolbar {
+                        Menu(content: {
+                            Button(action: {
+                                openWindow(id: "open-db-page")
+                            }) {
+                                Label("Open Database…", systemImage: "square.and.arrow.down.fill")
+                            }
+                            Button(action: {
+                                openWindow(id: "import-page")
+                            }) {
+                                Label("Import…", systemImage: "square.and.arrow.down.on.square")
+                            }
+                        }, label: {Label("More", systemImage: "ellipsis.circle")})
                         Button(role: .destructive, action: deleteSelectedRecipes) {
                             Label("Delete Recipe", systemImage: "minus")
                         }
@@ -98,11 +110,6 @@ struct RecipeNavigationSplitView: View {
                             }
                         }) {
                             Label("New Recipe", systemImage: "plus")
-                        }
-                        Button(action: {
-                            openWindow(id: "import-page")
-                        }) {
-                            Label("Import", systemImage: "square.and.arrow.down.on.square")
                         }
                     }
                     .searchable(text: $searchString)
