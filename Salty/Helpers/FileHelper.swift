@@ -21,8 +21,34 @@ extension FileManager {
     static let defaultSaltyLibraryDirectory = FileManager.getDocumentsDirectory()
         .appendingPathComponent(folderName, isDirectory: true)
         .appendingPathExtension(folderBundleExt)
+    
+    static var customSaltyLibraryDirectory: URL? {
+        guard let bookmarkData = UserDefaults.standard.data(forKey: "databaseLocation") else {
+            print("No databaseLocation; returning")
+            return nil
+        }
+        var wasStale = false
+    #if os(macOS)
+        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], bookmarkDataIsStale: &wasStale) else {
+            print("Unable to resolve databaseLocation")
+            return nil
+        }
+    #else
+        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
+            print("Unable to resolve databaseLocation")
+            return nil
+        }
+    #endif
+        if (wasStale) {
+            print("databaseLocation was stale; TODO: update")
+            //UserDefaults.standard.set(databaseLocation.absoluteString, forKey: "databaseLocation")
+        }
+        return databaseLocation
+    }
+    
+    static let saltyLibraryDirectory = customSaltyLibraryDirectory ?? defaultSaltyLibraryDirectory
 
-    static var defaultSaltyLibraryPath: URL {
+    static var defaultSaltyLibraryFullPath: URL {
         let libDir = defaultSaltyLibraryDirectory
         try? FileManager.default.createDirectory(at: libDir, withIntermediateDirectories: true)
         return libDir
@@ -33,46 +59,29 @@ extension FileManager {
     static let saltyImageFolderName = "images"
     
     static var saltyImageFolderUrl: URL {
-        return defaultSaltyLibraryDirectory
+        return saltyLibraryDirectory
             .appendingPathComponent(saltyImageFolderName, isDirectory: true)
     }
 
     static var customSaltyLibraryFullPath: URL? {
-        //return nil;
-        //var wasStale = false
-        guard let bookmarkData = UserDefaults.standard.data(forKey: "databaseLocation") else {
-            print("No databaseLocation; returning")
-            return nil
-        }
-        var wasStale = false
-        #if os(macOS)
-        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], bookmarkDataIsStale: &wasStale) else {
-            print("Unable to resolve databaseLocation")
-            return nil
-        }
-        #else
-        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
-            print("Unable to resolve databaseLocation")
-            return nil
-        }
-        #endif
-        if (wasStale) {
-            print("databaseLocation was stale; TODO: update")
-            // UserDefaults.standard.set(databaseLocation.absoluteString, forKey: "databaseLocation")
-        }
-//        try? FileManager.default.createDirectory(at: databaseLocation, withIntermediateDirectories: true)
+        let databaseLocation = saltyLibraryDirectory
         #if os(macOS)
         databaseLocation.startAccessingSecurityScopedResource()
         #endif
         // defer { baseURL!.stopAccessingSecurityScopedResource() }
         print("databaseLocation = \(databaseLocation.absoluteString)")
-        return databaseLocation
+        var fullLocation = databaseLocation
                 .appendingPathComponent(dbFileName)
                 .appendingPathExtension(dbFileExt)
+        if !FileManager.default.fileExists(atPath: fullLocation.path) {
+            print("Custom database specified but not found; revering to default")
+            fullLocation = defaultSaltyLibraryFullPath
+        }
+        return fullLocation
     }
     
-    static var saltyLibraryPath: URL {
-        let path = customSaltyLibraryFullPath ?? defaultSaltyLibraryPath
+    static var saltyLibraryFullPath: URL {
+        let path = customSaltyLibraryFullPath ?? defaultSaltyLibraryFullPath
         print("Opening database at path: \(path)")
         return path
     }

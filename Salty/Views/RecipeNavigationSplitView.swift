@@ -15,8 +15,11 @@ struct RecipeNavigationSplitView: View {
     @State private var selectedSidebarItemId: RealmSwift.ObjectId?
     @State private var selectedRecipeIDs = Set<RealmSwift.ObjectId>()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    
     @State private var showEditRecipeView = false
     @State private var showingEditLibCategoriesSheet = false
+    @State private var showingOpenDBSheet = false
+    @State private var showingImportRecipesSheet = false
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -69,9 +72,9 @@ struct RecipeNavigationSplitView: View {
                 ScrollViewReader { scrollProxy in
                     List(selection: $selectedRecipeIDs) {
                         ForEach (recipesToList.sorted(byKeyPath: "name"), id: \._id) { recipe in
-                            NavigationLink(value: recipe) {
+                            //NavigationLink(value: recipe) {
                                 RecipeRowView(recipe:  recipe)
-                            }
+                            //}
                             .contextMenu {
                                 Button(role: .destructive, action: deleteSelectedRecipes) {
                                     Text("Delete")
@@ -85,20 +88,21 @@ struct RecipeNavigationSplitView: View {
                     .navigationTitle("Recipes")
                     .toolbar {
                         Menu(content: {
-                            Button(action: {
-                                openWindow(id: "open-db-page")
-                            }) {
-                                Label("Open Database…", systemImage: "square.and.arrow.down.fill")
+                            
+                            Button("Open Database…") {
+                                //openWindow(id: "open-db-page")
+                                showingOpenDBSheet.toggle()
                             }
-                            Button(action: {
-                                openWindow(id: "import-page")
-                            }) {
-                                Label("Import…", systemImage: "square.and.arrow.down.on.square")
+                            Button("Import Recipes…") {
+                                showingImportRecipesSheet.toggle()
                             }
+                            
                         }, label: {Label("More", systemImage: "ellipsis.circle")})
+                        
                         Button(role: .destructive, action: deleteSelectedRecipes) {
                             Label("Delete Recipe", systemImage: "minus")
                         }
+                        
                         Button(action: {
                             let newRecipe = Recipe()
                             $recipeLibrary.recipes.append(newRecipe)
@@ -113,6 +117,12 @@ struct RecipeNavigationSplitView: View {
                         }
                     }
                     .searchable(text: $searchString)
+                    .sheet(isPresented: $showingImportRecipesSheet) {
+                        ImportView()
+                    }
+                    .sheet(isPresented: $showingOpenDBSheet) {
+                        OpenDBView()
+                    }
                 }
             }
             else if let selectedCategory = recipeLibrary.categories.first(where: { $0._id == sidebarItemId }) {

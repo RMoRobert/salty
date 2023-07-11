@@ -13,7 +13,7 @@ struct ContentView: SwiftUI.App {
     @AppStorage("databaseLocation") var databaseLocation: URL?
     
     let realmConfig = Realm.Configuration(
-        fileURL: FileManager.saltyLibraryPath,
+        fileURL: FileManager.saltyLibraryFullPath,
         schemaVersion: 2
     )
     

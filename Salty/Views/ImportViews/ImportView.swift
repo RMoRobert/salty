@@ -10,6 +10,7 @@ import RealmSwift
 
 struct ImportView: View {
     @ObservedResults(RecipeLibrary.self) var recipeLibraries
+    @Environment(\.dismiss) private var dismiss
     @State private var showingImportFilePicker = false
     @State private var selectedFileUrl: URL?
     @State private var isImporting = false
@@ -19,9 +20,11 @@ struct ImportView: View {
             VStack {
                 if let importUrl = selectedFileUrl?.relativePath {
                     Text("Import from: \(importUrl)")
+                        .padding()
                 }
                 else {
                     Text("Import from:")
+                        .padding()
                 }
                 Button("Choose File…") {  showingImportFilePicker.toggle() }
                     .fileImporter(
@@ -39,6 +42,9 @@ struct ImportView: View {
             }
             VStack {
                 Text("Select your MacGourgmet (.mgourmet) export file above, then select \"Import\" below to start importing into the current Salty recipe library.")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(4)
+                    .padding()
             }
             Spacer()
             if let file = selectedFileUrl {
@@ -67,7 +73,14 @@ struct ImportView: View {
             }
             else {
                 Text("Select file above to import.")
+                    .padding()
             }
+            
+            Button("Dismiss") {
+               dismiss()
+            }
+            .buttonStyle(.borderless)
+            
         }
         .padding()
         .frame(idealWidth: 400, maxWidth: 500, idealHeight: 300)
