@@ -11,7 +11,7 @@ import RealmSwift
 final class ShoppingListItem: EmbeddedObject, ObjectKeyIdentifiable {
     @Persisted var _id: ObjectId
     /// The backlink to the `ShoppingList` this item is a part of.
-    @Persisted(originProperty: "items") var recipeLibrary: LinkingObjects<ShoppingList>
+    @Persisted(originProperty: "items") var shoppingList: LinkingObjects<ShoppingList>
     @Persisted var name = ""
     @Persisted var notes = ""
 }

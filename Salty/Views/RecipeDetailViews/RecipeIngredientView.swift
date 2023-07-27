@@ -20,6 +20,7 @@ struct RecipeIngredientView: View {
                 else {
                     let ingText = "\(ingredient.quantity) \(ingredient.name) \(ingredient.notes)".trimmingCharacters(in: .whitespacesAndNewlines)
                     Text(ingText)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer().frame(maxHeight: 5)
                 }
             }

@@ -101,7 +101,7 @@ struct RecipeDetailView: View {
             
             Section {
                 layoutHorV {
-                    VStack{
+                    VStack {
                         Text("Ingredients")
                             .font(.title3)
                             .padding()
@@ -109,7 +109,7 @@ struct RecipeDetailView: View {
                             .frame(minHeight: 50)
                             .padding()
                     }
-                    VStack{
+                    VStack {
                         Text("Directions")
                             .font(.title3)
                             .padding()
@@ -127,6 +127,7 @@ struct RecipeDetailView: View {
                                 Text(note.name)
                                     .fontWeight(.semibold)
                                 Text(note.text)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }

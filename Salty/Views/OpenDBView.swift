@@ -15,6 +15,7 @@ struct OpenDBView: View {
     @State private var hasSelected = false
     @State private var isOpening = false
     @State private var hasOpened = false
+    @State private var currentLocation = FileManager.saltyLibraryDirectory
     
     var body: some View {
         VStack {
@@ -102,6 +103,8 @@ struct OpenDBView: View {
             }
             
             VStack {
+                Text("Current location: \(currentLocation.relativePath)")
+                    .font(.footnote)
                 Button("Revert to default location") {
                     UserDefaults.standard.removeObject(forKey: "databaseLocation")
                     selectedUrl = nil

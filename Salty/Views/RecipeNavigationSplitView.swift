@@ -2,13 +2,13 @@
 //  RecipeNavigationSplitView.swift
 //  Salty
 //
-//  Created by Robert on 10/25/22.
+//  Created by Robert on 10/25/22, re-creaated 7/24/23
 //
 
 import SwiftUI
 import RealmSwift
 
-struct RecipeNavigationSplitView: View {
+struct RecipeNavigationSplitViewNEW: View {
     @ObservedRealmObject var recipeLibrary: RecipeLibrary
     @Environment(\.openWindow) private var openWindow
     @State private var searchString = ""
@@ -24,174 +24,51 @@ struct RecipeNavigationSplitView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $selectedSidebarItemId) {
-                Section("Library") {
+                // Library:
+                Section {
                     Label("All Recipes", systemImage: "book")
                         .tag(recipeLibrary._id)
                 }
-                Section("Categories") {
+                header: {
+                    Text("Library")
+                }
+                // Categories:
+                Section {
                     ForEach(recipeLibrary.categories.sorted(byKeyPath: "name")) { category in
                         Label(category.name, systemImage: "doc.plaintext")
                             .tag(category._id)
                     }
-                    //                        Button("Edit") {
-                    //                            showingEditLibCategoriesSheet = true
-                    //                        }
-                    //                        .frame(alignment: .trailing)
-                    //                        .buttonStyle(.plain)
-                    //                        .font(.footnote)
-                    //                        .sheet(isPresented: $showingEditLibCategoriesSheet) {
-                    //                            LibraryCategoriesEditView()
-                    //                                .presentationDetents([.large])
-                    //                        }
                 }
-                Section("Smart Lists") {
-                    //ForEach(recipeLibrary.smartLists.sorted(byKeyPath: "name")) { smartList in
-                    Label("Coming Soon!", systemImage: "doc.text.magnifyingglass")
-                    //}
+                header: {
+                    Text("Categories")
                 }
-                Section("Shopping Lists") {
+                // Smart Lists:
+                Section {
+                    Label("Coming Soon", systemImage: "doc.text.magnifyingglass")
+                    }
+                header: {
+                    Text("Smart Lists")
+                }
+                // Shopping Lists
+                Section {
                     ForEach(recipeLibrary.shoppingLists.sorted(byKeyPath: "name")) { shoppingList in
                         Label(shoppingList.name, systemImage: "list.bullet.rectangle")
                             .tag(shoppingList._id)
                     }
                 }
-                .contextMenu {
-                    Button(role: .destructive, action: {
-                        addNewShoppingist()
-                    }) {
-                        Text("New List")
-                    }
+                header: {
+                    Text("Shopping Lists")
                 }
             }
-            //.listStyle(.sidebar)
+            .listStyle(.sidebar)
         }
     content: {
-        if let sidebarItemId = selectedSidebarItemId {
-            if sidebarItemId == recipeLibrary._id {
-                let recipesToList = (searchString == "") ? AnyRealmCollection(recipeLibrary.recipes) : AnyRealmCollection(recipeLibrary.recipes.where({ $0.name.contains(searchString, options: [.caseInsensitive, .diacriticInsensitive]) }))
-                ScrollViewReader { scrollProxy in
-                    List(selection: $selectedRecipeIDs) {
-                        ForEach (recipesToList.sorted(byKeyPath: "name"), id: \._id) { recipe in
-                            //NavigationLink(value: recipe) {
-                                RecipeRowView(recipe:  recipe)
-                            //}
-                            .contextMenu {
-                                Button(role: .destructive, action: deleteSelectedRecipes) {
-                                    Text("Delete")
-                                }
-                                .keyboardShortcut(.delete, modifiers: [.command])
-                            }
-                        }
-                        .onDelete(perform: $recipeLibrary.recipes.remove)
-                        .onMove(perform: $recipeLibrary.recipes.move)
-                    }
-                    .navigationTitle("Recipes")
-                    .toolbar {
-                        Menu(content: {
-                            
-                            Button("Open Database…") {
-                                //openWindow(id: "open-db-page")
-                                showingOpenDBSheet.toggle()
-                            }
-                            Button("Import Recipes…") {
-                                showingImportRecipesSheet.toggle()
-                            }
-                            
-                        }, label: {Label("More", systemImage: "ellipsis.circle")})
-                        
-                        Button(role: .destructive, action: deleteSelectedRecipes) {
-                            Label("Delete Recipe", systemImage: "minus")
-                        }
-                        
-                        Button(action: {
-                            let newRecipe = Recipe()
-                            $recipeLibrary.recipes.append(newRecipe)
-                            selectedRecipeIDs.removeAll()
-                            selectedRecipeIDs.insert(newRecipe._id)
-                            withAnimation {
-                                // TODO: Why is this not working?
-                                scrollProxy.scrollTo(newRecipe._id)
-                            }
-                        }) {
-                            Label("New Recipe", systemImage: "plus")
-                        }
-                    }
-                    .searchable(text: $searchString)
-                    .sheet(isPresented: $showingImportRecipesSheet) {
-                        ImportView()
-                    }
-                    .sheet(isPresented: $showingOpenDBSheet) {
-                        OpenDBView()
-                    }
-                }
-            }
-            else if let selectedCategory = recipeLibrary.categories.first(where: { $0._id == sidebarItemId }) {
-                // TODO: Clean up, can share some code w/ above?
-                List(selection: $selectedRecipeIDs) {
-                    ForEach (selectedCategory.recipes, id: \._id) { recipe in
-                        NavigationLink(value: recipe) {
-                            RecipeRowView(recipe:  recipe)
-                        }
-                        .contextMenu {
-                            Button(role: .destructive, action: deleteSelectedRecipes) {
-                                Text("Delete")
-                            }
-                            .keyboardShortcut(.delete, modifiers: [.command])
-                        }
-                    }
-                    .onDelete(perform: $recipeLibrary.recipes.remove)
-                    .onMove(perform: $recipeLibrary.recipes.move)
-                }
-                .navigationTitle("Recipes")
-                .toolbar {
-                    Button(role: .destructive, action: deleteSelectedRecipes) {
-                        Label("Delete Recipe", systemImage: "minus")
-                    }
-                    Button(action: {
-                        $recipeLibrary.recipes.append(Recipe())
-                    }) {
-                        Label("New Recipe", systemImage: "plus")
-                    }
-                }
-            }
-            else {
-                Text("something else selected?")
-            }
-        }
-        else {
-            Text("No category/list selected")
-                .foregroundStyle(.tertiary)
-        }
+        Text("No category/list selected")
+            .foregroundStyle(.tertiary)
     }
     detail: {
-        // TODO: better multiple selection? (show stack?)
-        VStack {
-            //            if let selectedRecipe = selectedRecipes.first  {
-            if let selectedRecipe = recipeLibrary.recipes.first(where: { $0._id == selectedRecipeIDs.first })  {
-                if !self.showEditRecipeView {
-                    RecipeDetailView(recipe: selectedRecipe)
-                    //RecipeDetailHTMLView(recipe: selectedRecipe)
-                        .toolbar {
-                            Button("Edit") {
-                                self.showEditRecipeView = true
-                            }
-                        }
-                }
-                else {
-                    RecipeDetailEditView(recipe: selectedRecipe)
-                        .toolbar {
-                            Button("End Edit") {
-                                self.showEditRecipeView = false
-                            }
-                        }
-                }
-            }
-            else {
-                Text("No recipe selected")
-                    .foregroundStyle(.tertiary)
-                    .font(.title)
-            }
-        }
+        Text("No recipe selected")
+            .foregroundStyle(.tertiary)
     }
     .navigationTitle("Recipes")
     }
@@ -215,10 +92,10 @@ struct RecipeNavigationSplitView: View {
     }
 }
 
-struct RecipeNavigationSplitView_Preview: PreviewProvider {
+struct RecipeNavigationSplitViewNEW_Preview: PreviewProvider {
     static var previews: some View {
         let realm = RecipeLibrary.previewRealm
         let lib = realm.objects(RecipeLibrary.self)        
-        RecipeNavigationSplitView(recipeLibrary: lib.first!)
+        RecipeNavigationSplitViewNEW(recipeLibrary: lib.first!)
     }
 }

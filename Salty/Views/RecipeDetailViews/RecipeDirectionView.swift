@@ -25,6 +25,7 @@ struct RecipeDirectionView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Text(direction.text)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer().frame(maxHeight: 10)
                         }
                     }

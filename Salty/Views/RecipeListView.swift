@@ -22,9 +22,10 @@
 //                }
 //                .contextMenu {
 //                    Button(role: .destructive, action: {
-//                        if let idx = recipeLibrary.recipes.lastIndex(of: recipe) {
-//                            $recipeLibrary.recipes.remove(at: idx)
-//                        }
+////                        if let idx = recipeLibrary.recipes.lastIndex(of: recipe) {
+////                            $recipeLibrary.recipes.remove(at: idx)
+////                        }
+//                        print("TODO: Delete")
 //                    }){
 //                    Text("Delete")
 //                    }
