@@ -1,5 +1,7 @@
 # Salty
-Salty is a recipe management app written in Swift, primaruly using SwiftUI for the interface and Realm for persistence. The primary focus at the moment is macOS, with efforts made to ensure iOS and iPadOS parity for as many features as possible (but priority is given to macOS for the time being).
+Salty is a recipe management app written in Swift, primarily using SwiftUI for the interface and Realm for persistence. The primary focus at the moment is macOS, with efforts made to ensure iOS and iPadOS parity for as many features as possible (but priority is given to macOS for the time being).
+
+<!-- Some consideration is being given to an additional cross-platform viewer or even similarly-featured solution, perhaps using a tool such as .NET MAUI or Electron. However, there are no concrete plans for such at the moment. -->
 
 Salty is currently **alpha-quality software** and use in a production environment is *not recommended*.
 
