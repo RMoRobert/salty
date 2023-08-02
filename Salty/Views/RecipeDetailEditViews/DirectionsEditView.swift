@@ -77,7 +77,7 @@ struct DirectionsEditView: View {
                 Button("Done") {
                     dismiss()
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.borderless)
             }
             .padding()
         

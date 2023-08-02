@@ -68,7 +68,7 @@ struct RecipeDetailEditView: View {
                     Button("Edit") {
                         showingEditIngredientsSheet.toggle()
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.borderless)
                     .sheet(isPresented: $showingEditIngredientsSheet) {
                         IngredientsEditView(recipe: recipe)
                     }
@@ -89,7 +89,7 @@ struct RecipeDetailEditView: View {
                     Button("Edit") {
                         showingEditDirectionsSheet.toggle()
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.borderless)
                     .sheet(isPresented: $showingEditDirectionsSheet) {
                         DirectionsEditView(recipe: recipe)
                     }

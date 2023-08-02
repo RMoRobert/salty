@@ -70,7 +70,7 @@ struct IngredientsEditView: View {
                 Button("Done") {
                     dismiss()
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.borderless)
             }
             .padding()
         }
