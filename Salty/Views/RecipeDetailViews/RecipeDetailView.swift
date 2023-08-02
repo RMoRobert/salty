@@ -22,10 +22,9 @@ struct RecipeDetailView: View {
     #endif
     
     var body: some View {
-        let layoutHorV = horizontalSizeClass == .regular ? AnyLayout(HStackLayout()) : AnyLayout(VStackLayout())
         ScrollView {
             Section {
-                layoutHorV {
+                HOrVStack {
                     VStack {
                         Text(recipe.name)
                             .font(.title)
@@ -41,7 +40,7 @@ struct RecipeDetailView: View {
                             Text("Yield: \(recipe.yield)")
                         }
                         
-                        layoutHorV {
+                        HOrVStack {
                             if (recipe.rating != .notSet) {
                                 VStack{
                                     Text("Rating:")
@@ -72,7 +71,7 @@ struct RecipeDetailView: View {
                     Section {
                         VStack(alignment: .leading) {
                             ForEach($recipe.preparationTimes) { $prepTime in
-                                layoutHorV {
+                                HOrVStack {
                                     Label(prepTime.name, systemImage: "clock")
                                         .fontWeight(.semibold)
                                     Text(prepTime.timeString)
@@ -86,7 +85,7 @@ struct RecipeDetailView: View {
 //                    }
                 }
                 
-                layoutHorV {
+                HOrVStack {
                     if (recipe.isFavorite) {
                         Label("Favorite", systemImage: "heart.fill")
                     }
@@ -100,7 +99,7 @@ struct RecipeDetailView: View {
             }
             
             Section {
-                layoutHorV {
+                HOrVStack {
                     VStack {
                         Text("Ingredients")
                             .font(.title3)

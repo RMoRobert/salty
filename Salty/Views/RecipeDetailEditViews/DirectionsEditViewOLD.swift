@@ -8,11 +8,9 @@
 import SwiftUI
 import RealmSwift
 
-struct DirectionsEditView: View {
+struct DirectionsEditViewOLD: View {
     @ObservedRealmObject var recipe: Recipe
     @State private var selectedDirectionIDs = Set<UInt64>()
-    @Environment(\.dismiss) private var dismiss
-    
     private func shouldShowDetailView(for selection: Set<UInt64>) -> Bool {
         print("sel = \(selectedDirectionIDs)")
         if let id = selectedDirectionIDs.first, let _ = recipe.directions.first(where: { $0.id == id }) {
@@ -51,7 +49,7 @@ struct DirectionsEditView: View {
             VStack {
                 if shouldShowDetailView(for: selectedDirectionIDs) {
                     let direction = recipe.directions.first(where: {$0.id == selectedDirectionIDs.first! })!
-                    DirectionDetailEditView(direction: direction)
+                    DirectionDetailEditViewOLD(direction: direction)
                 }
                 else {
                     Text("Select direction to edit")
@@ -61,25 +59,19 @@ struct DirectionsEditView: View {
             }
             .frame(minHeight: 60, idealHeight: 100)
             //.padding()
-            VStack {
-                HStack {
-                    Button(role: .destructive, action: { deleteSelectedDirections() } ) {
-                        Label("Delete", systemImage: "trash")
-                            .foregroundColor(.red)
-                    }
-                    //.padding()
-                    
-                    Button(action: { $recipe.directions.append(Direction()) } ) {
-                        Label("Add", systemImage: "plus")
-                    }
-                    //.padding()
+            
+            HStack {
+                Button(role: .destructive, action: { deleteSelectedDirections() } ) {
+                    Label("Delete", systemImage: "trash")
+                        .foregroundColor(.red)
                 }
-                Button("Done") {
-                    dismiss()
+                //.padding()
+                
+                Button(action: { $recipe.directions.append(Direction()) } ) {
+                    Label("Add", systemImage: "plus")
                 }
-                .buttonStyle(.link)
+                //.padding()
             }
-            .padding()
         
                     
             //                    Button(role: .destructive, action: {
@@ -94,8 +86,6 @@ struct DirectionsEditView: View {
 
             
         }
-        .padding()
-        .frame(minWidth: 450, minHeight: 500)
     }
     
     func deleteSelectedDirections() -> () {
@@ -111,7 +101,7 @@ struct DirectionsEditView: View {
     }
 }
 
-struct DirectionDetailEditView: View {
+struct DirectionDetailEditViewOLD: View {
     @ObservedRealmObject var direction: Direction
     
     var body: some View {
@@ -124,11 +114,11 @@ struct DirectionDetailEditView: View {
     }
 }
 
-struct DirectionsEditView_Previews: PreviewProvider {
+struct DirectionsEditViewOLD_Previews: PreviewProvider {
     static var previews: some View {
         let realm = RecipeLibrary.previewRealm
         let rl = realm.objects(RecipeLibrary.self)
         let r = rl.randomElement()!.recipes.randomElement()!
-        DirectionsEditView(recipe: r)
+        DirectionsEditViewOLD(recipe: r)
     }
 }

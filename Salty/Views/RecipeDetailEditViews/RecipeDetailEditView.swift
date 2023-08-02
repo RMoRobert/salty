@@ -11,6 +11,10 @@ import RealmSwift
 struct RecipeDetailEditView: View {
     @ObservedRealmObject var recipe: Recipe
     @State private var showingCategoryPopover = false
+    @State private var showingEditIngredientsSheet = false
+    @State private var showingEditDirectionsSheet = false
+    @Environment(\.dismiss) private var dismiss
+
     
     var body: some View {
         ScrollView {
@@ -53,25 +57,43 @@ struct RecipeDetailEditView: View {
             Divider()
             
             Section {
-                IngredientsEditView(recipe: recipe)
-                    .frame(minHeight: 200)
+                RecipeIngredientView(recipe: recipe)
+                    //.frame(minHeight: 10)
                     .padding()
             }
             header: {
-                Text("Ingredients")
-                    .font(.headline)
+                HStack {
+                    Text("Ingredients")
+                        .font(.headline)
+                    Button("Edit") {
+                        showingEditIngredientsSheet.toggle()
+                    }
+                    .buttonStyle(.link)
+                    .sheet(isPresented: $showingEditIngredientsSheet) {
+                        IngredientsEditView(recipe: recipe)
+                    }
+                }
             }
             Divider()
         
             Section {
-                DirectionsEditView(recipe: recipe)
-                //DirectionsEditViewOLD(recipe: recipe)
-                    .frame(minHeight: 350)
+                RecipeDirectionView(recipe: recipe)
+                //DirectionsEditView(recipe: recipe)
+                    .frame(minHeight: 100)
                     .padding()
             }
             header: {
-                Text("Directions")
-                    .font(.headline)
+                HStack {
+                    Text("Directions")
+                        .font(.headline)
+                    Button("Edit") {
+                        showingEditDirectionsSheet.toggle()
+                    }
+                    .buttonStyle(.link)
+                    .sheet(isPresented: $showingEditDirectionsSheet) {
+                        DirectionsEditView(recipe: recipe)
+                    }
+                }
             }
             Divider()
         

@@ -6,92 +6,114 @@
 //
 
 import SwiftUI
-import Tabler
 import RealmSwift
-
-struct Fruit: Identifiable {
-    var id: String
-    var name: String
-    var weight: Double
-    var color: Color
-}
 
 struct IngredientsEditView: View {
     @ObservedRealmObject var recipe: Recipe
     @State private var selectedIngredientIDs = Set<UInt64>()
+    @Environment(\.dismiss) private var dismiss
     
-       
-    @State private var gridItems: [GridItem] = [
-        GridItem(.flexible(minimum: 35, maximum: 60), alignment: .leading),
-        GridItem(.flexible(minimum: 100), alignment: .leading),
-        GridItem(.flexible(minimum: 40), alignment: .leading)
-    ]
-
-    private typealias Context = TablerContext<Ingredient>
-    typealias BoundValue = Binding<Ingredient>
-
-    private func header(ctx: Binding<Context>) -> some View {
-        LazyVGrid(columns: gridItems) {
-            Text("Qty")
-            Text("Name")
-            Text("Notes")
+    private func shouldShowDetailView(for selection: Set<UInt64>) -> Bool {
+        print("sel = \(selectedIngredientIDs)")
+        if let id = selectedIngredientIDs.first, let _ = recipe.ingredients.first(where: { $0.id == id }) {
+            return true
         }
-        .font(.caption)
-    }
-    
-    private func bRow(ingredient: BoundValue) -> some View {
-        LazyVGrid(columns: gridItems) {
-            Text(ingredient.wrappedValue.quantity)
-            Text(ingredient.wrappedValue.name)
-            Text(ingredient.wrappedValue.notes)
+        else {
+            return false
         }
     }
     
     var body: some View {
-        TablerListMB(header: header,
-                   row: bRow,
-                   results: $recipe.ingredients,
-                   selected: $selectedIngredientIDs)
-        
+        VStack {
+            List(selection: $selectedIngredientIDs) {
+                ForEach(recipe.ingredients, id: \.id) { ingredient in
+                    Text(ingredient.toString())
+                }
+                .onDelete(perform: $recipe.ingredients.remove)
+                .onMove(perform: $recipe.ingredients.move)
+            }
+            #if os(macOS)
+            .listStyle(.inset(alternatesRowBackgrounds: true))
+            #endif
+            
+            VStack {
+                if shouldShowDetailView(for: selectedIngredientIDs) {
+                    let ingredient = recipe.ingredients.first(where: {$0.id == selectedIngredientIDs.first! })!
+                    IngredientDetailEditView(ingredient: ingredient)
+                }
+                else {
+                    Text("Select ingredient to edit")
+                        .foregroundStyle(.secondary)
+                }
+                
+            }
+            .frame(minHeight: 60, idealHeight: 100)
+            //.padding()
+            
+            VStack {
+                HStack {
+                    Button(role: .destructive, action: { deleteSelectedIngredients() } ) {
+                        Label("Delete", systemImage: "trash")
+                            .foregroundColor(.red)
+                    }
+                    //.padding()
+                    
+                    Button(action: {
+                        let newIng = Ingredient()
+                        newIng.name = "New Ingredient"
+                        $recipe.ingredients.append(newIng)
+                    } ) {
+                        Label("Add", systemImage: "plus")
+                    }
+                    //.padding()
+                }
+                Button("Done") {
+                    dismiss()
+                }
+                .buttonStyle(.link)
+            }
+            .padding()
+        }
+        .frame(minWidth: 300, minHeight: 400)
     }
     
-//    func deleteSelectedIngredients() -> () {
-//        // TODO: there has to be a better way?
-//        let ids = selectedIngredientIDs.map { $0 }
-//            ids.forEach { theId in
-//                if let theIdx = recipe.ingredients.firstIndex(where: {
-//                    $0.id == theId
-//                }) {
-//                    $recipe.ingredients.remove(at: theIdx)
-//                }
-//            }
-//    }
+    func deleteSelectedIngredients() -> () {
+        // TODO: there has to be a better way?
+        let ids = selectedIngredientIDs.map { $0 }
+            ids.forEach { theId in
+                if let theIdx = recipe.ingredients.firstIndex(where: {
+                    $0.id == theId
+                }) {
+                    $recipe.ingredients.remove(at: theIdx)
+                }
+            }
+    }
 }
 
-//struct IngredientDetailEditView: View {
-//    @ObservedRealmObject var ingredient: Ingredient
-//    
-//    var body: some View {
-//        VStack {
-//                Toggle(isOn: $ingredient.isCategory) { Text("Category?") }
-//                    .labelsHidden()
-//                if !ingredient.isCategory {
-//                    HStack { // TODO: H or V...
-//                        TextField("Qty", text: $ingredient.quantity)
-//                        TextField("Name", text: $ingredient.name)
-//                        TextField("Notes", text: $ingredient.notes)
-//                        Toggle(isOn: $ingredient.isMain) { Text("Main?") }
-//                            .labelsHidden()
-//                    }
-//                }
-//                else {
-//                    TextField("Name", text: $ingredient.name)
-//                        .gridCellColumns(3)
-//                    Spacer()
-//                }            
-//        }
-//    }
-//}
+struct IngredientDetailEditView: View {
+    @ObservedRealmObject var ingredient: Ingredient
+    
+    var body: some View {
+        VStack {
+                Toggle(isOn: $ingredient.isCategory) { Text("Is Category?") }
+                if !ingredient.isCategory {
+                    HOrVStack {
+                        TextField("Qty", text: $ingredient.quantity)
+                            .frame(idealWidth: 60, maxWidth: 200)
+                        TextField("Name", text: $ingredient.name)
+                        TextField("Notes", text: $ingredient.notes)
+                        Toggle(isOn: $ingredient.isMain) { Text("Main?") }
+                            //.labelsHidden()
+                    }
+                    .padding()
+                }
+                else {
+                    TextField("Name", text: $ingredient.name)
+                        .padding()
+                }
+        }
+    }
+}
 
 struct IngredientsEditView_Previews: PreviewProvider {
     static var previews: some View {
