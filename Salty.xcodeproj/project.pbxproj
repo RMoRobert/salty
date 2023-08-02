@@ -18,7 +18,6 @@
 		D43DD9ED2A2C30AA0077E269 /* DifficultyEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43DD9EC2A2C30AA0077E269 /* DifficultyEditView.swift */; };
 		D43DD9EF2A2C3B630077E269 /* RatingEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43DD9EE2A2C3B630077E269 /* RatingEditView.swift */; };
 		D4471DFF2A532DD500F20097 /* RatingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4471DFE2A532DD500F20097 /* RatingView.swift */; };
-		D44BFA632A71BA1B005DED1F /* Tabler in Frameworks */ = {isa = PBXBuildFile; productRef = D44BFA622A71BA1B005DED1F /* Tabler */; };
 		D44D38752A38DE9100BD7C7C /* DirectionsEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44D38742A38DE9100BD7C7C /* DirectionsEditView.swift */; };
 		D45360402A4A2D4C00D48C19 /* RecipeImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D453603F2A4A2D4C00D48C19 /* RecipeImageView.swift */; };
 		D455282F29EE56900031B539 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D455282E29EE56900031B539 /* MainView.swift */; };
@@ -143,7 +142,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D44BFA632A71BA1B005DED1F /* Tabler in Frameworks */,
 				D455285E29EE57EC0031B539 /* RealmSwift in Frameworks */,
 				D455285C29EE57EC0031B539 /* Realm in Frameworks */,
 				D47A37EE2A1831F90023B548 /* SwiftHtml in Frameworks */,
@@ -360,7 +358,6 @@
 				D455285B29EE57EC0031B539 /* Realm */,
 				D455285D29EE57EC0031B539 /* RealmSwift */,
 				D47A37ED2A1831F90023B548 /* SwiftHtml */,
-				D44BFA622A71BA1B005DED1F /* Tabler */,
 			);
 			productName = Salty;
 			productReference = D455282929EE56900031B539 /* Salty.app */;
@@ -437,7 +434,6 @@
 			packageReferences = (
 				D455285A29EE57EC0031B539 /* XCRemoteSwiftPackageReference "realm-swift" */,
 				D47A37EC2A1831F90023B548 /* XCRemoteSwiftPackageReference "swift-html" */,
-				D44BFA612A71BA1B005DED1F /* XCRemoteSwiftPackageReference "SwiftTabler" */,
 			);
 			productRefGroup = D455282A29EE56900031B539 /* Products */;
 			projectDirPath = "";
@@ -891,14 +887,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		D44BFA612A71BA1B005DED1F /* XCRemoteSwiftPackageReference "SwiftTabler" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/openalloc/SwiftTabler";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.7;
-			};
-		};
 		D455285A29EE57EC0031B539 /* XCRemoteSwiftPackageReference "realm-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/realm/realm-swift.git";
@@ -918,11 +906,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		D44BFA622A71BA1B005DED1F /* Tabler */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D44BFA612A71BA1B005DED1F /* XCRemoteSwiftPackageReference "SwiftTabler" */;
-			productName = Tabler;
-		};
 		D455285B29EE57EC0031B539 /* Realm */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D455285A29EE57EC0031B539 /* XCRemoteSwiftPackageReference "realm-swift" */;
