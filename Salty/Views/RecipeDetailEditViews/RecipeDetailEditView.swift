@@ -48,7 +48,7 @@ struct RecipeDetailEditView: View {
                     .padding()
 //                }
                     .padding()
-                Button("Categories") {
+                Button("Edit Categories") {
                     showingCategoryPopover.toggle()
                 }
                 .padding()

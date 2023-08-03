@@ -12,7 +12,7 @@ extension RecipeLibrary {
     static var previewRealm: Realm {
         var realm: Realm
         let identifier = "saltyPreviewRealm"
-        let config = Realm.Configuration(inMemoryIdentifier: identifier)
+        let config = Realm.Configuration(inMemoryIdentifier: identifier, schemaVersion: 2)
         do {
             realm = try Realm(configuration: config)
             let realmObjects = realm.objects(RecipeLibrary.self)

@@ -11,7 +11,7 @@ import RealmSwift
 struct CategoryEditView: View {
     @ObservedRealmObject var recipe: Recipe
     @ObservedRealmObject var recipeLibrary: RecipeLibrary
-    //@State private var showingEditPopover = false
+    @State private var showingEditLibraryCategoriesSheet = false
     
     var body: some View {
         ScrollView {
@@ -37,6 +37,12 @@ struct CategoryEditView: View {
                         }
                     )
                     )
+                }
+                Button("Edit…") {
+                    showingEditLibraryCategoriesSheet.toggle()
+                }
+                .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
+                    LibraryCategoriesEditView()
                 }
             }
         }
