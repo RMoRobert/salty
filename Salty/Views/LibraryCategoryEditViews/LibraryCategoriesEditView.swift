@@ -12,12 +12,48 @@ import RealmSwift
 struct LibraryCategoriesEditView: View {
     @ObservedResults(RecipeLibrary.self) var recipeLibraries
     @State private var selectedCategoryIDs = Set<RealmSwift.ObjectId>()
+    
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
         if let recipeLibrary = recipeLibraries.first  {
             @ObservedRealmObject var recipeLibrary = recipeLibrary
-
+            NavigationStack {
+                List(recipeLibrary.categories, id: \._id, selection: $selectedCategoryIDs) { category in
+                    NavigationLink(category.name, value: category)
+                    .contextMenu {
+                        Button(role: .destructive, action: { deleteCategory(id: category._id) } ) {
+                        Text("Delete")
+                        }
+                     }
+                }
+                .navigationDestination(for: Category.self) { category in
+                    LibraryCategoryEditView(category: category)
+                        .padding()
+                }
+            }
+            .padding()
+            .frame(minWidth: 200, minHeight: 300)
+            HOrVStack {
+                Button(action: {
+                    let c = Category()
+                    c.name = "New Category"
+                    $recipeLibrary.categories.append(c)
+                }) {
+                    Image(systemName: "plus")
+                }
+                .padding()
+                Button(role: .destructive, action: {
+                    deleteSelectedCategories()
+                }) {
+                    Image(systemName: "minus")
+                }
+                .padding()
+                Button("Dismiss") {
+                    dismiss()
+                }
+                .padding()
+            }
         }
         else {
             Text("No recipe library found")
@@ -70,6 +106,8 @@ struct LibraryCategoryEditView: View {
 
 struct LibraryCategoriesEditView_Previews: PreviewProvider {
     static var previews: some View {
+        //let realm = RecipeLibrary.previewRealm
+        //let rl = realm.objects(RecipeLibrary.self)
         Group {
             LibraryCategoriesEditView()
         }

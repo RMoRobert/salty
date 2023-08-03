@@ -14,41 +14,45 @@ struct CategoryEditView: View {
     @State private var showingEditLibraryCategoriesSheet = false
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading) {
-                ForEach(recipeLibrary.categories.sorted(byKeyPath: "name")) { category in
-                    //GridRow {
-                    Toggle(category.name, isOn: Binding<Bool> (
-                        get: {
-                            if let _ = recipe.categories.index(of: category) {
-                                return true
+ //       ScrollView {
+//            VStack(alignment: .leading) {
+                List {
+                    ForEach(recipeLibrary.categories.sorted(byKeyPath: "name")) { category in
+                        Toggle(category.name, isOn: Binding<Bool> (
+                            get: {
+                                if let _ = recipe.categories.index(of: category) {
+                                    return true
+                                }
+                                else {
+                                    return false
+                                }
+                            },
+                            set: { newVal in
+                                if newVal == true {
+                                    addCategory(category)
+                                }
+                                else {
+                                    removeCategory(category)
+                                }
                             }
-                            else {
-                                return false
-                            }
-                        },
-                        set: { newVal in
-                            if newVal == true {
-                                addCategory(category)
-                            }
-                            else {
-                                removeCategory(category)
-                            }
-                        }
-                    )
-                    )
+                        )
+                        )
+                    }
                 }
+                .frame(minWidth: 200, minHeight: 300)
+                .padding([.top, .leading, .trailing])
                 Button("Edit…") {
                     showingEditLibraryCategoriesSheet.toggle()
                 }
+                .padding()
                 .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
                     LibraryCategoriesEditView()
                 }
-            }
+//            }
         }
-        .frame(alignment: .leading)
-        .padding()
-    }
+//        .frame(alignment: .leading)
+//        .padding()
+//    }
     
     private func addCategory(_ category: Category) -> () {
         $recipe.categories.append(category)
