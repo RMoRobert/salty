@@ -13,47 +13,65 @@ struct RecipeDetailEditView: View {
     @State private var showingCategoryPopover = false
     @State private var showingEditIngredientsSheet = false
     @State private var showingEditDirectionsSheet = false
+    #if os(macOS)
+    @State private var isMacOS = true
+    #else
+    @State private var isMacOS = false
+    #endif
     @Environment(\.dismiss) private var dismiss
 
     
     var body: some View {
         ScrollView {
-            Section {
-                HStack {
-                    Form {
-                        TextField("Name", text: $recipe.name)
-                        TextField("Source", text: $recipe.source)
-                        TextField("Source Details", text: $recipe.sourceDetails)
-                        TextField("Yield", text: $recipe.yield)
-                        HStack {
-                            Toggle("Have Prepared", isOn: $recipe.prepared)
-                            Toggle("Want to Make", isOn: $recipe.wantToMake)
-                            Button("Categories") {
-                                showingCategoryPopover.toggle()
-                            }
-                            .popover(isPresented: $showingCategoryPopover) {
-                                CategoryEditView(recipe: recipe, recipeLibrary: recipe.recipeLibrary.first!)
-                            }
-                        }
-                        HStack {
-                            DifficultyEditView(recipe: recipe)
-                            Spacer()
-                            RatingEditView(recipe: recipe)
-                        }
-                        .frame(maxWidth: 500)
-                    }
-                    VStack {
-                        Toggle("Favorite", isOn: $recipe.isFavorite)
-                        Spacer()
-                        RecipeImageEditView(recipe: recipe)
-                        Spacer()
-                    }
+            Group {
+                #if os(macOS)
+                // TODO: de-duplicate, etc. (but also see what else can improve)
+                Form {
+                    TextField("Name", text: $recipe.name)
+                    TextField("Source", text: $recipe.source)
+                    TextField("Source Details", text: $recipe.sourceDetails)
+                    TextField("Yield", text: $recipe.yield)
                 }
+                #else
+                TextField("Name", text: $recipe.name)
+                TextField("Source", text: $recipe.source)
+                TextField("Source Details", text: $recipe.sourceDetails)
+                TextField("Yield", text: $recipe.yield)
+                #endif
+                RecipeImageEditView(recipe: recipe)
+//                HOrVStack {
+                    HOrVStack {
+                        Toggle("Favorite", isOn: $recipe.isFavorite)
+                        Toggle("Have Prepared", isOn: $recipe.prepared)
+                        Toggle("Want to Make", isOn: $recipe.wantToMake)
+                    }
+                    .padding()
+//                }
+                    .padding()
+                Button("Categories") {
+                    showingCategoryPopover.toggle()
+                }
+                .padding()
+                .popover(isPresented: $showingCategoryPopover) {
+                    CategoryEditView(recipe: recipe, recipeLibrary: recipe.recipeLibrary.first!)
+                        .frame(minWidth: 100, minHeight: 225)
+                }
+                HOrVStack {
+                    Spacer()
+                    DifficultyEditView(recipe: recipe)
+                        .frame(maxWidth: 175)
+                    Spacer()
+                    RatingEditView(recipe: recipe)
+                        .frame(maxWidth: 175)
+                    
+                    Spacer()
+                }
+                .padding()
             }
-            header: {
-                Text("Information")
-                    .font(.headline)
-            }
+//            header: {
+//                Text("Information")
+//                    .font(.headline)
+//            }
             Divider()
             
             Section {
@@ -73,6 +91,7 @@ struct RecipeDetailEditView: View {
                         IngredientsEditView(recipe: recipe)
                     }
                 }
+                .padding()
             }
             Divider()
         
@@ -94,6 +113,7 @@ struct RecipeDetailEditView: View {
                         DirectionsEditView(recipe: recipe)
                     }
                 }
+                .padding()
             }
             Divider()
         
