@@ -21,7 +21,6 @@ struct HOrVStack<Content: View>: View {
     
     @ViewBuilder var content: () -> Content
     
-    
     var currentLayout: AnyLayout {
         horizontalSizeClass == .regular ? AnyLayout(HStackLayout()) : AnyLayout(VStackLayout())
     }

@@ -32,46 +32,70 @@ struct RecipeDetailEditView: View {
                     TextField("Source Details", text: $recipe.sourceDetails)
                     TextField("Yield", text: $recipe.yield)
                 }
+                    .padding()
                 #else
-                TextField("Name", text: $recipe.name)
-                TextField("Source", text: $recipe.source)
-                TextField("Source Details", text: $recipe.sourceDetails)
-                TextField("Yield", text: $recipe.yield)
+                VStack {
+                    TextField("Name", text: $recipe.name)
+                        .textFieldStyle(.roundedBorder)
+                    //.padding()
+                    TextField("Source", text: $recipe.source)
+                        .textFieldStyle(.roundedBorder)
+                    //.padding()
+                    TextField("Source Details", text: $recipe.sourceDetails)
+                        .textFieldStyle(.roundedBorder)
+                    //.padding()
+                    TextField("Yield", text: $recipe.yield)
+                        .textFieldStyle(.roundedBorder)
+                    //.padding()
+                }
+                    .padding()
                 #endif
                 RecipeImageEditView(recipe: recipe)
-//                HOrVStack {
-                    HOrVStack {
-                        Toggle("Favorite", isOn: $recipe.isFavorite)
-                        Toggle("Have Prepared", isOn: $recipe.prepared)
-                        Toggle("Want to Make", isOn: $recipe.wantToMake)
-                    }
                     .padding()
-//                }
-                    .padding()
+                // TODO: De-duplicate, etc.
+                #if os(macOS)
+                HStack {
+                    Toggle("Favorite", isOn: $recipe.isFavorite)
+                    Toggle("Have Prepared", isOn: $recipe.prepared)
+                    Toggle("Want to Make", isOn: $recipe.wantToMake)
+                }
+                #else
+                VStack {
+                    Toggle("Favorite", isOn: $recipe.isFavorite)
+                        .padding(5)
+                    Divider()
+                    Toggle("Have Prepared", isOn: $recipe.prepared)
+                        .padding(5)
+                    Divider()
+                    Toggle("Want to Make", isOn: $recipe.wantToMake)
+                        .padding(5)
+                    Divider()
+                }
+                .frame(maxWidth: 400)
+                .padding()
+                #endif
+                //Divider()
                 Button("Edit Categories") {
                     showingCategoryPopover.toggle()
                 }
-                .padding()
-                .popover(isPresented: $showingCategoryPopover) {
-                    CategoryEditView(recipe: recipe, recipeLibrary: recipe.recipeLibrary.first!)
-                        .frame(minWidth: 100, minHeight: 225)
-                }
+                    .padding()
+                    .popover(isPresented: $showingCategoryPopover) {
+                        CategoryEditView(recipe: recipe, recipeLibrary: recipe.recipeLibrary.first!)
+                            .frame(minWidth: 100, minHeight: 225)
+                    }
+                Divider()
                 HOrVStack {
                     Spacer()
                     DifficultyEditView(recipe: recipe)
-                        .frame(maxWidth: 175)
+                        .frame(maxWidth: 180)
                     Spacer()
                     RatingEditView(recipe: recipe)
-                        .frame(maxWidth: 175)
+                        .frame(maxWidth: 180)
                     
                     Spacer()
                 }
                 .padding()
             }
-//            header: {
-//                Text("Information")
-//                    .font(.headline)
-//            }
             Divider()
             
             Section {
@@ -119,6 +143,7 @@ struct RecipeDetailEditView: View {
         
             Section {
                 NotesEditView(recipe: recipe)
+                    .frame(maxHeight: .infinity)
                     .padding()
             }
             header: {

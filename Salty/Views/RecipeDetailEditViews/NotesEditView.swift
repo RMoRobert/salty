@@ -32,7 +32,8 @@ struct NotesEditView: View {
                 GridRow {
                     TextEditor(text: $note.text)
                             .lineLimit(2)
-                            .frame(height: 40)
+                            //.frame(height: 40)
+                            .fixedSize(horizontal: false, vertical: true)
                     Button(role: .destructive, action: {
                         if let idx = recipe.notes.index(of: note) {
                             $recipe.notes.remove(at: idx)
