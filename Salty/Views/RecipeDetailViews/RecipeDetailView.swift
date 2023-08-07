@@ -99,7 +99,7 @@ struct RecipeDetailView: View {
             }
             
             Section {
-                HOrVStack {
+                HOrVStack(alignFirstTextLeadingIfHStack: true) {
                     VStack {
                         Text("Ingredients")
                             .font(.title3)
