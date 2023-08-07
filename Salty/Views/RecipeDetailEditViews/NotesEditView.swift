@@ -27,13 +27,10 @@ struct NotesEditView: View {
             ForEach($recipe.notes) { $note in
                 GridRow {
                     TextField("Note Name", text: $note.name)
-                        .gridCellColumns(2)
+                        .gridCellColumns(1)
                 }
                 GridRow {
-                    TextEditor(text: $note.text)
-                            .lineLimit(2)
-                            //.frame(height: 40)
-                            .fixedSize(horizontal: false, vertical: true)
+                    TextField("Note Text", text: $note.text, axis: .vertical)
                     Button(role: .destructive, action: {
                         if let idx = recipe.notes.index(of: note) {
                             $recipe.notes.remove(at: idx)
@@ -60,6 +57,11 @@ struct NotesEditView: View {
 
 struct NotesEditView_Previews: PreviewProvider {
     static var previews: some View {
-        NotesEditView(recipe: Recipe())
+        let r = Recipe()
+        let n1 = Note()
+        n1.name = "Note 1"
+        n1.text = "This is my note. I'm making it somewhat long so the text might wrap a little, and we will see what happens if that does."
+        r.notes.append(n1)
+        return NotesEditView(recipe: r)
     }
 }
