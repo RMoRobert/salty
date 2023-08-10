@@ -176,8 +176,8 @@ struct MacGourmetImportRecipe: Decodable {
         
         enum NoteType: Int, CustomStringConvertible {
             case other = 0
-            case preparation = 2
             case chef = 6
+            case preparation = 7
             case serving = 8
             case cooking = 10
             
