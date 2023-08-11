@@ -55,8 +55,10 @@ struct ImportView: View {
                     }
                     isImporting = true
                     print("Starting import...")
+                    let _ = file.startAccessingSecurityScopedResource()
                     MacGourmetImportHelper.importIntoRecipeLibrary(recipeLibrary, xmlFileUrl: file)
                     print("Done with import")
+                    file.stopAccessingSecurityScopedResource()
                     isImporting = false
                     hasImported = true
                 }

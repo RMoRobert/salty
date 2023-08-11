@@ -11,11 +11,12 @@ import RealmSwift
 struct MacGourmetImportHelper: ImporterProtocol {
     static func importIntoRecipeLibrary(_ recipeLibrary: RecipeLibrary, xmlFileUrl: URL) -> () {
         guard let xmlData = getDataFromFile(xmlFileUrl) else {
+            print("No XML data; returning")
             return
         }
-        
         do {
             let mgRecipes = try PropertyListDecoder().decode([MacGourmetImportRecipe].self, from: xmlData)
+            print("Found \(mgRecipes.count) MG recipes")
             mgRecipes.forEach { mgRecipe in
                 var imgData: Data?
                 var categories: [String]?

@@ -84,6 +84,11 @@ struct RecipeNavigationSplitView: View {
                         }
                         .onDelete(perform: $recipeLibrary.recipes.remove)
                         .onMove(perform: $recipeLibrary.recipes.move)
+                        #if !os(macOS)
+                        .toolbar {
+                            EditButton()
+                        }
+                        #endif
                     }
                     .navigationTitle("Recipes")
                     .toolbar {
