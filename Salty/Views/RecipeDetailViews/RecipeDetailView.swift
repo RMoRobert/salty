@@ -41,19 +41,20 @@ struct RecipeDetailView: View {
                         }
                         
                         HOrVStack {
-                            if (recipe.rating != .notSet) {
-                                VStack{
-                                    Text("Rating:")
+                            VStack{
+                                Text("Rating:") // TODO: eliminate wrap?
+                                if (recipe.rating == .notSet) {
+                                    Text("(not rated)")
+                                        .italic()
+                                }
+                                else {
                                     RatingView(rating: recipe.rating)
                                         .padding(0.25)
                                 }
                             }
-                            else {
-                                    Text("Rating: *(not rated)*")
-                            }
                             if (recipe.difficulty != .notSet) {
                                 Divider()
-                                HStack{
+                                VStack{
                                     Text("Difficulty:")
                                     RecipeDifficultyView(difficulty: recipe.difficulty)
                                 }
