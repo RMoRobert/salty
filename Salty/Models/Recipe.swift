@@ -14,6 +14,8 @@ final class Recipe: EmbeddedObject, ObjectKeyIdentifiable {
     /// The backlink to the `RecipeLibrary` this item is a part of.
     @Persisted(originProperty: "recipes") var recipeLibrary: LinkingObjects<RecipeLibrary>
     @Persisted var name: String = "New Recipe"
+    @Persisted var createdDate = Date.now;
+    @Persisted var lastModifiedDate = Date.now;
     @Persisted var source = ""
     @Persisted var sourceDetails = ""
     @Persisted var introduction = ""

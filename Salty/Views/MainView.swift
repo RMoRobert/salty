@@ -14,7 +14,7 @@ struct ContentView: SwiftUI.App {
     
     let realmConfig = Realm.Configuration(
         fileURL: FileManager.saltyLibraryFullPath,
-        schemaVersion: 2
+        schemaVersion: 3
     )
     
     
