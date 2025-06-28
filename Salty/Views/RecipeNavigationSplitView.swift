@@ -57,7 +57,7 @@ struct RecipeNavigationSplitView: View {
             List(selection: $selectedSidebarItemId) {
                 // Library:
                 Section {
-                    Text("All Recipes")
+                    Label("All Recipes", systemImage: "book")
                         .tag("0") // figure out better way to ta all...
                 } header: {
                     Text("Library")
@@ -66,7 +66,7 @@ struct RecipeNavigationSplitView: View {
                 // Categories:
                 Section {
                     ForEach(categories) { category in
-                        Text(category.name)
+                        Label(category.name, systemImage: "doc.plaintext")
                             .tag(category.id)
                     }
                 } header: {
