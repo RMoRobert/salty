@@ -28,26 +28,24 @@ struct RecipeDetailEditView: View {
                         .fontWeight(.semibold)
                         .padding(.bottom, 4)
                     
+                    Form {
+                        TextField("Name", text: $recipe.name)
+                        TextField("Source", text: $recipe.source)
+                        TextField("Source Details", text: $recipe.sourceDetails)
+                        TextField("Yield", text: $recipe.yield)
+                    }
+                    
                     VStack {
-                        LabeledTextField(label: "Name:", text: $recipe.name)
-                        LabeledTextField(label: "Source:", text: $recipe.source)
-                        LabeledTextField(label: "Source Details:", text: $recipe.sourceDetails)
-                        LabeledTextField(label: "Yield:", text: $recipe.yield)
-                        
                         // Rating and Difficulty in a row
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Rating:")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
                                     .frame(width: 80, alignment: .leading)
                                 RatingEditView(recipe: $recipe)
                             }
                             
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Difficulty:")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
                                     .frame(width: 80, alignment: .leading)
                                 DifficultyEditView(recipe: $recipe)
                             }
