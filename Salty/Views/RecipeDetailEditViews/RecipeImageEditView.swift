@@ -11,6 +11,7 @@ import SharingGRDB
 struct RecipeImageEditView: View {
     @Binding var recipe: Recipe
     @State private var dragOver = false
+    @State private var showingImagePicker = false
     
     var body: some View {
         VStack {
@@ -18,6 +19,7 @@ struct RecipeImageEditView: View {
                 .labelStyle(TitleOnlyLabelStyle())
             
             if let imageData = recipe.imageData, let nsImage = NSImage(data: imageData) {
+
                 Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -59,7 +61,7 @@ struct RecipeImageEditView: View {
                         .labelStyle(.iconOnly)
                     )
                     .onTapGesture {
-                        print("tapped!")
+                        showingImagePicker = true
                     }
                     .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                         providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
@@ -70,6 +72,35 @@ struct RecipeImageEditView: View {
                         })
                         return true
                     }
+            }
+        }
+        .fileImporter(
+            isPresented: $showingImagePicker,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    do {
+                        // Start accessing the security-scoped resource
+                        guard url.startAccessingSecurityScopedResource() else {
+                            return
+                        }
+                        
+                        defer {
+                            // Stop accessing the security-scoped resource
+                            url.stopAccessingSecurityScopedResource()
+                        }
+                        
+                        let imageData = try Data(contentsOf: url)
+                        recipe.imageData = imageData
+                    } catch {
+                        print("Error loading image data: \(error)")
+                    }
+                }
+            case .failure(let error):
+                print("Error selecting image: \(error.localizedDescription)")
             }
         }
     }
