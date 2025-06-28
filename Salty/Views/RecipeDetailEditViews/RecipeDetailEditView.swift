@@ -53,7 +53,7 @@ struct RecipeDetailEditView: View {
                             }
                         }
                         
-                        RecipeImageEditView(recipe: recipe)
+                        RecipeImageEditView(recipe: $recipe)
                         
                         HOrVStack() {
                             Toggle("Is favorite?", isOn: $recipe.isFavorite)

@@ -9,7 +9,7 @@ import SwiftUI
 import SharingGRDB
 
 struct RecipeImageEditView: View {
-    @State var recipe: Recipe
+    @Binding var recipe: Recipe
     @State private var dragOver = false
     
     var body: some View {
@@ -84,7 +84,7 @@ struct RecipeImageEditView_Previews: PreviewProvider {
             }
         }
         Group {
-            RecipeImageEditView(recipe: recipe)
+            RecipeImageEditView(recipe: .constant(recipe))
         }
     }
 }
