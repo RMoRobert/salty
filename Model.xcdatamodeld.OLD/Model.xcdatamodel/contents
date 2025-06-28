@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23788.4" systemVersion="24F74" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="Category" representedClassName="Category" syncable="YES" codeGenerationType="class">
+        <attribute name="name" attributeType="String" maxValueString="128" defaultValueString=""/>
+        <relationship name="recipes" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Recipe" inverseName="category" inverseEntity="Recipe"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="name"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="Direction" representedClassName="Direction" syncable="YES" codeGenerationType="class">
+        <attribute name="isHeading" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="text" optional="YES" attributeType="String" maxValueString="100000" defaultValueString=""/>
+        <relationship name="recipe" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Recipe" inverseName="directions" inverseEntity="Recipe"/>
+    </entity>
+    <entity name="Ingredient" representedClassName="Ingredient" syncable="YES" codeGenerationType="class">
+        <attribute name="isHeading" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="text" attributeType="String" maxValueString="1000" defaultValueString=""/>
+        <relationship name="recipe" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Recipe" inverseName="ingredients" inverseEntity="Recipe"/>
+    </entity>
+    <entity name="Note" representedClassName="Note" syncable="YES" codeGenerationType="class">
+        <attribute name="text" optional="YES" attributeType="String" maxValueString="50000"/>
+        <attribute name="type" optional="YES" attributeType="String" maxValueString="128"/>
+        <relationship name="recipe" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Recipe" inverseName="notes" inverseEntity="Recipe"/>
+    </entity>
+    <entity name="PreparationTime" representedClassName="PreparationTime" syncable="YES" codeGenerationType="class">
+        <attribute name="timeString" attributeType="String" maxValueString="256" defaultValueString=""/>
+        <attribute name="type" attributeType="String" maxValueString="128" defaultValueString=""/>
+        <relationship name="recipe" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Recipe" inverseName="preparationTimes" inverseEntity="Recipe"/>
+    </entity>
+    <entity name="Recipe" representedClassName="Recipe" syncable="YES" codeGenerationType="class">
+        <attribute name="createdDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="difficulty" attributeType="Integer 16" minValueString="0" maxValueString="5" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="imageData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="introduction" optional="YES" attributeType="String" maxValueString="2048" defaultValueString=""/>
+        <attribute name="isFavorite" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isPrepared" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isWantToMake" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastModifiedDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String" maxValueString="128" defaultValueString="" spotlightIndexingEnabled="YES"/>
+        <attribute name="rating" attributeType="Integer 16" minValueString="0" maxValueString="5" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="source" attributeType="String" maxValueString="2048" defaultValueString=""/>
+        <attribute name="sourceDetails" attributeType="String" maxValueString="2048" defaultValueString=""/>
+        <attribute name="yield" attributeType="String" maxValueString="128" defaultValueString=""/>
+        <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Category" inverseName="recipes" inverseEntity="Category"/>
+        <relationship name="directions" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="Direction" inverseName="recipe" inverseEntity="Direction"/>
+        <relationship name="ingredients" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="Ingredient" inverseName="recipe" inverseEntity="Ingredient"/>
+        <relationship name="notes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Note" inverseName="recipe" inverseEntity="Note"/>
+        <relationship name="preparationTimes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="PreparationTime" inverseName="recipe" inverseEntity="PreparationTime"/>
+        <relationship name="tags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Tag" inverseName="recipes" inverseEntity="Tag"/>
+        <fetchedProperty name="summary" optional="YES">
+            <fetchRequest name="fetchedPropertyFetchRequest" entity="Recipe" predicateString="getSummary"/>
+        </fetchedProperty>
+    </entity>
+    <entity name="ShoppingList" representedClassName="ShoppingList" syncable="YES" codeGenerationType="class">
+        <attribute name="name" attributeType="String" maxValueString="256" defaultValueString=""/>
+        <relationship name="items" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ShoppingListItem" inverseName="shoppingList" inverseEntity="ShoppingListItem"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="name"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="ShoppingListItem" representedClassName="ShoppingListItem" syncable="YES" codeGenerationType="class">
+        <attribute name="text" attributeType="String" maxValueString="1024" defaultValueString=""/>
+        <relationship name="shoppingList" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ShoppingList" inverseName="items" inverseEntity="ShoppingList"/>
+    </entity>
+    <entity name="Tag" representedClassName="Tag" syncable="YES" codeGenerationType="class">
+        <attribute name="name" attributeType="String" maxValueString="256" defaultValueString=""/>
+        <relationship name="recipes" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Recipe" inverseName="tags" inverseEntity="Recipe"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="name"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+</model>
