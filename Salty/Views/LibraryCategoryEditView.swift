@@ -17,6 +17,7 @@ struct LibraryCategoriesEditView: View {
     @State private var selectedCategoryIDs: Set<String>? = nil
     
     @State private var editingCategory: Category? = nil
+    @State private var editingCategoryName: String = ""
     
     @Environment(\.dismiss) var dismiss
     
@@ -24,33 +25,25 @@ struct LibraryCategoriesEditView: View {
         NavigationStack {
             List(categories, id: \.id, selection: $selectedCategoryIDs) { category in
                 if editingCategory?.id == category.id {
-                    TextField("Category Name", text: Binding(
-                        get: { editingCategory?.name ?? "" },
-                        set: { newValue in
-                            if var editingCategory = editingCategory {
-                                editingCategory.name = newValue
-                                self.editingCategory = editingCategory
-                            }
+                    TextField("Category Name", text: $editingCategoryName)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit {
+                            saveEditingCategory()
                         }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        saveEditingCategory()
-                    }
-                    .onExitCommand {
-                        editingCategory = nil
-                    }
+                        .onExitCommand {
+                            editingCategory = nil
+                        }
                 } else {
                     HStack {
                         Text(category.name)
                             #if os(macOS)
                             .onTapGesture(count: 2) {
-                                editingCategory = category
+                                startEditing(category)
                             }
                             #endif
                         Spacer()
                         Button(action: {
-                            editingCategory = category
+                            startEditing(category)
                         }) {
                             Image(systemName: "pencil")
                                 .foregroundStyle(.secondary)
@@ -78,7 +71,7 @@ struct LibraryCategoriesEditView: View {
                     try? database.write { db in
                         let category = Category(id: UUID().uuidString, name: "New Category")
                         try category.insert(db)
-                        editingCategory = category
+                        startEditing(category)
                     }
                 }) {
                     Image(systemName: "plus")
@@ -103,13 +96,21 @@ struct LibraryCategoriesEditView: View {
         }
     }
     
+    private func startEditing(_ category: Category) {
+        editingCategory = category
+        editingCategoryName = category.name
+    }
+    
     private func saveEditingCategory() {
-        if let category = editingCategory {
+        if let category = editingCategory, !editingCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             try? database.write { db in
-                try category.update(db)
+                var updatedCategory = category
+                updatedCategory.name = editingCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+                try updatedCategory.update(db)
             }
         }
         editingCategory = nil
+        editingCategoryName = ""
     }
     
     func deleteSelectedCategories() {

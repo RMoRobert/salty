@@ -12,7 +12,7 @@ struct RecipeDetailEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Environment(\.dismiss) var dismiss
     @State var recipe: Recipe
-    @State private var showingCategoryPopover = false
+    @State private var showingEditCategoriesSheet = false
     @State private var showingEditIngredientsSheet = false
     @State private var showingEditDirectionsSheet = false
     @State private var showingEditPreparationTimes = false
@@ -48,6 +48,13 @@ struct RecipeDetailEditView: View {
                                 Text("Difficulty:")
                                     .frame(width: 80, alignment: .leading)
                                 DifficultyEditView(recipe: $recipe)
+                            }
+                            Button("Categories") {
+                                showingEditCategoriesSheet.toggle()
+                            }
+                            .buttonStyle(.bordered)
+                            .popover(isPresented: $showingEditCategoriesSheet) {
+                                CategoryEditView(recipe: $recipe)
                             }
                         }
                         
