@@ -12,6 +12,7 @@ struct RecipeNavigationSplitView: View {
     @Dependency(\.defaultDatabase) private var database
     //@Environment(\.openWindow) private var openWindow
     @State private var recipeToEditID: String?
+    private let allRecipesID: String = "0"
     
     @FetchAll
     var recipes: [Recipe]
@@ -32,6 +33,7 @@ struct RecipeNavigationSplitView: View {
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingOpenDBSheet = false
     @State private var showingImportRecipesSheet = false
+    @State private var showingDeleteConfirmation = false
     
     // Removed computed property that was causing performance issues
     
@@ -43,7 +45,7 @@ struct RecipeNavigationSplitView: View {
     private var filteredRecipes: [Recipe] {
         var recipesToFilter: [Recipe]
         
-        if selectedSidebarItemId == "0" {
+        if selectedSidebarItemId == allRecipesID {
             recipesToFilter = recipes
         } else if let categoryId = selectedSidebarItemId,
                   let category = categories.first(where: { $0.id == categoryId }) {
@@ -89,7 +91,7 @@ struct RecipeNavigationSplitView: View {
                 // Library:
                 Section {
                     Label("All Recipes", systemImage: "book")
-                        .tag("0") // figure out better way to ta all...
+                        .tag(allRecipesID) // figure out better way to ta all...
                 } header: {
                     Text("Library")
                 }
@@ -111,6 +113,9 @@ struct RecipeNavigationSplitView: View {
 //                }
             }
             .listStyle(.sidebar)
+            .onAppear() {
+                selectedSidebarItemId = allRecipesID
+            }
         } content: {
             List(selection: $selectedRecipeIDs) {
                 ForEach(filteredRecipes) { recipe in
@@ -150,10 +155,20 @@ struct RecipeNavigationSplitView: View {
         .searchable(text: $searchString)
         .navigationTitle("Recipes")
         .toolbar {
-            Button(role: .destructive, action: deleteSelectedRecipes) {
+            Button(role: .destructive, action: {
+                showingDeleteConfirmation = true
+            }) {
                 Label("Delete Recipe", systemImage: "minus")
             }
             .disabled(selectedRecipeIDs.isEmpty)
+            .alert("Delete Recipe(s)?", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    deleteSelectedRecipes()
+                }
+            } message: {
+                Text("Are you sure you want to delete \(selectedRecipeIDs.count) recipe\(selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
+            }
             Button(action: {
                 try? database.write { db in
                     let newRecipe = Recipe(
@@ -195,7 +210,7 @@ struct RecipeNavigationSplitView: View {
     }
     
     private var navigationTitle: String {
-        if selectedSidebarItemId == "0" {
+        if selectedSidebarItemId == allRecipesID {
             return "Recipes"
         } else if let categoryId = selectedSidebarItemId,
                   let category = categories.first(where: { $0.id == categoryId }) {
