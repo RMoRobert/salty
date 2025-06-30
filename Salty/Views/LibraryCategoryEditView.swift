@@ -11,116 +11,121 @@ import SharingGRDB
 
 struct LibraryCategoriesEditView: View {
     @Dependency(\.defaultDatabase) private var database
-    
     @FetchAll private var categories: [Category]
-    
-    @State private var selectedCategoryIDs: Set<String>? = nil
-    
-    @State private var editingCategory: Category? = nil
-    @State private var editingCategoryName: String = ""
+    @State private var selectedCategoryIDs: Set<String> = []
+    @State private var isEditMode = false
+    @State private var editingCategory: Category?
+    @State private var editingName = ""
+    @State private var isCreatingNew = false
     
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        NavigationStack {
-            List(categories, id: \.id, selection: $selectedCategoryIDs) { category in
-                if editingCategory?.id == category.id {
-                    TextField("Category Name", text: $editingCategoryName)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit {
-                            saveEditingCategory()
+        List(selection: $selectedCategoryIDs) {
+            ForEach(categories, id: \.id) { category in
+                HStack {
+                    Text(category.name)
+                        .onTapGesture(count: 2) {
+                            editingCategory = category
+                            editingName = category.name
                         }
-                        .onExitCommand {
-                            editingCategory = nil
+                        .popover(isPresented: .constant(editingCategory?.id == category.id || isCreatingNew)) {
+                            EditCategoryPopover(
+                                categoryName: $editingName,
+                                isNewCategory: isCreatingNew,
+                                onSave: isCreatingNew ? saveNewCategory : saveCategoryName,
+                                onCancel: {
+                                    editingCategory = nil
+                                    isCreatingNew = false
+                                    editingName = ""
+                                }
+                            )
                         }
-                } else {
-                    HStack {
-                        Text(category.name)
-                            #if os(macOS)
-                            .onTapGesture(count: 2) {
-                                startEditing(category)
-                            }
-                            #endif
-                        Spacer()
-                        Button(action: {
-                            startEditing(category)
-                        }) {
-                            Image(systemName: "pencil")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .contextMenu {
-                        Button(role: .destructive, action: { deleteCategory(id: category.id) } ) {
-                            Text("Delete")
-                        }
-                    }
+                    
+                    Spacer()
                 }
             }
-            .listStyle(.inset(alternatesRowBackgrounds: true))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                saveEditingCategory()
-            }
+        }
+        .onDeleteCommand {
+            deleteSelectedCategories()
         }
         .padding()
         .frame(minWidth: 300, minHeight: 400)
         .toolbar {
-            ToolbarItem(placement: .automatic) {
+            ToolbarItem {
                 Button(action: {
-                    try? database.write { db in
-                        let category = Category(id: UUID().uuidString, name: "New Category")
-                        try category.insert(db)
-                        startEditing(category)
-                    }
+                    createNewCategory()
                 }) {
                     Image(systemName: "plus")
                 }
             }
             
-            ToolbarItem(placement: .automatic) {
+            ToolbarItem {
                 Button(role: .destructive, action: {
                     deleteSelectedCategories()
                 }) {
                     Image(systemName: "minus")
                 }
-                .disabled(selectedCategoryIDs?.isEmpty ?? true)
+                .disabled(selectedCategoryIDs.isEmpty)
             }
             
-            ToolbarItem(placement: .automatic) {
+            ToolbarItem {
+                Button(action: {
+                    editSelectedCategory()
+                }) {
+                    Image(systemName: "pencil")
+                }
+                .disabled(selectedCategoryIDs.count != 1)
+            }
+            
+            ToolbarItem {
                 Button("Done") {
-                    saveEditingCategory()
                     dismiss()
                 }
             }
         }
     }
     
-    private func startEditing(_ category: Category) {
-        editingCategory = category
-        editingCategoryName = category.name
-    }
-    
-    private func saveEditingCategory() {
-        if let category = editingCategory, !editingCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            try? database.write { db in
-                var updatedCategory = category
-                updatedCategory.name = editingCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-                try updatedCategory.update(db)
-            }
-        }
-        editingCategory = nil
-        editingCategoryName = ""
-    }
     
     func deleteSelectedCategories() {
-        guard let ids = selectedCategoryIDs else { return }
         try? database.write { db in
-            for id in ids {
+            for id in selectedCategoryIDs {
                 try Category.deleteOne(db, key: id)
             }
         }
-        selectedCategoryIDs?.removeAll()
+        selectedCategoryIDs.removeAll()
+    }
+    
+    func saveCategoryName() {
+        guard let category = editingCategory else { return }
+        let trimmedName = editingName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        
+        try? database.write { db in
+            var updatedCategory = category
+            updatedCategory.name = trimmedName
+            try updatedCategory.update(db)
+        }
+        
+        editingCategory = nil
+    }
+    
+    func createNewCategory() {
+        editingName = "New Category"
+        isCreatingNew = true
+    }
+    
+    func saveNewCategory() {
+        let trimmedName = editingName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        
+        try? database.write { db in
+            try Category.upsert(Category.Draft(id: UUID().uuidString, name: trimmedName))
+                .execute(db)
+        }
+        
+        isCreatingNew = false
+        editingName = ""
     }
     
     func deleteCategory(id: String) {
@@ -128,22 +133,50 @@ struct LibraryCategoriesEditView: View {
             try Category.deleteOne(db, key: id)
         }
     }
+    
+    func editSelectedCategory() {
+        guard selectedCategoryIDs.count == 1,
+              let selectedID = selectedCategoryIDs.first,
+              let category = categories.first(where: { $0.id == selectedID }) else {
+            return
+        }
+        
+        editingCategory = category
+        editingName = category.name
+    }
 }
 
-struct LibraryCategoryEditView: View {
-    @Dependency(\.defaultDatabase) private var database
-    @State var category: Category
+struct EditCategoryPopover: View {
+    @Binding var categoryName: String
+    let isNewCategory: Bool
+    let onSave: () -> Void
+    let onCancel: () -> Void
     
     var body: some View {
-        VStack {
-            TextField("Name", text: $category.name)
-                .onChange(of: category.name) { _, newValue in
-                    try? database.write { db in
-                        try category.update(db)
+        VStack(spacing: 16) {
+            Text(isNewCategory ? "New Category" : "Edit Category")
+                .font(.headline)
+            
+            TextField("Category name", text: $categoryName)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .frame(width: 200)
+                .onSubmit {
+                    if !categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        onSave()
                     }
                 }
+            
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.escape)
+                
+                Button(isNewCategory ? "Create" : "Save", action: onSave)
+                    .keyboardShortcut(.return)
+                    .disabled(categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
         }
         .padding()
+        .frame(width: 250, height: 120)
     }
 }
 
