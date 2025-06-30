@@ -116,6 +116,7 @@ struct Direction: Codable, Hashable, Equatable, Identifiable  {
 struct Ingredient: Codable, Hashable, Equatable, Identifiable  {
     var id: String
     var isHeading: Bool = false
+    var isMain: Bool = false
     var text: String
 }
 
@@ -411,7 +412,7 @@ extension Database {
                     Direction(id: UUID().uuidString, text: "Now, do the second step."),
                 ],
                 ingredients: [
-                    Ingredient(id: UUID().uuidString, text: "1 cup flour"),
+                    Ingredient(id: UUID().uuidString, isMain: true, text: "1 cup flour"),
                     Ingredient(id: UUID().uuidString, text: "1/2 cup water"),
                     Ingredient(id: UUID().uuidString, text: "salt, to taste")
                 ],
