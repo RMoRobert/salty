@@ -17,23 +17,23 @@ struct RatingEditView: View {
             Text("Not Rated")
                 .tag(Rating.notSet)
             
-            Text("1 ⭐")
+            Text("⭐")
                 .accessibilityLabel(Text("1 star"))
                 .tag(Rating.one)
             
-            Text("2 ⭐⭐")
+            Text("⭐⭐")
                 .accessibilityLabel(Text("2 stars"))
                 .tag(Rating.two)
             
-            Text("3 ⭐⭐⭐")
+            Text("⭐⭐⭐")
                 .accessibilityLabel(Text("3 stars"))
                 .tag(Rating.three)
             
-            Text("4 ⭐⭐⭐⭐")
+            Text("⭐⭐⭐⭐")
                 .accessibilityLabel(Text("4 stars"))
                 .tag(Rating.four)
             
-            Text("5 ⭐⭐⭐⭐⭐")
+            Text("⭐⭐⭐⭐⭐")
                 .accessibilityLabel(Text("5 stars"))
                 .tag(Rating.five)
         }
