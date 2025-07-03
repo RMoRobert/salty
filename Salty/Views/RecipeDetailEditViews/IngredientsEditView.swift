@@ -108,17 +108,15 @@ struct IngredientDetailEditView: View {
             Text("Edit Ingredient")
                 .font(.headline)
             
-            Toggle("Is Heading", isOn: $ingredient.isHeading)
-                .font(.subheadline)
-                .fontWeight(.medium)
+            if (!ingredient.isMain) {
+                Toggle("Is Heading", isOn: $ingredient.isHeading)
+            }
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Text:")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                TextField("Ingredient text", text: $ingredient.text, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...4)
+                Text(ingredient.isHeading ? "Heading Text:" : "Ingredient:")
+                TextField("Ingredient:", text: $ingredient.text)
+                if (!ingredient.isHeading) {                    Toggle("Is Main", isOn: $ingredient.isMain)
+                }
             }
         }
         .padding()
