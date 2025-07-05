@@ -35,6 +35,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D47AAAC72E19AC2D0082A893 /* ci_pre_xcodebuild.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = ci_pre_xcodebuild.sh; sourceTree = "<group>"; };
 		D47F8FDF2DF35EB300A64304 /* Salty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Salty.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D47F8FED2DF35EB400A64304 /* SaltyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaltyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D47F8FF72DF35EB400A64304 /* SaltyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaltyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -91,9 +92,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D47AAAC62E19ABFC0082A893 /* ci_scripts */ = {
+			isa = PBXGroup;
+			children = (
+				D47AAAC72E19AC2D0082A893 /* ci_pre_xcodebuild.sh */,
+			);
+			path = ci_scripts;
+			sourceTree = "<group>";
+		};
 		D47F8FD62DF35EB300A64304 = {
 			isa = PBXGroup;
 			children = (
+				D47AAAC62E19ABFC0082A893 /* ci_scripts */,
 				D47F900A2DF35EEA00A64304 /* Credits.rtf */,
 				D47F8FE12DF35EB300A64304 /* Salty */,
 				D47F8FF02DF35EB400A64304 /* SaltyTests */,
