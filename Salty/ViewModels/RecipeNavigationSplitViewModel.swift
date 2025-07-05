@@ -24,6 +24,8 @@ class RecipeNavigationSplitViewModel {
     @ObservationIgnored
     @FetchAll var categories: [Category]
     
+
+    
     // MARK: - State
     var searchString = ""
     var selectedSidebarItemId: String?

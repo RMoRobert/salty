@@ -92,10 +92,7 @@ struct CategoryEditView: View {
 }
 
 
-//struct CategoryEditView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        let realm = RecipeLibrary.previewRealm
-//        let lib = realm.objects(RecipeLibrary.self)
-//        CategoryEditView(recipe: lib.first!.recipes.first!, recipeLibrary: lib.first!)
-//    }
-//}
+#Preview {
+    @Previewable @State var recipe = SampleData.sampleRecipes[0]
+    return CategoryEditView(recipe: $recipe)
+}

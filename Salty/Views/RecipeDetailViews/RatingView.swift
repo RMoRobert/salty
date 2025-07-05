@@ -30,11 +30,6 @@ struct RatingView: View {
     }
 }
 
-//struct RatingView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        Group {
-//            let rawRating = 3
-//            RatingView(Recipe())
-//        }
-//    }
-//}
+#Preview {
+    RatingView(recipe: SampleData.sampleRecipes[0])
+}

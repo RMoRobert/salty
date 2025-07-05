@@ -195,16 +195,6 @@ struct RecipeDetailView: View {
 }
 
 
-//struct RecipeDetailView_Previews: PreviewProvider {
-//    static var previews: some View {
-//       let recipe = try! prepareDependencies {
-//            $0.defaultDatabase = try Salty.appDatabase()
-//            return try $0.defaultDatabase.read { db in
-//                try Recipe.all.fetchOne(db)!
-//            }
-//        }
-//        Group {
-//            RecipeDetailView(recipe: recipe)
-//        }
-//    }
-//}
+#Preview {
+    RecipeDetailView(recipe: SampleData.sampleRecipes[0])
+}

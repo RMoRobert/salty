@@ -150,9 +150,6 @@ struct RecipeNavigationSplitView: View {
 
 }
 
-//#Preview {
-//    let _ = try! prepareDependencies {
-//        $0.defaultDatabase = try Salty.appDatabase()
-//    }
-//    RecipeNavigationSplitView()
-//}
+#Preview {
+    RecipeNavigationSplitView()
+}

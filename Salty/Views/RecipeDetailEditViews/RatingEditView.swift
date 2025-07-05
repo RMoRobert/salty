@@ -42,12 +42,7 @@ struct RatingEditView: View {
     }
 }
 
-//struct RatingEditView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        let realm = RecipeLibrary.previewRealm
-//        let rl = realm.objects(RecipeLibrary.self)
-//        let r = rl.randomElement()!.recipes.randomElement()!
-//        RatingEditView(recipe: r)
-//    }
-//}
-
+#Preview {
+    @Previewable @State var recipe = SampleData.sampleRecipes[0]
+    return RatingEditView(recipe: $recipe)
+}

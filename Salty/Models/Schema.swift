@@ -97,26 +97,26 @@ extension Recipe {
     /// Loads the full image data from external storage
     var fullImageData: Data? {
         guard let filename = imageFilename else { return nil }
-        return ImageManager.shared.loadImage(filename: filename)
+        return RecipeImageManager.shared.loadImage(filename: filename)
     }
     
     /// Gets the URL for the full image from external storage
     var fullImageURL: URL? {
         guard let filename = imageFilename else { return nil }
-        return URL.documentsDirectory.appending(component: ImageManager.imagesFolderName).appending(component: filename)
+        return URL.documentsDirectory.appending(component: RecipeImageManager.imagesFolderName).appending(component: filename)
     }
     
     /// Sets the image data, saving to external storage and generating thumbnail
     mutating func setImage(_ imageData: Data?) {
         if let imageData = imageData {
-            if let result = ImageManager.shared.saveImage(imageData, for: id) {
+            if let result = RecipeImageManager.shared.saveImage(imageData, for: id) {
                 self.imageFilename = result.filename
                 self.imageThumbnailData = result.thumbnailData
             }
         } else {
             // Remove existing image
             if let filename = imageFilename {
-                ImageManager.shared.deleteImage(filename: filename)
+                RecipeImageManager.shared.deleteImage(filename: filename)
             }
             self.imageFilename = nil
             self.imageThumbnailData = nil
@@ -126,7 +126,7 @@ extension Recipe {
     /// Removes the image and cleans up external storage
     mutating func removeImage() {
         if let filename = imageFilename {
-            ImageManager.shared.deleteImage(filename: filename)
+            RecipeImageManager.shared.deleteImage(filename: filename)
         }
         self.imageFilename = nil
         self.imageThumbnailData = nil
@@ -264,7 +264,6 @@ enum Difficulty: Int, Codable, CaseIterable, QueryBindable {
             return "difficult"
         }
     }
-    
 }
 
 enum Rating: Int, CaseIterable, Identifiable, Codable, QueryBindable {
@@ -446,181 +445,24 @@ func appDatabase() throws -> any DatabaseWriter {
     return database
 }
 
-// MARK: - Image Manager
 
-class ImageManager {
-    static let shared = ImageManager()
-    
-    static let imagesFolderName = "recipeImages"
-    
-    private let imagesDirectory: URL
-    
-    private init() {
-        let documentsPath = URL.documentsDirectory
-        self.imagesDirectory = documentsPath.appending(component: Self.imagesFolderName)
-        
-        // Create images directory if it doesn't exist
-        try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
-    }
-    
-    func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
-        // Determine file extension from image data
-        let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
-        let filename = "\(recipeId).\(fileExtension)"
-        let fileURL = imagesDirectory.appending(component: filename)
-        
-        do {
-            try imageData.write(to: fileURL)
-            let thumbnailData = generateThumbnail(from: imageData, size: CGSize(width: 300, height: 300))
-            
-            // If thumbnail generation fails, create a blank thumbnail or return nil
-            if let thumbnailData = thumbnailData {
-                return (filename, thumbnailData)
-            } else {
-                // Create a blank thumbnail as fallback
-                let blankThumbnailData = createBlankThumbnail(size: CGSize(width: 300, height: 300))
-                return (filename, blankThumbnailData)
-            }
-        } catch {
-            logger.error("Failed to save image for recipe \(recipeId): \(error)")
-            return nil
-        }
-    }
-    
-    func loadImage(filename: String) -> Data? {
-        let fileURL = imagesDirectory.appending(component: filename)
-        return try? Data(contentsOf: fileURL)
-    }
-    
-    func deleteImage(filename: String) {
-        let fileURL = imagesDirectory.appending(component: filename)
-        try? FileManager.default.removeItem(at: fileURL)
-    }
-    
-    func generateThumbnail(from imageData: Data, size: CGSize) -> Data? {
-        #if os(iOS)
-        guard let image = UIImage(data: imageData) else { return nil }
-        
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let thumbnail = renderer.image { context in
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
-        
-        return thumbnail.jpegData(compressionQuality: 0.8)
-        
-        #elseif os(macOS)
-        guard let image = NSImage(data: imageData) else { return nil }
-        
-        let thumbnail = NSImage(size: size)
-        thumbnail.lockFocus()
-        
-        image.draw(in: NSRect(origin: .zero, size: size))
-        
-        thumbnail.unlockFocus()
-        
-        guard let cgImage = thumbnail.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
-        return bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
-        #endif
-    }
-    
-    func createBlankThumbnail(size: CGSize) -> Data {
-        #if os(iOS)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let blankImage = renderer.image { context in
-            UIColor.white.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-        }
-        return blankImage.jpegData(compressionQuality: 0.8) ?? Data()
-        
-        #elseif os(macOS)
-        let blankImage = NSImage(size: size)
-        blankImage.lockFocus()
-        
-        NSColor.white.setFill()
-        NSRect(origin: .zero, size: size).fill()
-        
-        blankImage.unlockFocus()
-        
-        guard let cgImage = blankImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return Data()
-        }
-        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
-        return bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) ?? Data()
-        #endif
-    }
-    
-    private func determineImageFormat(from data: Data) -> String? {
-        guard data.count >= 8 else { return nil }
-        
-        let bytes = [UInt8](data.prefix(8))
-        
-        // Check for PNG signature
-        if bytes.count >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
-            return "png"
-        }
-        
-        // Check for JPEG signature
-        if bytes.count >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 {
-            return "jpg"
-        }
-        
-        // Check for HEIC signature (simplified)
-        if bytes.count >= 12 && String(bytes: bytes[4...11], encoding: .ascii)?.contains("ftyp") == true {
-            return "heic"
-        }
-        
-        return nil
-    }
-}
 
 #if DEBUG
 extension Database {
     func seedSampleData() throws {
         try seed {
-            // Add sample categories
-            Category(id: UUID().uuidString, name: "Breakfast")
-            Category(id: UUID().uuidString, name: "Lunch")
-            Category(id: UUID().uuidString, name: "Dinner")
-            Category(id: UUID().uuidString, name: "Dessert")
-            
-            Course(id: UUID().uuidString, name: "Main")
-            Course(id: UUID().uuidString, name: "Dessert")
-            
-            Tag(id: UUID().uuidString, name: "easy")
-            Tag(id: UUID().uuidString, name: "vegan")
-            
-            Recipe(
-                id: UUID().uuidString,
-                name: "My Recipe",
-                createdDate: Date(),
-                lastModifiedDate: Date(),
-                lastPrepared: Date(timeIntervalSinceNow: 0-60*24*45),
-                source: "Some Book",
-                introduction: "This is an introduction for my recipe. Some introductions are long, so let's make this one long, too. Here is some more text. Is it long enough yet? Let's write more just in case. Yay, recipes!",
-                difficulty: .somewhatEasy,
-                rating: Rating.four,
-                imageFilename: nil,
-                imageThumbnailData: nil,
-                isFavorite: false,
-                wantToMake: false,
-                yield: "2 dozen",
-                directions: [
-                    Direction(id: UUID().uuidString, text: "Do the first step. We'll make this text a bit longer so there is a chance that it will need to wrap or show other text rendering nuances. Lorem ipsum dolor sit amet consectetur adipisicing elit. Quo, molestias! Quasi, voluptatem. Now, let's move on to the  next step -- but not before adding a bit more here just in case. Wow, what a long step!"),
-                    Direction(id: UUID().uuidString, text: "Now, do the second step."),
-                ],
-                ingredients: [
-                    Ingredient(id: UUID().uuidString, isMain: true, text: "1 cup flour"),
-                    Ingredient(id: UUID().uuidString, text: "1/2 cup water"),
-                    Ingredient(id: UUID().uuidString, text: "salt, to taste")
-                ],
-                notes: [
-                    Note(id: UUID().uuidString, title: "Note 1", content: "This is the text of the note")
-                ],
-                preparationTimes: [
-                    PreparationTime(id: UUID().uuidString, type: "Preparation", timeString: "25 Minutes")
-                ]
-            )
+            for category in SampleData.sampleCategories {
+                category
+            }
+            for course in SampleData.sampleCourses {
+                course
+            }
+            for tag in SampleData.sampleTags {
+                tag
+            }
+            for recipe in SampleData.sampleRecipes {
+                recipe
+            }
         }
     }
 }

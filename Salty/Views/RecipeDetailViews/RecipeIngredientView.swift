@@ -28,17 +28,5 @@ struct RecipeIngredientView: View {
 }
 
 #Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try Salty.appDatabase()
-    }
-    @FetchAll var recipes: [Recipe]
-    RecipeIngredientView(recipe: recipes.first!)
+    RecipeIngredientView(recipe: SampleData.sampleRecipes[0])
 }
-
-//struct RecipeIngredientView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        let realm = RecipeLibrary.previewRealm
-//        let lib = realm.objects(RecipeLibrary.self)
-//        RecipeIngredientView(recipe: lib.first!.recipes.first!)
-//    }
-//}

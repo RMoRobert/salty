@@ -12,44 +12,32 @@ struct DifficultyEditView: View {
     @Binding var recipe: Recipe
     
     var body: some View {
-        Picker("Difficulty", selection: $recipe.difficulty) {
-            Text("Not Set")
-                .tag(Difficulty.notSet)
-            
-            Text("Easy")
-                .accessibilityLabel(Text("Easy difficulty"))
-                .tag(Difficulty.easy)
-            
-            Text("Somewhat Easy")
-                .accessibilityLabel(Text("Somewhat easy difficulty"))
-                .tag(Difficulty.somewhatEasy)
-            
-            Text("Medium")
-                .accessibilityLabel(Text("Medium difficulty"))
-                .tag(Difficulty.medium)
-            
-            Text("Slightly Difficult")
-                .accessibilityLabel(Text("Slightly difficult"))
-                .tag(Difficulty.slightlyDifficult)
-            
-            Text("Difficult")
-                .accessibilityLabel(Text("Difficult"))
-                .tag(Difficulty.difficult)
+        VStack(alignment: .leading, spacing: 8) {
+            Slider(
+                value: Binding(
+                    get: { recipe.difficulty.asIndex },
+                    set: { newValue in
+                        recipe.difficulty = Difficulty(index: newValue)
+                    }
+                ),
+                in: 0...Double(Difficulty.allCases.count - 1),
+                step: 1
+            ) {
+                //Text("Difficulty")
+                // TODO: Show difficulty value!
+            } minimumValueLabel: {
+                Text("Not Set")
+            } maximumValueLabel: {
+                Text("Difficult")
+            }
+            .accessibilityLabel("Difficulty")
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
     }
 }
 
-//struct DifficultyEditView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        let _ = try! prepareDependencies {
-//            $0.defaultDatabase = try Salty.appDatabase()
-//        }
-//        @FetchAll var recipes: [Recipe]
-//        DifficultyEditView(recipe: recipes.first!)
-//    }
-//}
-
+#Preview {
+    @Previewable @State var recipe = SampleData.sampleRecipes[0]
+    return DifficultyEditView(recipe: $recipe)
+}
 
 

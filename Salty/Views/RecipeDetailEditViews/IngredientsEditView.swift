@@ -123,16 +123,6 @@ struct IngredientDetailEditView: View {
     }
 }
 
-struct IngredientsEditView_Previews: PreviewProvider {
-    static var previews: some View {
-        let recipe = try! prepareDependencies {
-            $0.defaultDatabase = try Salty.appDatabase()
-            return try $0.defaultDatabase.read { db in
-                try Recipe.all.fetchOne(db)!
-            }
-        }
-        Group {
-            IngredientsEditView(recipe: .constant(recipe))
-        }
-    }
+#Preview {
+    IngredientsEditView(recipe: .constant(SampleData.sampleRecipes[0]))
 }

@@ -120,16 +120,6 @@ struct PreparationTimeDetailEditView: View {
     }
 }
 
-struct PreparationTimesEditView_Previews: PreviewProvider {
-    static var previews: some View {
-        let recipe = try! prepareDependencies {
-            $0.defaultDatabase = try Salty.appDatabase()
-            return try $0.defaultDatabase.read { db in
-                try Recipe.all.fetchOne(db)!
-            }
-        }
-        Group {
-            PreparationTimesEditView(recipe: .constant(recipe))
-        }
-    }
+#Preview {
+    PreparationTimesEditView(recipe: .constant(SampleData.sampleRecipes[0]))
 }

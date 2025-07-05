@@ -35,9 +35,5 @@ struct RecipeDirectionView: View {
 }
 
 #Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try Salty.appDatabase()
-    }
-    @FetchAll var recipes: [Recipe]
-    RecipeDirectionView(recipe: recipes.first!)
+    RecipeDirectionView(recipe: SampleData.sampleRecipes[0])
 }
