@@ -78,7 +78,7 @@ struct RecipeDetailEditView: View {
                         .padding(.bottom, 4)
                     
                     VStack(spacing: 12) {
-                        TextField("Introduction:", text: $recipe.introduction, axis: .vertical)
+                        TextField("Introduction", text: $recipe.introduction, axis: .vertical)
                             .lineLimit(5...10)
                     }
                 }

@@ -18,7 +18,7 @@ struct RecipeImageEditView: View {
             Label("Image", systemImage: "photo")
                 .labelStyle(TitleOnlyLabelStyle())
             
-            if let imageData = recipe.imageData, let nsImage = NSImage(data: imageData) {
+            if let imageData = recipe.fullImageData, let nsImage = NSImage(data: imageData) {
 
                 Image(nsImage: nsImage)
                         .resizable()
@@ -30,14 +30,14 @@ struct RecipeImageEditView: View {
                             providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
                                 if let data = data
                                 {
-                                    recipe.imageData = data
+                                    recipe.setImage(data)
                                 }
                             })
                             return true
                         }
                         .contextMenu {
                             Button(role: .destructive) {
-                                recipe.imageData = nil
+                                recipe.removeImage()
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -67,7 +67,7 @@ struct RecipeImageEditView: View {
                         providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
                             if let data = data
                             {
-                                recipe.imageData = data
+                                recipe.setImage(data)
                             }
                         })
                         return true
@@ -94,7 +94,7 @@ struct RecipeImageEditView: View {
                         }
                         
                         let imageData = try Data(contentsOf: url)
-                        recipe.imageData = imageData
+                        recipe.setImage(imageData)
                     } catch {
                         print("Error loading image data: \(error)")
                     }

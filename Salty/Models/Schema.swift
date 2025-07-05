@@ -9,6 +9,12 @@ import SharingGRDB
 import OSLog
 import Foundation
 
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
 private let logger = Logger(subsystem: "Salty", category: "Database")
 
 // Record Types
@@ -25,7 +31,8 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
     var introduction: String = ""
     var difficulty: Difficulty = .notSet
     var rating: Rating = .notSet
-    var imageData: Data?
+    var imageFilename: String?
+    var imageThumbnailData: Data?
     var isFavorite: Bool = false
     var wantToMake: Bool = false
     var yield: String = ""
@@ -64,7 +71,8 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
         static let introduction = Column(CodingKeys.introduction)
         static let difficulty = Column(CodingKeys.difficulty)
         static let rating = Column(CodingKeys.rating)
-        static let imageData = Column(CodingKeys.imageData)
+        static let imageFilename = Column(CodingKeys.imageFilename)
+        static let imageThumbnailData = Column(CodingKeys.imageThumbnailData)
         static let isFavorite = Column(CodingKeys.isFavorite)
         static let wantToMake = Column(CodingKeys.wantToMake)
         static let directions = JSONColumn(CodingKeys.directions)
@@ -76,13 +84,56 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
     static var databaseSelection: [any SQLSelectable] {
         [Columns.id, Columns.name, Columns.createdDate, Columns.lastModifedDate,
          Columns.source, Columns.sourceDetails, Columns.introduction,
-         Columns.difficulty, Columns.rating, Columns.imageData,
-         Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
+         Columns.difficulty, Columns.rating, Columns.imageFilename,
+         Columns.imageThumbnailData, Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
          Database.json(Columns.directions), Database.json(Columns.ingredients),
          Database.json(Columns.notes), Database.json(Columns.preparationTimes)]
     }
 }
 
+// MARK: - Recipe Image Extensions
+
+extension Recipe {
+    /// Loads the full image data from external storage
+    var fullImageData: Data? {
+        guard let filename = imageFilename else { return nil }
+        return ImageManager.shared.loadImage(filename: filename)
+    }
+    
+    /// Gets the URL for the full image from external storage
+    var fullImageURL: URL? {
+        guard let filename = imageFilename else { return nil }
+        return URL.documentsDirectory.appending(component: ImageManager.imagesFolderName).appending(component: filename)
+    }
+    
+    /// Sets the image data, saving to external storage and generating thumbnail
+    mutating func setImage(_ imageData: Data?) {
+        if let imageData = imageData {
+            if let result = ImageManager.shared.saveImage(imageData, for: id) {
+                self.imageFilename = result.filename
+                self.imageThumbnailData = result.thumbnailData
+            }
+        } else {
+            // Remove existing image
+            if let filename = imageFilename {
+                ImageManager.shared.deleteImage(filename: filename)
+            }
+            self.imageFilename = nil
+            self.imageThumbnailData = nil
+        }
+    }
+    
+    /// Removes the image and cleans up external storage
+    mutating func removeImage() {
+        if let filename = imageFilename {
+            ImageManager.shared.deleteImage(filename: filename)
+        }
+        self.imageFilename = nil
+        self.imageThumbnailData = nil
+    }
+}
+
+// TODO: Consider using something like this when presenting List view on main screen, as lack of lazy loading might mean we're fetching too much to start...
 @Selection
 struct RecipeSummary: Identifiable, Hashable, Equatable {
     let id: String
@@ -95,7 +146,7 @@ struct RecipeSummary: Identifiable, Hashable, Equatable {
     let introduction: String
     let difficulty: Difficulty
     let rating: Rating
-    let imageData: Data?
+    let imageThumbnailData: Data?
     let isFavorite: Bool
 }
 
@@ -347,7 +398,8 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("introduction", .text)
             t.column("difficulty", .integer)
             t.column("rating", .integer)
-            t.column("imageData", .blob)
+            t.column("imageFilename", .text)
+            t.column("imageThumbnailData", .blob)
             t.column("isFavorite", .boolean)
             t.column("wantToMake", .boolean)
             t.column("yield", .text)
@@ -384,6 +436,7 @@ func appDatabase() throws -> any DatabaseWriter {
             t.primaryKey(["recipeId", "tagId"])
         }
     }
+    
     try migrator.migrate(database)
     if context == .preview {
       try database.write { db in
@@ -391,6 +444,134 @@ func appDatabase() throws -> any DatabaseWriter {
       }
     }
     return database
+}
+
+// MARK: - Image Manager
+
+class ImageManager {
+    static let shared = ImageManager()
+    
+    static let imagesFolderName = "recipeImages"
+    
+    private let imagesDirectory: URL
+    
+    private init() {
+        let documentsPath = URL.documentsDirectory
+        self.imagesDirectory = documentsPath.appending(component: Self.imagesFolderName)
+        
+        // Create images directory if it doesn't exist
+        try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
+    }
+    
+    func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
+        // Determine file extension from image data
+        let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
+        let filename = "\(recipeId).\(fileExtension)"
+        let fileURL = imagesDirectory.appending(component: filename)
+        
+        do {
+            try imageData.write(to: fileURL)
+            let thumbnailData = generateThumbnail(from: imageData, size: CGSize(width: 300, height: 300))
+            
+            // If thumbnail generation fails, create a blank thumbnail or return nil
+            if let thumbnailData = thumbnailData {
+                return (filename, thumbnailData)
+            } else {
+                // Create a blank thumbnail as fallback
+                let blankThumbnailData = createBlankThumbnail(size: CGSize(width: 300, height: 300))
+                return (filename, blankThumbnailData)
+            }
+        } catch {
+            logger.error("Failed to save image for recipe \(recipeId): \(error)")
+            return nil
+        }
+    }
+    
+    func loadImage(filename: String) -> Data? {
+        let fileURL = imagesDirectory.appending(component: filename)
+        return try? Data(contentsOf: fileURL)
+    }
+    
+    func deleteImage(filename: String) {
+        let fileURL = imagesDirectory.appending(component: filename)
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+    
+    func generateThumbnail(from imageData: Data, size: CGSize) -> Data? {
+        #if os(iOS)
+        guard let image = UIImage(data: imageData) else { return nil }
+        
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let thumbnail = renderer.image { context in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        
+        return thumbnail.jpegData(compressionQuality: 0.8)
+        
+        #elseif os(macOS)
+        guard let image = NSImage(data: imageData) else { return nil }
+        
+        let thumbnail = NSImage(size: size)
+        thumbnail.lockFocus()
+        
+        image.draw(in: NSRect(origin: .zero, size: size))
+        
+        thumbnail.unlockFocus()
+        
+        guard let cgImage = thumbnail.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+        return bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
+        #endif
+    }
+    
+    func createBlankThumbnail(size: CGSize) -> Data {
+        #if os(iOS)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let blankImage = renderer.image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        return blankImage.jpegData(compressionQuality: 0.8) ?? Data()
+        
+        #elseif os(macOS)
+        let blankImage = NSImage(size: size)
+        blankImage.lockFocus()
+        
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        
+        blankImage.unlockFocus()
+        
+        guard let cgImage = blankImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return Data()
+        }
+        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+        return bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) ?? Data()
+        #endif
+    }
+    
+    private func determineImageFormat(from data: Data) -> String? {
+        guard data.count >= 8 else { return nil }
+        
+        let bytes = [UInt8](data.prefix(8))
+        
+        // Check for PNG signature
+        if bytes.count >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
+            return "png"
+        }
+        
+        // Check for JPEG signature
+        if bytes.count >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 {
+            return "jpg"
+        }
+        
+        // Check for HEIC signature (simplified)
+        if bytes.count >= 12 && String(bytes: bytes[4...11], encoding: .ascii)?.contains("ftyp") == true {
+            return "heic"
+        }
+        
+        return nil
+    }
 }
 
 #if DEBUG
@@ -419,7 +600,8 @@ extension Database {
                 introduction: "This is an introduction for my recipe. Some introductions are long, so let's make this one long, too. Here is some more text. Is it long enough yet? Let's write more just in case. Yay, recipes!",
                 difficulty: .somewhatEasy,
                 rating: Rating.four,
-                imageData: nil,
+                imageFilename: nil,
+                imageThumbnailData: nil,
                 isFavorite: false,
                 wantToMake: false,
                 yield: "2 dozen",

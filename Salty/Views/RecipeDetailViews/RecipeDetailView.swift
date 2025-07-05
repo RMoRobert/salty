@@ -53,7 +53,7 @@ struct RecipeDetailView: View {
                         }
                     }
                     .padding()
-                    if let _ = recipe.imageData {
+                    if recipe.imageFilename != nil {
                         RecipeImageView(recipe: recipe)
                             .padding()
                     }

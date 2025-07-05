@@ -13,8 +13,8 @@ struct RecipeRowView: View {
     
     var body: some View {
         HStack {
-            if recipe.imageData != nil, let imageData = recipe.imageData {
-                let img = NSImage(data: imageData)
+            if let thumbnailData = recipe.imageThumbnailData {
+                let img = NSImage(data: thumbnailData)
                 Image(nsImage: img ?? NSImage())
                     .resizable()
                     .scaledToFill()

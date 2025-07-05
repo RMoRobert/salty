@@ -11,6 +11,8 @@ import SharingGRDB
 struct RecipeImageView: View {
     @State var recipe: Recipe
     @State private var dragOver = false
+    @State private var loadedImage: NSImage?
+    @State private var isLoading = false
     
     var body: some View {
         VStack {
@@ -20,12 +22,23 @@ struct RecipeImageView: View {
                 .frame(width: 0, height: 0)
             
 #if os(macOS)
-            if let recipeImageData = recipe.imageData {
-                Image(nsImage: NSImage(data: recipeImageData) ?? NSImage())
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .scaledToFit()
-                    .frame(width: 125, height: 125, alignment: .center)
+            if let imageURL = recipe.fullImageURL {
+                if isLoading {
+                    ProgressView()
+                        .frame(width: 125, height: 125)
+                } else if let loadedImage = loadedImage {
+                    Image(nsImage: loadedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaledToFit()
+                        .frame(width: 125, height: 125, alignment: .center)
+                } else {
+                    ProgressView()
+                        .frame(width: 125, height: 125)
+                        .onAppear {
+                            loadImageWithDelay(from: imageURL)
+                        }
+                }
             }
             else {
                 RoundedRectangle(cornerRadius: 10)
@@ -46,6 +59,26 @@ struct RecipeImageView: View {
 //                    .border(.thickMaterial)
 //            }
 #endif
+        }
+    }
+    
+    private func loadImageWithDelay(from url: URL) {
+        isLoading = true
+        
+        // Simulate slow loading with a 3-second delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            // Load the actual image
+            if let imageData = try? Data(contentsOf: url),
+               let image = NSImage(data: imageData) {
+                DispatchQueue.main.async {
+                    self.loadedImage = image
+                    self.isLoading = false
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                }
+            }
         }
     }
 }
