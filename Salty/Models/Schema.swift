@@ -83,6 +83,22 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
     }
 }
 
+@Selection
+struct RecipeSummary: Identifiable, Hashable, Equatable {
+    let id: String
+    let name: String
+    let createdDate: Date
+    let lastModifiedDate: Date
+    let lastPrepared: Date?
+    let source: String
+    let sourceDetails: String
+    let introduction: String
+    let difficulty: Difficulty
+    let rating: Rating
+    let imageData: Data?
+    let isFavorite: Bool
+}
+
 
 struct Note: Codable, Hashable, Equatable, Identifiable {
     var id: String

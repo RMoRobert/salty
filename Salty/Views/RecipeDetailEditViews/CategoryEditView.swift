@@ -82,7 +82,7 @@ struct CategoryEditView: View {
     }
     
     private func removeCategory(_ category: Category) {
-        try? database.write { db in
+        let _ = try? database.write { db in
             try RecipeCategory
                 .filter(Column("recipeId") == recipe.id && Column("categoryId") == category.id)
                 .deleteAll(db)

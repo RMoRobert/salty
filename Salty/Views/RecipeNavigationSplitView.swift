@@ -6,26 +6,12 @@
 //
 
 import SwiftUI
-import SharingGRDB
 
 struct RecipeNavigationSplitView: View {
-    @Dependency(\.defaultDatabase) private var database
+    @State private var viewModel = RecipeNavigationSplitViewModel()
     //@Environment(\.openWindow) private var openWindow
     @State private var recipeToEditID: String?
-    private let allRecipesID: String = "0"
-    
-    @FetchAll
-    var recipes: [Recipe]
-    
-    @FetchAll
-    var categories: [Category]
-    
-//    @FetchAll
-//    var shoppingLists: [ShoppingList]
-    
-    @State private var searchString = ""
-    @State private var selectedSidebarItemId: String?
-    @State private var selectedRecipeIDs = Set<String>()
+
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     //@State private var showEditRecipeView = false
@@ -35,70 +21,20 @@ struct RecipeNavigationSplitView: View {
     @State private var showingImportRecipesSheet = false
     @State private var showingDeleteConfirmation = false
     
-    // Removed computed property that was causing performance issues
-    
-    private var recipeToEdit: Recipe? {
-        guard let recipeId = recipeToEditID else { return nil }
-        return recipes.first(where: { $0.id == recipeId })
-    }
-    
-    private var filteredRecipes: [Recipe] {
-        var recipesToFilter: [Recipe]
-        
-        if selectedSidebarItemId == allRecipesID {
-            recipesToFilter = recipes
-        } else if let categoryId = selectedSidebarItemId,
-                  let category = categories.first(where: { $0.id == categoryId }) {
-            // Filter recipes for the selected category
-            do {
-                let recipeIds = try database.read { db in
-                    try RecipeCategory
-                        .filter(Column("categoryId") == category.id)
-                        .fetchAll(db)
-                        .map { $0.recipeId }
-                }
-                
-                recipesToFilter = recipes.filter { recipe in
-                    recipeIds.contains(recipe.id)
-                }
-            } catch {
-                recipesToFilter = []
-            }
-        } else {
-            recipesToFilter = []
-        }
-        
-        // Apply search filter if search string is not empty
-        if !searchString.isEmpty {
-            let normalizedSearch = searchString
-                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            recipesToFilter = recipesToFilter.filter { recipe in
-                let normalizedName = recipe.name
-                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                
-                return normalizedName.contains(normalizedSearch)
-            }
-        }
-        
-        return recipesToFilter
-    }
-    
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(selection: $selectedSidebarItemId) {
+            List(selection: $viewModel.selectedSidebarItemId) {
                 // Library:
                 Section {
                     Label("All Recipes", systemImage: "book")
-                        .tag(allRecipesID) // figure out better way to ta all...
+                        .tag(viewModel.allRecipesID) // figure out better way to tag all...
                 } header: {
                     Text("Library")
                 }
                 
                 // Categories:
                 Section {
-                    ForEach(categories) { category in
+                    ForEach(viewModel.categories) { category in
                         Label(category.name, systemImage: "doc.plaintext")
                             .tag(category.id)
                     }
@@ -114,11 +50,11 @@ struct RecipeNavigationSplitView: View {
             }
             .listStyle(.sidebar)
             .onAppear() {
-                selectedSidebarItemId = allRecipesID
+                viewModel.selectedSidebarItemId = viewModel.allRecipesID
             }
         } content: {
-            List(selection: $selectedRecipeIDs) {
-                ForEach(filteredRecipes) { recipe in
+            List(selection: $viewModel.selectedRecipeIDs) {
+                ForEach(viewModel.filteredRecipes) { recipe in
                     RecipeRowView(recipe: recipe)
                         .contextMenu {
                             Button("Edit") {
@@ -126,10 +62,7 @@ struct RecipeNavigationSplitView: View {
                                 showingEditSheet = true
                             }
                             Button(role: .destructive, action: {
-                                // TODO: Re-add delete recipe action!
-//                                    if let id = recipe.id {
-//                                        viewModel.deleteRecipe(id: id)
-//                                    }
+                                viewModel.deleteRecipe(id: recipe.id)
                             }) {
                                 Text("Delete")
                             }
@@ -137,13 +70,13 @@ struct RecipeNavigationSplitView: View {
                         }
                 }
             }
-            .navigationTitle(navigationTitle)
+            .navigationTitle(viewModel.navigationTitle)
             .onDeleteCommand {
-                deleteSelectedRecipes()
+                viewModel.deleteSelectedRecipes()
             }
         } detail: {
-            if let recipeId = selectedRecipeIDs.first,
-               let recipe = recipes.first(where: { $0.id == recipeId }) {
+            if let recipeId = viewModel.selectedRecipeIDs.first,
+               let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
                 //RecipeDetailWebView(recipe: recipe)
                 RecipeDetailView(recipe: recipe)
             } else {
@@ -152,7 +85,7 @@ struct RecipeNavigationSplitView: View {
                     .font(.title)
             }
         }
-        .searchable(text: $searchString)
+        .searchable(text: $viewModel.searchString)
         .navigationTitle("Recipes")
         .toolbar {
             Button(role: .destructive, action: {
@@ -160,28 +93,17 @@ struct RecipeNavigationSplitView: View {
             }) {
                 Label("Delete Recipe", systemImage: "minus")
             }
-            .disabled(selectedRecipeIDs.isEmpty)
+            .disabled(viewModel.selectedRecipeIDs.isEmpty)
             .alert("Delete Recipe(s)?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
-                    deleteSelectedRecipes()
+                    viewModel.deleteSelectedRecipes()
                 }
             } message: {
-                Text("Are you sure you want to delete \(selectedRecipeIDs.count) recipe\(selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
+                Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
             }
             Button(action: {
-                try? database.write { db in
-                    let newRecipe = Recipe(
-                        id: UUID().uuidString,
-                        name: "New Recipe",
-                        createdDate: Date(),
-                        lastModifiedDate: Date(),
-                        lastPrepared: Date(timeIntervalSinceNow: 0-60*24*45),                  isFavorite: false,
-                        wantToMake: false
-                    )
-                    try? newRecipe.insert(db)
-                }
-                
+                viewModel.addNewRecipe()
             }) {
                 Label("New Recipe", systemImage: "plus")
             }
@@ -197,7 +119,7 @@ struct RecipeNavigationSplitView: View {
             })
         }
         .sheet(isPresented: $showingEditSheet) {
-            if let recipe = recipeToEdit {
+            if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
                 RecipeDetailEditView(recipe: recipe)
                     .frame(minWidth: 600, minHeight: 500)
             }
@@ -207,32 +129,17 @@ struct RecipeNavigationSplitView: View {
                 recipeToEditID = nil
             }
         }
+
     }
     
-    private var navigationTitle: String {
-        if selectedSidebarItemId == allRecipesID {
-            return "Recipes"
-        } else if let categoryId = selectedSidebarItemId,
-                  let category = categories.first(where: { $0.id == categoryId }) {
-            return category.name
-        } else {
-            return "Recipes"
-        }
-    }
+
     
-    private func deleteSelectedRecipes() {
-        try? database.write { db in
-            for id in selectedRecipeIDs {
-                try Recipe.deleteOne(db, key: id)
-            }
-        }
-        selectedRecipeIDs.removeAll()
-    }
+
 }
 
-#Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try Salty.appDatabase()
-    }
-    RecipeNavigationSplitView()
-}
+//#Preview {
+//    let _ = try! prepareDependencies {
+//        $0.defaultDatabase = try Salty.appDatabase()
+//    }
+//    RecipeNavigationSplitView()
+//}
