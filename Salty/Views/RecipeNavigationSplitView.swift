@@ -102,11 +102,24 @@ struct RecipeNavigationSplitView: View {
             } message: {
                 Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
             }
+            
             Button(action: {
                 viewModel.addNewRecipe()
             }) {
                 Label("New Recipe", systemImage: "plus")
             }
+            
+            Button(action: {
+                if let firstSelectedID = viewModel.selectedRecipeIDs.first {
+                    recipeToEditID = firstSelectedID
+                    showingEditSheet = true
+                }
+            }) {
+                Label("Edit Recipe", systemImage: "pencil")
+            }
+            .disabled(viewModel.selectedRecipeIDs.isEmpty)
+            .keyboardShortcut("e", modifiers: [.command])
+            
             Menu(content: {
                 Button("Open Database…") {
                     showingOpenDBSheet.toggle()
