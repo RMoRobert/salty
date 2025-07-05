@@ -443,8 +443,8 @@ func appDatabase() throws -> any DatabaseWriter {
         try db.seedSampleData()
       }
     }
-    return database
 #endif
+    return database
 }
 
 
