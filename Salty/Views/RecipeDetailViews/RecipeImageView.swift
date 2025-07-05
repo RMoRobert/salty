@@ -11,8 +11,6 @@ import SharingGRDB
 struct RecipeImageView: View {
     @State var recipe: Recipe
     @State private var dragOver = false
-    @State private var loadedImage: NSImage?
-    @State private var isLoading = false
     
     var body: some View {
         VStack {
@@ -23,21 +21,34 @@ struct RecipeImageView: View {
             
 #if os(macOS)
             if let imageURL = recipe.fullImageURL {
-                if isLoading {
-                    ProgressView()
-                        .frame(width: 125, height: 125)
-                } else if let loadedImage = loadedImage {
-                    Image(nsImage: loadedImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .scaledToFit()
-                        .frame(width: 125, height: 125, alignment: .center)
-                } else {
-                    ProgressView()
-                        .frame(width: 125, height: 125)
-                        .onAppear {
-                            loadImageWithDelay(from: imageURL)
-                        }
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(width: 125, height: 125)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .scaledToFit()
+                            .frame(width: 125, height: 125, alignment: .center)
+                    case .failure(_):
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(.white)
+                            .frame(width: 125, height: 125)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4))
+                            )
+                    @unknown default:
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(.white)
+                            .frame(width: 125, height: 125)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4))
+                            )
+                    }
                 }
             }
             else {
@@ -59,26 +70,6 @@ struct RecipeImageView: View {
 //                    .border(.thickMaterial)
 //            }
 #endif
-        }
-    }
-    
-    private func loadImageWithDelay(from url: URL) {
-        isLoading = true
-        
-        // Simulate slow loading with a 3-second delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            // Load the actual image
-            if let imageData = try? Data(contentsOf: url),
-               let image = NSImage(data: imageData) {
-                DispatchQueue.main.async {
-                    self.loadedImage = image
-                    self.isLoading = false
-                }
-            } else {
-                DispatchQueue.main.async {
-                    self.isLoading = false
-                }
-            }
         }
     }
 }
