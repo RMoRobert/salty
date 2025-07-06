@@ -55,21 +55,39 @@ struct RecipeRowView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
-                //if (recipe.rating != .notSet) {
-                    Spacer()
-                    HStack(alignment: .bottom, spacing: 0) {
-                        ForEach(1..<6) { starNum in
-                            Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
-                                .foregroundColor(recipe.rating != .notSet ? .secondary : .gray )
-                                .font(.caption)
-                                .accessibilityHidden(true)
+                Spacer()
+                HStack {
+                    if (recipe.rating != .notSet) {
+                        HStack(alignment: .bottom, spacing: 0) {
+                            ForEach(1..<6) { starNum in
+                                Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
+                                    .foregroundColor(.secondary)
+                                    .font(.caption)
+                                    .accessibilityHidden(true)
+                            }
                         }
+                        .accessibilityHint("Rating: \(recipe.rating.rawValue) stars")
                     }
-                    .accessibilityHint(recipe.rating != .notSet ? "Rating: \(recipe.rating.rawValue) stars" : "Recipe not rated")
-                    .padding([.leading, .trailing], 0)
+                    else {
+                        HStack(alignment: .bottom, spacing: 0) {
+                            ForEach(1..<6) { starNum in
+                                Image(systemName: "circle.dotted")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .hidden()
+                        .accessibilityHint("Recipe not rated")
+                        
+                    }
                     Spacer()
-                    
-                //}
+                    Image(systemName: recipe.isFavorite ? "heart.fill" : "heart.slash")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .opacity(recipe.isFavorite ? 100 : 0)
+                        .accessibilityHint(recipe.isFavorite ? "Is Favorite" : "Not Favorite")
+                }
                 Spacer()
             }
         }
