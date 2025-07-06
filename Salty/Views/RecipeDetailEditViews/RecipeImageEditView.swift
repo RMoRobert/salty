@@ -13,18 +13,17 @@ struct RecipeImageEditView: View {
     @State private var dragOver = false
     @State private var showingImagePicker = false
     
+    @State var imageFrameSize: CGFloat = 100
+    
     var body: some View {
         VStack {
-            Label("Image", systemImage: "photo")
-                .labelStyle(TitleOnlyLabelStyle())
-            
             if let imageData = recipe.fullImageData, let nsImage = NSImage(data: imageData) {
 
                 Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .scaledToFit()
-                        .frame(width: 100, height: 100, alignment: .center)
+                        .frame(width: imageFrameSize, height: imageFrameSize, alignment: .center)
                         .border(.thickMaterial)
                         .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                             providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
@@ -51,7 +50,7 @@ struct RecipeImageEditView: View {
             else {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(.white)
-                    .frame(width: 100, height: 100)
+                    .frame(width: imageFrameSize, height: imageFrameSize)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
                             .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4, dash: [5]))

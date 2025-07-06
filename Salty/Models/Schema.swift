@@ -229,6 +229,9 @@ extension Tag: FetchableRecord, PersistableRecord {
     }
 }
 
+
+
+
 enum Difficulty: Int, Codable, CaseIterable, QueryBindable {
     case notSet = 0,  easy, somewhatEasy, medium, slightlyDifficult, difficult
     
@@ -353,6 +356,7 @@ struct RecipeTag: Codable, Hashable, Equatable, PersistableRecord, FetchableReco
 }
 
 
+
 // DatabaseWriter code, migrations, etc:
 
 func appDatabase() throws -> any DatabaseWriter {
@@ -436,6 +440,8 @@ func appDatabase() throws -> any DatabaseWriter {
         }
     }
     
+
+    
     try migrator.migrate(database)
 #if DEBUG
     if context == .preview {
@@ -462,6 +468,7 @@ extension Database {
             for tag in SampleData.sampleTags {
                 tag
             }
+
             for recipe in SampleData.sampleRecipes {
                 recipe
             }

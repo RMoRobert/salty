@@ -120,6 +120,6 @@ struct PreparationTimeDetailEditView: View {
     }
 }
 
-#Preview {
-    PreparationTimesEditView(recipe: .constant(SampleData.sampleRecipes[0]))
-}
+//#Preview {
+//    PreparationTimesEditView(recipe: .constant(SampleData.sampleRecipes[0]))
+//}

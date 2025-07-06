@@ -7,6 +7,7 @@
 
 import Foundation
 import SharingGRDB
+import SwiftUICore
 
 // Helper function to safely prepare dependencies for previews
 func prepareDependenciesIfNeeded() {
@@ -17,6 +18,19 @@ func prepareDependenciesIfNeeded() {
     } catch {
         // Dependencies already prepared, ignore the error
         print("Dependencies already prepared: \(error)")
+    }
+}
+
+// MARK: - Preview Environment Keys
+
+private struct PreviewDataKey: EnvironmentKey {
+    static let defaultValue: (recipes: [Recipe], categories: [Category])? = nil
+}
+
+extension EnvironmentValues {
+    var previewData: (recipes: [Recipe], categories: [Category])? {
+        get { self[PreviewDataKey.self] }
+        set { self[PreviewDataKey.self] = newValue }
     }
 }
 
