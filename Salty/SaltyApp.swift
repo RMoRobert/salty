@@ -46,11 +46,10 @@ struct SaltyApp: App {
                 .frame(idealWidth: 800)
                 .navigationTitle("Import Recipe from Web")
         }
-
-//        #if !os(macOS)
-//        .onChange(of: scenePhase) { _ in
-//            persistenceController.save()
-//        }
-//        #endif
+        #if os(macOS)
+        Settings {
+            SettingsView()
+        }
+        #endif
     }
 }

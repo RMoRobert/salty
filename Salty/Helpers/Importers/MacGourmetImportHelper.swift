@@ -37,7 +37,10 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                     
                     // Save categories if present
                     if let categories = categories {
-                        for categoryName in categories {
+                        // Use a Set to deduplicate category names
+                        let uniqueCategories = Set(categories)
+                        
+                        for categoryName in uniqueCategories {
                             // Find existing category or create new one
                             var category = try Category.filter(Column("name") == categoryName).fetchOne(db)
                             if category == nil {
@@ -47,9 +50,16 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                             
                             guard let category = category else { continue }
                             
-                            // Create relationship
-                            let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: category.id)
-                            try recipeCategory.insert(db)
+                            // Check if relationship already exists before creating it
+                            let existingRelationship = try RecipeCategory
+                                .filter(Column("recipeId") == recipe.id && Column("categoryId") == category.id)
+                                .fetchOne(db)
+                            
+                            if existingRelationship == nil {
+                                // Create relationship only if it doesn't already exist
+                                let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: category.id)
+                                try recipeCategory.insert(db)
+                            }
                         }
                     }
                 }

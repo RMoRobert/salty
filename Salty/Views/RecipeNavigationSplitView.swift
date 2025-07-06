@@ -9,6 +9,7 @@ import SwiftUI
 
 struct RecipeNavigationSplitView: View {
     @State private var viewModel: RecipeNavigationSplitViewModel
+    @AppStorage("webPreviews") private var useWebRecipeDetailView = true
     
     init(previewData: (recipes: [Recipe], categories: [Category])? = nil) {
         if let previewData = previewData {
@@ -137,9 +138,14 @@ struct RecipeNavigationSplitView: View {
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
-                //RecipeDetailWebView(recipe: recipe)
-                RecipeDetailView(recipe: recipe)
-                    .id(recipeId) // Force reload when recipe changes
+                if useWebRecipeDetailView == true {
+                    RecipeDetailWebView(recipe: recipe)
+                        .id(recipeId) // seems to be needed to force full reload when recipe changes?
+                }
+                else {
+                    RecipeDetailView(recipe: recipe)
+                        .id(recipeId) // seems to be needed to force full reload when recipe changes?
+                }
             } else {
                 Text("No recipe selected")
                     .foregroundStyle(.tertiary)
