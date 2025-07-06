@@ -12,6 +12,7 @@ import SharingGRDB
 struct RecipeDetailView: View {
     let recipe: Recipe
     @Environment(\.openWindow) private var openWindow
+    @State private var showingFullImage = false
     //@State private var showingEditSheet = false
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -62,6 +63,9 @@ struct RecipeDetailView: View {
                     if recipe.imageFilename != nil {
                         RecipeImageView(recipe: recipe)
                             .padding()
+                            .onTapGesture {
+                                showingFullImage = true
+                            }
                     }
                 }
                 if recipe.preparationTimes.count > 0 {
@@ -181,6 +185,10 @@ struct RecipeDetailView: View {
                 .frame(minWidth: 100, maxWidth: .infinity)
                 }
             }
+        }
+        .sheet(isPresented: $showingFullImage) {
+            RecipeFullImageView(recipe: recipe)
+                .frame(minWidth: 400, minHeight: 400)
         }
 //        .toolbar {
 //            ToolbarItem {

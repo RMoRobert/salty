@@ -20,9 +20,7 @@ struct CategoryEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     
-    
-    //@FetchAll(Category.sort(by: \.name))
-    @FetchAll var categories: [Category]
+    @FetchAll(Category.order(by: \.name)) private var categories
     
     @State private var showingEditLibraryCategoriesSheet = false
     @State private var selectedCategoryIDs: Set<String> = []
@@ -52,10 +50,10 @@ struct CategoryEditView: View {
         .onChange(of: categories) { _, _ in
             loadSelectedCategories()
         }
-        Button("Edit…") {
-            showingEditLibraryCategoriesSheet.toggle()
-        }
-        .padding()
+//        Button("Edit…") {
+//            showingEditLibraryCategoriesSheet.toggle()
+//        }
+//        .padding()
         .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
             LibraryCategoriesEditView()
         }

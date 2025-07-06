@@ -11,7 +11,7 @@ import SharingGRDB
 
 struct LibraryCategoriesEditView: View {
     @Dependency(\.defaultDatabase) private var database
-    @FetchAll private var categories: [Category]
+    @FetchAll(Category.order(by: \.name)) private var categories
     @State private var selectedCategoryIDs: Set<String> = []
     @State private var navigationPath = NavigationPath()
     
