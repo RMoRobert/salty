@@ -145,6 +145,10 @@ struct RecipeNavigationSplitView: View {
                     .frame(minWidth: 600, minHeight: 500)
             }
         }
+        .sheet(isPresented: $showingImportRecipesSheet) {
+            ImportRecipesView()
+                .frame(minWidth: 500, minHeight: 400)
+        }
         .onChange(of: showingEditSheet) { _, isPresented in
             if !isPresented {
                 recipeToEditID = nil

@@ -100,17 +100,28 @@ class RecipeNavigationSplitViewModel {
     }
     
     func deleteSelectedRecipes() {
-        try? database.write { db in
-            for id in selectedRecipeIDs {
-                try Recipe.deleteOne(db, key: id)
+        do {
+            let _ = try database.write { db in
+                try Recipe
+                    .filter(selectedRecipeIDs.contains(Column("id")))
+                    .deleteAll(db)
             }
+            
+            selectedRecipeIDs.removeAll()
+        } catch {
+            print("Error deleting recipes: \(error)")
         }
-        selectedRecipeIDs.removeAll()
     }
     
     func deleteRecipe(id: String) {
-        let _ = try? database.write { db in
-            try Recipe.deleteOne(db, key: id)
+        do {
+            let _ = try database.write { db in
+                try Recipe
+                    .filter(Column("id") == id)
+                    .deleteAll(db)
+            }
+        } catch {
+            print("Error deleting recipe \(id): \(error)")
         }
     }
     

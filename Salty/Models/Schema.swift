@@ -75,6 +75,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
         static let imageThumbnailData = Column(CodingKeys.imageThumbnailData)
         static let isFavorite = Column(CodingKeys.isFavorite)
         static let wantToMake = Column(CodingKeys.wantToMake)
+        static let yield = Column(CodingKeys.yield)
         static let directions = JSONColumn(CodingKeys.directions)
         static let ingredients = JSONColumn(CodingKeys.ingredients)
         static let notes  = JSONColumn(CodingKeys.notes)
@@ -86,6 +87,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
          Columns.source, Columns.sourceDetails, Columns.introduction,
          Columns.difficulty, Columns.rating, Columns.imageFilename,
          Columns.imageThumbnailData, Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
+         Columns.yield,
          Database.json(Columns.directions), Database.json(Columns.ingredients),
          Database.json(Columns.notes), Database.json(Columns.preparationTimes)]
     }

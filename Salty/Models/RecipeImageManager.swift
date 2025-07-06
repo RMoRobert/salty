@@ -34,6 +34,16 @@ class RecipeImageManager {
         try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
     }
     
+    // TODO: Future Enhancement - Add cleanup method
+    // func cleanupOrphanedImages() async {
+    //     This method should:
+    //     1. Get all image filenames from the images directory
+    //     2. Get all recipe IDs from the database that have imageFilename set
+    //     3. Find files that exist on disk but don't have corresponding recipe IDs
+    //     4. Delete those orphaned image files
+    //     5. Log the cleanup results for debugging?
+    // }
+    
     func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
         // Determine file extension from image data
         let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
