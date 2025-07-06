@@ -76,7 +76,7 @@ struct DirectionsEditView: View {
                         )
                     )
                 } else {
-                    Text("Select a direction to edit")
+                    Text("Select a step to edit")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -90,7 +90,7 @@ struct DirectionsEditView: View {
                     recipe.directions.append(Direction(
                         id: UUID().uuidString,
                         stepName: "",
-                        text: "New direction step"
+                        text: "New step"
                     ))
                     try Recipe.upsert(Recipe.Draft(recipe))
                         .execute(db)
@@ -98,11 +98,14 @@ struct DirectionsEditView: View {
                 // Select the newly added item
                 selectedIndex = recipe.directions.count - 1
             } label: {
-                Label("Add Direction", systemImage: "plus")
+                Label("Add Step", systemImage: "plus")
             }
+            .buttonStyle(.bordered)
             .padding()
         }
+        #if os(macOS)
         .frame(minWidth: 500, minHeight: 500)
+        #endif
     }
 }
 
@@ -124,7 +127,9 @@ struct DirectionDetailEditView: View {
                         direction.stepName = newValue.isEmpty ? nil : newValue
                     }
                 ))
-                //.textFieldStyle(.roundedBorder)
+#if os(iOS)
+.textFieldStyle(.roundedBorder)
+#endif
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -135,6 +140,9 @@ struct DirectionDetailEditView: View {
                     //.textFieldStyle(.roundedBorder)
                     .lineLimit(4...12)
                     .frame(minHeight: 60)
+                #if os(iOS)
+                .textFieldStyle(.roundedBorder)
+                #endif
             }
         }
         .padding()

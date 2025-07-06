@@ -139,7 +139,9 @@ struct NotesEditView: View {
             }
             .padding()
         }
+        #if os(macOS)
         .frame(minWidth: 500, minHeight: 500)
+        #endif
         .onAppear {
             // Initialize the view
         }

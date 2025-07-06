@@ -147,12 +147,16 @@ struct RecipeNavigationSplitView: View {
         .sheet(isPresented: $showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
                 RecipeDetailEditView(recipe: recipe)
+                    #if os(macOS)
                     .frame(minWidth: 600, minHeight: 500)
+                    #endif
             }
         }
         .sheet(isPresented: $showingImportRecipesSheet) {
             ImportRecipesView()
+                #if os(macOS)
                 .frame(minWidth: 500, minHeight: 400)
+                #endif
         }
         .onChange(of: showingEditSheet) { _, isPresented in
             if !isPresented {
@@ -161,7 +165,9 @@ struct RecipeNavigationSplitView: View {
         }
         .sheet(isPresented: $showingOpenDBSheet) {
             OpenDBView()
+                #if os(macOS)
                 .frame(minWidth: 400, minHeight: 500)
+                #endif
         }
 
     }

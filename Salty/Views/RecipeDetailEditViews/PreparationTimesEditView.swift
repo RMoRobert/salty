@@ -90,7 +90,9 @@ struct PreparationTimesEditView: View {
             }
             .padding()
         }
+        #if os(macOS)
         .frame(minWidth: 400, minHeight: 400)
+        #endif
     }
 }
 
