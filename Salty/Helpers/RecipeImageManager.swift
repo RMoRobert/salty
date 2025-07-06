@@ -19,17 +19,11 @@ import AppKit
 
 class RecipeImageManager {
     static let shared = RecipeImageManager()
-    
-    static let imagesFolderName = "recipeImages"
-    
     private let logger = Logger(subsystem: "Salty", category: "App")
-    
     private let imagesDirectory: URL
     
     private init() {
-        let documentsPath = URL.documentsDirectory
-        self.imagesDirectory = documentsPath.appending(component: Self.imagesFolderName)
-        
+        self.imagesDirectory = FileManager.saltyImageFolderUrl
         // Create images directory if it doesn't exist
         try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
     }

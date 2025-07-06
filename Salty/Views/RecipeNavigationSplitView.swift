@@ -157,6 +157,10 @@ struct RecipeNavigationSplitView: View {
                 recipeToEditID = nil
             }
         }
+        .sheet(isPresented: $showingOpenDBSheet) {
+            OpenDBView()
+                .frame(minWidth: 400, minHeight: 500)
+        }
 
     }
     

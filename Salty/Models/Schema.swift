@@ -105,7 +105,7 @@ extension Recipe {
     /// Gets the URL for the full image from external storage
     var fullImageURL: URL? {
         guard let filename = imageFilename else { return nil }
-        return URL.documentsDirectory.appending(component: RecipeImageManager.imagesFolderName).appending(component: filename)
+        return FileManager.saltyImageFolderUrl.appending(component: filename)
     }
     
     /// Sets the image data, saving to external storage and generating thumbnail
@@ -382,7 +382,7 @@ func appDatabase() throws -> any DatabaseWriter {
     } else {
         let path =
          context == .live
-        ? URL.documentsDirectory.appending(component: "saltyLibrary.sqlite").path()
+        ? FileManager.saltyLibraryFullPath.path
         : URL.temporaryDirectory.appending(component: "\(UUID().uuidString)-saltyLibrary.sqlite").path()
         logger.info("open \(path)")
         database = try DatabasePool(path: path, configuration: configuration)
