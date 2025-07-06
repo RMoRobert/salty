@@ -19,12 +19,12 @@ struct Menus: Commands {
                print("TODO!")
            }
        }
-       //#if os(macOS)
+       #if os(macOS)
        CommandGroup(before: .windowList) {
            Button("Edit Categories") {
                openWindow(id: "edit-categories-window")
            }
        }
-       //#endif
+       #endif
   }
 }

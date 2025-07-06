@@ -15,11 +15,21 @@ struct RecipeImageEditView: View {
     
     @State var imageFrameSize: CGFloat = 100
     
+    private func createCGImage(from imageData: Data) -> CGImage? {
+        #if os(iOS)
+        guard let uiImage = UIImage(data: imageData) else { return nil }
+        return uiImage.cgImage
+        #elseif os(macOS)
+        guard let nsImage = NSImage(data: imageData) else { return nil }
+        return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #endif
+    }
+    
     var body: some View {
         VStack {
-            if let imageData = recipe.fullImageData, let nsImage = NSImage(data: imageData) {
+            if let imageData = recipe.fullImageData, let image = createCGImage(from: imageData) {
 
-                Image(nsImage: nsImage)
+                Image(image, scale: 1, label: Text("Recipe Image"))
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .scaledToFit()

@@ -79,11 +79,57 @@ struct RecipeNavigationSplitView: View {
                 }
             }
             .navigationTitle(viewModel.navigationTitle)
+            .toolbar {
+                Button(role: .destructive, action: {
+                    showingDeleteConfirmation = true
+                }) {
+                    Label("Delete Recipe", systemImage: "minus")
+                }
+                .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
+                    Button("Cancel", role: .cancel) { }
+                    Button("Delete", role: .destructive) {
+                        viewModel.deleteSelectedRecipes()
+                    }
+                } message: {
+                    Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
+                }
+                
+                Button(action: {
+                    viewModel.addNewRecipe()
+                }) {
+                    Label("New Recipe", systemImage: "plus")
+                }
+                
+                Button(action: {
+                    if let firstSelectedID = viewModel.selectedRecipeIDs.first {
+                        recipeToEditID = firstSelectedID
+                        showingEditSheet = true
+                    }
+                }) {
+                    Label("Edit Recipe", systemImage: "pencil")
+                }
+                .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                .keyboardShortcut("e", modifiers: [.command])
+                
+                Menu(content: {
+                    Button("Open Database…") {
+                        showingOpenDBSheet.toggle()
+                    }
+                    Button("Import Recipes…") {
+                        showingImportRecipesSheet.toggle()
+                    }
+                }, label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                })
+            }
+            #if os(macOS)
             .onDeleteCommand {
                 if !viewModel.selectedRecipeIDs.isEmpty {
                     showingDeleteConfirmation = true
                 }
             }
+            #endif
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
@@ -98,50 +144,6 @@ struct RecipeNavigationSplitView: View {
         }
         .searchable(text: $viewModel.searchString)
         .navigationTitle("Recipes")
-        .toolbar {
-            Button(role: .destructive, action: {
-                showingDeleteConfirmation = true
-            }) {
-                Label("Delete Recipe", systemImage: "minus")
-            }
-            .disabled(viewModel.selectedRecipeIDs.isEmpty)
-            .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    viewModel.deleteSelectedRecipes()
-                }
-            } message: {
-                Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
-            }
-            
-            Button(action: {
-                viewModel.addNewRecipe()
-            }) {
-                Label("New Recipe", systemImage: "plus")
-            }
-            
-            Button(action: {
-                if let firstSelectedID = viewModel.selectedRecipeIDs.first {
-                    recipeToEditID = firstSelectedID
-                    showingEditSheet = true
-                }
-            }) {
-                Label("Edit Recipe", systemImage: "pencil")
-            }
-            .disabled(viewModel.selectedRecipeIDs.isEmpty)
-            .keyboardShortcut("e", modifiers: [.command])
-            
-            Menu(content: {
-                Button("Open Database…") {
-                    showingOpenDBSheet.toggle()
-                }
-                Button("Import Recipes…") {
-                    showingImportRecipesSheet.toggle()
-                }
-            }, label: {
-                Label("More", systemImage: "ellipsis.circle")
-            })
-        }
         .sheet(isPresented: $showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
                 RecipeDetailEditView(recipe: recipe)

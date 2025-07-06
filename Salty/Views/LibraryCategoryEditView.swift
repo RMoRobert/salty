@@ -42,9 +42,11 @@ struct LibraryCategoriesEditView: View {
                     navigationPath.removeLast()
                 }
             }
+            #if os(macOS)
             .onDeleteCommand {
                 deleteSelectedCategories()
             }
+            #endif
             .padding()
             .frame(minWidth: 300, minHeight: 400)
             .toolbar {
