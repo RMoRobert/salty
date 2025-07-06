@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OSLog
 import SharingGRDB
 
 @Observable
@@ -13,6 +14,7 @@ import SharingGRDB
 class RecipeNavigationSplitViewModel {
     // MARK: - Constants
     let allRecipesID: String = "0"
+    private let logger = Logger(subsystem: "Salty", category: "Database")
     
     // MARK: - Dependencies
     @ObservationIgnored
@@ -106,10 +108,9 @@ class RecipeNavigationSplitViewModel {
                     .filter(selectedRecipeIDs.contains(Column("id")))
                     .deleteAll(db)
             }
-            
             selectedRecipeIDs.removeAll()
         } catch {
-            print("Error deleting recipes: \(error)")
+            logger.error("Error deleting recipes: \(error)")
         }
     }
     
@@ -121,7 +122,7 @@ class RecipeNavigationSplitViewModel {
                     .deleteAll(db)
             }
         } catch {
-            print("Error deleting recipe \(id): \(error)")
+            logger.error("Error deleting recipe \(id): \(error)")
         }
     }
     
