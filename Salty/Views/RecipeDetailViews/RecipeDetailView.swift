@@ -12,7 +12,7 @@ import SharingGRDB
 struct RecipeDetailView: View {
     let recipe: Recipe
     @Environment(\.openWindow) private var openWindow
-    @State private var showingEditSheet = false
+    //@State private var showingEditSheet = false
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     #else
@@ -182,20 +182,20 @@ struct RecipeDetailView: View {
                 }
             }
         }
-        .toolbar {
-            ToolbarItem {
-                Button(action: {
-                    showingEditSheet = true
-                }) {
-                    Label("Edit Recipe", systemImage: "info.circle")
-                }
-                .keyboardShortcut("e", modifiers: .command)
-            }
-        }
-        .sheet(isPresented: $showingEditSheet) {
-            RecipeDetailEditView(recipe: recipe)
-                .frame(minWidth: 600, minHeight: 500)
-        }
+//        .toolbar {
+//            ToolbarItem {
+//                Button(action: {
+//                    showingEditSheet = true
+//                }) {
+//                    Label("Edit Recipe", systemImage: "info.circle")
+//                }
+//                .keyboardShortcut("e", modifiers: .command)
+//            }
+//        }
+//        .sheet(isPresented: $showingEditSheet) {
+//            RecipeDetailEditView(recipe: recipe)
+//                .frame(minWidth: 600, minHeight: 500)
+//        }
     }
 }
 
