@@ -20,7 +20,6 @@ struct RecipeImageView: View {
                 .hidden()
                 .frame(width: 0, height: 0)
             
-#if os(macOS)
             if let imageURL = recipe.fullImageURL {
                 AsyncImage(url: imageURL) { phase in
                     switch phase {
@@ -61,9 +60,6 @@ struct RecipeImageView: View {
                             .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4))
                     )
             }
-#else
-                // TODO: something similar for iOS using UIImage instead of NSImage, and any other changes that may be needed.
-#endif
         }
     }
 }
