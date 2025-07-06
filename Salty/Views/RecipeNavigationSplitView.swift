@@ -26,7 +26,8 @@ struct RecipeNavigationSplitView: View {
     @State private var showingEditSheet = false
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingOpenDBSheet = false
-    @State private var showingImportRecipesSheet = false
+    @State private var showingImportFromFileSheet = false
+    @State private var showingImportFromWebSheet = false
     @State private var showingDeleteConfirmation = false
     
     var body: some View {
@@ -113,11 +114,14 @@ struct RecipeNavigationSplitView: View {
                 .keyboardShortcut("e", modifiers: [.command])
                 
                 Menu(content: {
+                    Button("Import Recipe from Web…") {
+                        showingImportFromWebSheet.toggle()
+                    }
+                    Button("Import Recipes from File…") {
+                        showingImportFromFileSheet.toggle()
+                    }
                     Button("Open Database…") {
                         showingOpenDBSheet.toggle()
-                    }
-                    Button("Import Recipes…") {
-                        showingImportRecipesSheet.toggle()
                     }
                 }, label: {
                     Label("More", systemImage: "ellipsis.circle")
@@ -152,8 +156,8 @@ struct RecipeNavigationSplitView: View {
                     #endif
             }
         }
-        .sheet(isPresented: $showingImportRecipesSheet) {
-            ImportRecipesView()
+        .sheet(isPresented: $showingImportFromFileSheet) {
+            ImportRecipesFromFileView()
                 #if os(macOS)
                 .frame(minWidth: 500, minHeight: 400)
                 #endif
@@ -165,9 +169,15 @@ struct RecipeNavigationSplitView: View {
         }
         .sheet(isPresented: $showingOpenDBSheet) {
             OpenDBView()
-                #if os(macOS)
-                .frame(minWidth: 400, minHeight: 500)
-                #endif
+            #if os(macOS)
+            .frame(minWidth: 400, minHeight: 500)
+            #endif
+        }
+        .sheet(isPresented: $showingImportFromWebSheet) {
+            ImportRecipeFromWebView()
+            #if os(macOS)
+                .frame(minWidth: 800, minHeight: 700)
+            #endif
         }
 
     }

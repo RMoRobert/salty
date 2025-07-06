@@ -34,6 +34,18 @@ struct SaltyApp: App {
                 .frame(idealWidth: 300)
                 .navigationTitle("Category Editor")
         }
+        // "Import from File" window
+        WindowGroup(id: "import-from-file-window") {
+            ImportRecipesFromFileView()
+                .frame(idealWidth: 300)
+                .navigationTitle("Import Recipes from File")
+        }
+        // "Import from Web" window
+        WindowGroup(id: "import-from-web-window") {
+            ImportRecipeFromWebView()
+                .frame(idealWidth: 800)
+                .navigationTitle("Import Recipe from Web")
+        }
 
 //        #if !os(macOS)
 //        .onChange(of: scenePhase) { _ in

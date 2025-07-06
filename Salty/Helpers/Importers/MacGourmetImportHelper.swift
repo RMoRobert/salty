@@ -8,7 +8,7 @@
 import Foundation
 import SharingGRDB
 
-struct MacGourmetImportHelper: ImporterProtocol {
+struct MacGourmetImportHelper: RecipeFileImporterProtocol {
     static func importIntoDatabase(_ database: any DatabaseWriter, xmlFileUrl: URL) async {
         guard let xmlData = getDataFromFile(xmlFileUrl) else {
             print("No XML data; returning")

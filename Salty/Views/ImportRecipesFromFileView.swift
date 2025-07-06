@@ -1,5 +1,5 @@
 //
-//  ImportView.swift
+//  ImportRecipesFromFileView.swift
 //  Salty
 //
 //  Created by Robert on 6/1/23.
@@ -8,7 +8,7 @@
 import SwiftUI
 import SharingGRDB
 
-struct ImportRecipesView: View {
+struct ImportRecipesFromFileView: View {
     @Dependency(\.defaultDatabase) private var database
     @Environment(\.dismiss) private var dismiss
     @State private var showingImportFilePicker = false
@@ -92,5 +92,5 @@ struct ImportRecipesView: View {
 }
 
 #Preview {
-    ImportRecipesView()
+    ImportRecipesFromFileView()
 }

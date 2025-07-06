@@ -8,11 +8,11 @@
 import Foundation
 //import SWXMLHash
 
-protocol ImporterProtocol {
+protocol RecipeFileImporterProtocol {
     
 }
 
-extension ImporterProtocol {
+extension RecipeFileImporterProtocol {
     static func getDataFromFile(_ fileUrl: URL) -> Data? {
         guard let data = try? Data(contentsOf: fileUrl) else {
             return nil
