@@ -93,7 +93,9 @@ struct IngredientsEditView: View {
                 selectedIndex = recipe.ingredients.count - 1
             } label: {
                 Label("Add Ingredient", systemImage: "plus")
+                    .buttonStyle(.bordered)
             }
+            .buttonStyle(.bordered)
             .padding()
         }
         .frame(minWidth: 400, minHeight: 400)
@@ -109,16 +111,23 @@ struct IngredientDetailEditView: View {
                 .font(.headline)
             
             if (!ingredient.isMain) {
-                Toggle("Is Heading", isOn: $ingredient.isHeading)
+                Toggle("Is heading", isOn: $ingredient.isHeading)
             }
             
             VStack(alignment: .leading, spacing: 8) {
+            #if os(iOS)
+                TextField("Ingredient:", text: $ingredient.text)
+                    .textFieldStyle(.roundedBorder)
+                if (!ingredient.isHeading) {                    Toggle("Is main", isOn: $ingredient.isMain)
+                }
+            #else
                 Text(ingredient.isHeading ? "Heading Text:" : "Ingredient:")
-                HOrVStack {
+                HStack {
                     TextField("Ingredient:", text: $ingredient.text)
                     if (!ingredient.isHeading) {                    Toggle("Is Main", isOn: $ingredient.isMain)
                     }
                 }
+            #endif
             }
         }
         .padding()
