@@ -60,7 +60,7 @@ struct RecipeRowView: View {
                     HStack(alignment: .bottom, spacing: 0) {
                         ForEach(1..<6) { starNum in
                             Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
-                                .foregroundColor(recipe.rating != .notSet ? .accentColor : .gray )
+                                .foregroundColor(recipe.rating != .notSet ? .secondary : .gray )
                                 .font(.caption)
                                 .accessibilityHidden(true)
                         }

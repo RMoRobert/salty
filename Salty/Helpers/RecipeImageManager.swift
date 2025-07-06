@@ -7,6 +7,7 @@
 
 import OSLog
 import Foundation
+import SharingGRDB
 
 #if os(iOS)
 import UIKit
@@ -28,15 +29,54 @@ class RecipeImageManager {
         try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
     }
     
-    // TODO: Future Enhancement - Add cleanup method
-    // func cleanupOrphanedImages() async {
-    //     This method should:
-    //     1. Get all image filenames from the images directory
-    //     2. Get all recipe IDs from the database that have imageFilename set
-    //     3. Find files that exist on disk but don't have corresponding recipe IDs
-    //     4. Delete those orphaned image files
-    //     5. Log the cleanup results for debugging?
-    // }
+    /// Compares image files in the images directory with database references and deletes orphaned files
+    /// This function should be called periodically to clean up unused image files
+    func cleanupOrphanedImages() /*async*/ {
+        do {
+            // Get all image filenames from the database
+            let referencedFilenames =
+                Recipe.select {
+                        ($0.imageFilename)
+                    }
+                    .where {
+                        ($0.imageFilename != nil)
+                    }
+
+            // Get all files in the images directory
+            let fileManager = FileManager.default
+            let imageFiles = try fileManager.contentsOfDirectory(at: imagesDirectory, includingPropertiesForKeys: nil)
+                .filter { $0.isFileURL }
+                .map { $0.lastPathComponent }
+            
+            // TODO: Finish this!
+            
+//            let orphanedFiles = imageFiles.filter { filename in
+//                !referencedFilenames.contains(filename)
+//            }
+//            
+//            // Delete orphaned files
+//            var deletedCount = 0
+//            for filename in orphanedFiles {
+//                do {
+//                    let fileURL = imagesDirectory.appending(component: filename)
+//                    try fileManager.removeItem(at: fileURL)
+//                    deletedCount += 1
+//                    logger.info("Deleted orphaned image file: \(filename)")
+//                } catch {
+//                    logger.error("Failed to delete orphaned image file \(filename): \(error)")
+//                }
+//            }
+//            
+//            if deletedCount > 0 {
+//                logger.info("Cleanup completed: deleted \(deletedCount) orphaned image files")
+//            } else {
+//                logger.info("Cleanup completed: no orphaned image files found")
+//            }
+            
+        } catch {
+            logger.error("Error during image cleanup: \(error)")
+        }
+    }
     
     func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
         // Determine file extension from image data
