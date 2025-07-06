@@ -45,13 +45,32 @@ struct RecipeRowView: View {
                     .padding(4)
             }
             VStack(alignment: .leading) {
-                Text(recipe.name)
-                    .fontWeight(.semibold)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                Text(recipe.summary)
-                    .foregroundColor(Color.gray)
-                    .lineLimit(1)
+                Spacer()
+                VStack(alignment: .leading) {
+                    Text(recipe.name)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(1)
+                    Text(recipe.summary)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                //if (recipe.rating != .notSet) {
+                    Spacer()
+                    HStack(alignment: .bottom, spacing: 0) {
+                        ForEach(1..<6) { starNum in
+                            Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
+                                .foregroundColor(recipe.rating != .notSet ? .accentColor : .gray )
+                                .font(.caption)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityHint(recipe.rating != .notSet ? "Rating: \(recipe.rating.rawValue) stars" : "Recipe not rated")
+                    .padding([.leading, .trailing], 0)
+                    Spacer()
+                    
+                //}
+                Spacer()
             }
         }
     }
