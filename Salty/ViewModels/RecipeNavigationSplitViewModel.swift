@@ -102,6 +102,7 @@ class RecipeNavigationSplitViewModel {
     }
     
     func deleteSelectedRecipes() {
+        // TODO: Delete images or schedule cleanup methods to remove image
         do {
             let _ = try database.write { db in
                 try Recipe
@@ -115,6 +116,7 @@ class RecipeNavigationSplitViewModel {
     }
     
     func deleteRecipe(id: String) {
+        // TODO: Delete images or schedule cleanup methods to remove image
         do {
             let _ = try database.write { db in
                 try Recipe

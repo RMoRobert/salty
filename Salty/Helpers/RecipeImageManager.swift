@@ -95,7 +95,30 @@ class RecipeImageManager {
         let thumbnail = NSImage(size: size)
         thumbnail.lockFocus()
         
-        image.draw(in: NSRect(origin: .zero, size: size))
+        // Calculate center crop to fill the entire thumbnail
+        let imageSize = image.size
+        let targetSize = size
+        
+        let imageAspect = imageSize.width / imageSize.height
+        let targetAspect = targetSize.width / targetSize.height
+        
+        var sourceRect: NSRect
+        let destRect = NSRect(origin: .zero, size: targetSize)
+        
+        if imageAspect > targetAspect {
+            // Image is wider than target - crop width from center
+            let cropWidth = imageSize.height * targetAspect
+            let cropX = (imageSize.width - cropWidth) / 2
+            sourceRect = NSRect(x: cropX, y: 0, width: cropWidth, height: imageSize.height)
+        } else {
+            // Image is taller than target - crop height from center
+            let cropHeight = imageSize.width / targetAspect
+            let cropY = (imageSize.height - cropHeight) / 2
+            sourceRect = NSRect(x: 0, y: cropY, width: imageSize.width, height: cropHeight)
+        }
+        
+        // Draw the cropped portion of the image to fill the entire thumbnail
+        image.draw(in: destRect, from: sourceRect, operation: .copy, fraction: 1.0)
         
         thumbnail.unlockFocus()
         

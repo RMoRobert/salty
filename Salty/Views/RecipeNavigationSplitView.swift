@@ -80,13 +80,16 @@ struct RecipeNavigationSplitView: View {
             }
             .navigationTitle(viewModel.navigationTitle)
             .onDeleteCommand {
-                viewModel.deleteSelectedRecipes()
+                if !viewModel.selectedRecipeIDs.isEmpty {
+                    showingDeleteConfirmation = true
+                }
             }
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
                 //RecipeDetailWebView(recipe: recipe)
                 RecipeDetailView(recipe: recipe)
+                    .id(recipeId) // Force reload when recipe changes
             } else {
                 Text("No recipe selected")
                     .foregroundStyle(.tertiary)
@@ -102,7 +105,7 @@ struct RecipeNavigationSplitView: View {
                 Label("Delete Recipe", systemImage: "minus")
             }
             .disabled(viewModel.selectedRecipeIDs.isEmpty)
-            .alert("Delete Recipe(s)?", isPresented: $showingDeleteConfirmation) {
+            .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
                     viewModel.deleteSelectedRecipes()
