@@ -29,15 +29,15 @@ struct RecipeDetailEditView: View {
                         .padding(.bottom, 4)
                     
                     Form {
-                        TextField("Name", text: $recipe.name)
-                        TextField("Source", text: $recipe.source)
-                        TextField("Source Details", text: $recipe.sourceDetails)
-                        TextField("Yield", text: $recipe.yield)
+                        TextField("Name:", text: $recipe.name)
+                        TextField("Source:", text: $recipe.source)
+                        TextField("Source Details:", text: $recipe.sourceDetails)
+                        TextField("Yield:", text: $recipe.yield)
                     }
                     
                     VStack {
                         // Rating and Difficulty in a row
-                        HStack(spacing: 16) {
+                        HStack(alignment: .firstTextBaseline, spacing: 16) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Rating:")
                                     .frame(width: 80, alignment: .leading)
@@ -49,8 +49,11 @@ struct RecipeDetailEditView: View {
                                     .frame(width: 80, alignment: .leading)
                                 DifficultyEditView(recipe: $recipe)
                             }
-                            Button("Categories") {
-                                showingEditCategoriesSheet.toggle()
+                            VStack(alignment: .leading) {
+                                Text("Categories:")
+                                Button("Edit Categories") {
+                                    showingEditCategoriesSheet.toggle()
+                                }
                             }
                             .buttonStyle(.bordered)
                             .popover(isPresented: $showingEditCategoriesSheet) {
@@ -58,7 +61,10 @@ struct RecipeDetailEditView: View {
                             }
                         }
                         
-                        RecipeImageEditView(recipe: $recipe)
+                        VStack {
+                            Text("Image:")
+                            RecipeImageEditView(recipe: $recipe, imageFrameSize: 100)
+                        }
                         
                         HOrVStack() {
                             Toggle("Is favorite?", isOn: $recipe.isFavorite)

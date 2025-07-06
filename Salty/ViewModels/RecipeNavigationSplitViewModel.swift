@@ -24,8 +24,6 @@ class RecipeNavigationSplitViewModel {
     @ObservationIgnored
     @FetchAll var categories: [Category]
     
-
-    
     // MARK: - State
     var searchString = ""
     var selectedSidebarItemId: String?
@@ -119,5 +117,40 @@ class RecipeNavigationSplitViewModel {
     func recipeToEdit(recipeId: String?) -> Recipe? {
         guard let recipeId = recipeId else { return nil }
         return recipes.first(where: { $0.id == recipeId })
+    }
+}
+
+// MARK: - Preview ViewModel
+
+/// A preview-specific ViewModel that doesn't use database dependencies
+@Observable
+@MainActor
+class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
+    // MARK: - Preview Data
+    private let previewRecipes: [Recipe]
+    private let previewCategories: [Category]
+    
+    // MARK: - Override @FetchAll properties for preview
+    override var recipes: [Recipe] { previewRecipes }
+    override var categories: [Category] { previewCategories }
+    
+    // MARK: - Initialization
+    init(previewData: (recipes: [Recipe], categories: [Category])) {
+        self.previewRecipes = previewData.recipes
+        self.previewCategories = previewData.categories
+        super.init()
+    }
+    
+    // MARK: - Override database-dependent methods
+    override func addNewRecipe() {
+        // No-op for preview
+    }
+    
+    override func deleteSelectedRecipes() {
+        // No-op for preview
+    }
+    
+    override func deleteRecipe(id: String) {
+        // No-op for preview
     }
 }

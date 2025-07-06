@@ -11,6 +11,7 @@ import SharingGRDB
 struct RecipeImageView: View {
     @State var recipe: Recipe
     @State private var dragOver = false
+    @State var imageFrameSize: CGFloat = 125
     
     var body: some View {
         VStack {
@@ -25,17 +26,17 @@ struct RecipeImageView: View {
                     switch phase {
                     case .empty:
                         ProgressView()
-                            .frame(width: 125, height: 125)
+                            .frame(width: imageFrameSize, height: imageFrameSize)
                     case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .scaledToFit()
-                            .frame(width: 125, height: 125, alignment: .center)
+                            .frame(width: imageFrameSize, height: imageFrameSize, alignment: .center)
                     case .failure(_):
                         RoundedRectangle(cornerRadius: 10)
                             .fill(.white)
-                            .frame(width: 125, height: 125)
+                            .frame(width: imageFrameSize, height: imageFrameSize)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
                                     .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4))
@@ -43,7 +44,7 @@ struct RecipeImageView: View {
                     @unknown default:
                         RoundedRectangle(cornerRadius: 10)
                             .fill(.white)
-                            .frame(width: 125, height: 125)
+                            .frame(width: imageFrameSize, height: imageFrameSize)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
                                     .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4))
@@ -54,28 +55,20 @@ struct RecipeImageView: View {
             else {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(.white)
-                    .frame(width: 125, height: 125)
+                    .frame(width: imageFrameSize, height: imageFrameSize)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
                             .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4))
                     )
             }
 #else
-//            if let recipeImg = recipe.getImageForRecipe() {
-//                Image(uiImage: recipeImg)
-//                    .resizable()
-//                    .aspectRatio(contentMode: .fit)
-//                    .scaledToFit()
-//                    .frame(width: 125, height: 125, alignment: .center)
-//                    .border(.thickMaterial)
-//            }
+                // TODO: something similar for iOS using UIImage instead of NSImage, and any other changes that may be needed.
 #endif
         }
     }
 }
 
-//struct RecipeImageView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        RecipeImageView(recipe: Recipe())
-//    }
-//}
+#Preview {
+    let r = SampleData.sampleRecipes[0]
+    RecipeImageView(recipe: r)
+}

@@ -42,7 +42,12 @@ struct RecipeDetailView: View {
                             .accessibilityLabel("Source: \(recipe.source)")
                         }
                         if !recipe.sourceDetails.isEmpty {
-                            Text(recipe.sourceDetails)
+                            if let url = URL(string: recipe.sourceDetails) {
+                                Link(recipe.sourceDetails, destination: url)
+                            }
+                            else {
+                                Text(recipe.sourceDetails)
+                            }
                         }
                         if !recipe.yield.isEmpty {
                             HStack {

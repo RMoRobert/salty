@@ -12,7 +12,7 @@ struct DifficultyEditView: View {
     @Binding var recipe: Recipe
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .center) {
             Slider(
                 value: Binding(
                     get: { recipe.difficulty.asIndex },
@@ -31,6 +31,8 @@ struct DifficultyEditView: View {
                 Text("Difficult")
             }
             .accessibilityLabel("Difficulty")
+            Text(recipe.difficulty.stringValue().localizedCapitalized)
+                .font(.caption)
         }
     }
 }

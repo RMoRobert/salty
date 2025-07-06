@@ -114,8 +114,10 @@ struct IngredientDetailEditView: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 Text(ingredient.isHeading ? "Heading Text:" : "Ingredient:")
-                TextField("Ingredient:", text: $ingredient.text)
-                if (!ingredient.isHeading) {                    Toggle("Is Main", isOn: $ingredient.isMain)
+                HOrVStack {
+                    TextField("Ingredient:", text: $ingredient.text)
+                    if (!ingredient.isHeading) {                    Toggle("Is Main", isOn: $ingredient.isMain)
+                    }
                 }
             }
         }
