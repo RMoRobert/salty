@@ -23,7 +23,7 @@ struct SettingsView: View {
 }
 
 struct GeneralSettingsView: View {
-    @AppStorage("webPreviews") private var useWebRecipeDetailView = true
+    @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     
     var body: some View {
         Form {

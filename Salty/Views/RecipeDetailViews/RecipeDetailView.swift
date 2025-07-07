@@ -143,6 +143,7 @@ struct RecipeDetailView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .font(recipe.ingredients[index].isHeading ? .callout : .none)
                                 .fontWeight(recipe.ingredients[index].isHeading ? .semibold : .regular)
+                                .padding(.bottom, 2)
                         }
                     }
                     .padding()
@@ -152,15 +153,20 @@ struct RecipeDetailView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                             .padding(.bottom)
-                        
+                        // TODO: Align step name with text, not number (i.e., farther right)?
                         ForEach(recipe.directions.indices, id: \.self) { index in
                             if (recipe.directions[index].stepName != nil && recipe.directions[index].stepName != "") {
                                 Text(recipe.directions[index].stepName!)
                                     .font(.callout)
                                     .fontWeight(.semibold)
                             }
-                            Text(recipe.directions[index].text)
-                                .fixedSize(horizontal: false, vertical: true)
+                            HStack(alignment: .top) {
+                                Text("\(index+1).")
+                                    .fontWeight(.semibold)
+                                Text(recipe.directions[index].text)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.bottom, 2)
+                            }
                         }
                     }
                     .padding()
