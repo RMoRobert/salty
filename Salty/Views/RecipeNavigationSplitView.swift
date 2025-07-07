@@ -8,16 +8,16 @@
 import SwiftUI
 
 struct RecipeNavigationSplitView: View {
-    @State private var viewModel: RecipeNavigationSplitViewModel
+    @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = true
     
-    init(previewData: (recipes: [Recipe], categories: [Category])? = nil) {
-        if let previewData = previewData {
-            self._viewModel = State(initialValue: PreviewRecipeNavigationSplitViewModel(previewData: previewData))
-        } else {
-            self._viewModel = State(initialValue: RecipeNavigationSplitViewModel())
-        }
-    }
+//    init(previewData: (recipes: [Recipe], categories: [Category])? = nil) {
+//        if let previewData = previewData {
+//            self._viewModel = State(initialValue: PreviewRecipeNavigationSplitViewModel(previewData: previewData))
+//        } else {
+//            self._viewModel = State(initialValue: RecipeNavigationSplitViewModel())
+//        }
+//    }
     //@Environment(\.openWindow) private var openWindow
     @State private var recipeToEditID: String?
 
@@ -195,9 +195,6 @@ struct RecipeNavigationSplitView: View {
 
 #Preview {
     RecipeNavigationSplitView(
-        previewData: (
-            recipes: SampleData.sampleRecipes,
-            categories: SampleData.sampleCategories
-        )
+        viewModel: RecipeNavigationSplitViewModel()
     )
 }

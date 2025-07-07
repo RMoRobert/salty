@@ -12,11 +12,14 @@ struct NotesEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @State private var selectedIndex: Int? = nil
+    @State private var editingNotes: [Note] = []
+    @State private var hasChanges: Bool = false
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack {
             List(selection: $selectedIndex) {
-                ForEach(Array(recipe.notes.enumerated()), id: \.element.id) { index, note in
+                ForEach(Array(editingNotes.enumerated()), id: \.element.id) { index, note in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             if !note.title.isEmpty {
@@ -38,11 +41,8 @@ struct NotesEditView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         
                         Button(role: .destructive) {
-                            try? database.write { db in
-                                recipe.notes.remove(at: index)
-                                try Recipe.upsert(Recipe.Draft(recipe))
-                                    .execute(db)
-                            }
+                            editingNotes.remove(at: index)
+                            hasChanges = true
                             if selectedIndex == index {
                                 selectedIndex = nil
                             }
@@ -59,11 +59,8 @@ struct NotesEditView: View {
                     .tag(index)
                     .contextMenu {
                         Button(role: .destructive) {
-                            try? database.write { db in
-                                recipe.notes.remove(at: index)
-                                try Recipe.upsert(Recipe.Draft(recipe))
-                                    .execute(db)
-                            }
+                            editingNotes.remove(at: index)
+                            hasChanges = true
                             if selectedIndex == index {
                                 selectedIndex = nil
                             }
@@ -73,24 +70,18 @@ struct NotesEditView: View {
                     }
                 }
                 .onDelete { indexSet in
-                    try? database.write { db in
-                        for index in indexSet.sorted(by: >) {
-                            recipe.notes.remove(at: index)
-                        }
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
+                    for index in indexSet.sorted(by: >) {
+                        editingNotes.remove(at: index)
                     }
+                    hasChanges = true
                     // Clear selection if deleted item was selected
                     if let selectedIndex = selectedIndex, indexSet.contains(selectedIndex) {
                         self.selectedIndex = nil
                     }
                 }
                 .onMove { from, to in
-                    try? database.write { db in
-                        recipe.notes.move(fromOffsets: from, toOffset: to)
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
-                    }
+                    editingNotes.move(fromOffsets: from, toOffset: to)
+                    hasChanges = true
                 }
             }
             #if os(macOS)
@@ -99,16 +90,13 @@ struct NotesEditView: View {
             
             // Detail editor
             VStack {
-                if let selectedIndex = selectedIndex, selectedIndex < recipe.notes.count {
+                if let selectedIndex = selectedIndex, selectedIndex < editingNotes.count {
                     NoteDetailEditView(
                         note: Binding(
-                            get: { recipe.notes[selectedIndex] },
+                            get: { editingNotes[selectedIndex] },
                             set: { newValue in
-                                recipe.notes[selectedIndex] = newValue
-                                try? database.write { db in
-                                    try Recipe.upsert(Recipe.Draft(recipe))
-                                        .execute(db)
-                                }
+                                editingNotes[selectedIndex] = newValue
+                                hasChanges = true
                             }
                         )
                     )
@@ -123,17 +111,14 @@ struct NotesEditView: View {
             
             // Add button
             Button {
-                try? database.write { db in
-                    recipe.notes.append(Note(
-                        id: UUID().uuidString,
-                        title: "",
-                        content: "New note content"
-                    ))
-                    try Recipe.upsert(Recipe.Draft(recipe))
-                        .execute(db)
-                }
+                editingNotes.append(Note(
+                    id: UUID().uuidString,
+                    title: "",
+                    content: "New note content"
+                ))
+                hasChanges = true
                 // Select the newly added item
-                selectedIndex = recipe.notes.count - 1
+                selectedIndex = editingNotes.count - 1
             } label: {
                 Label("Add Note", systemImage: "plus")
             }
@@ -143,15 +128,15 @@ struct NotesEditView: View {
         .frame(minWidth: 500, minHeight: 500)
         #endif
         .onAppear {
-            // Initialize the view
+            editingNotes = recipe.notes
+        }
+        .onChange(of: editingNotes) { _, _ in
+            recipe.notes = editingNotes
         }
         .onKeyPress(.delete) {
-            if let selectedIndex = selectedIndex, selectedIndex < recipe.notes.count {
-                try? database.write { db in
-                    recipe.notes.remove(at: selectedIndex)
-                    try Recipe.upsert(Recipe.Draft(recipe))
-                        .execute(db)
-                }
+            if let selectedIndex = selectedIndex, selectedIndex < editingNotes.count {
+                editingNotes.remove(at: selectedIndex)
+                hasChanges = true
                 self.selectedIndex = nil
             }
             return .handled

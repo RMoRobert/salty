@@ -12,11 +12,14 @@ struct IngredientsEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @State private var selectedIndex: Int? = nil
+    @State private var editingIngredients: [Ingredient] = []
+    @State private var hasChanges: Bool = false
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack {
             List(selection: $selectedIndex) {
-                ForEach(Array(recipe.ingredients.enumerated()), id: \.element.id) { index, ingredient in
+                ForEach(Array(editingIngredients.enumerated()), id: \.element.id) { index, ingredient in
                     HStack {
                         if ingredient.isHeading {
                             Text(ingredient.text)
@@ -30,24 +33,18 @@ struct IngredientsEditView: View {
                     .tag(index)
                 }
                 .onDelete { indexSet in
-                    try? database.write { db in
-                        for index in indexSet.sorted(by: >) {
-                            recipe.ingredients.remove(at: index)
-                        }
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
+                    for index in indexSet.sorted(by: >) {
+                        editingIngredients.remove(at: index)
                     }
+                    hasChanges = true
                     // Clear selection if deleted item was selected
                     if let selectedIndex = selectedIndex, indexSet.contains(selectedIndex) {
                         self.selectedIndex = nil
                     }
                 }
                 .onMove { from, to in
-                    try? database.write { db in
-                        recipe.ingredients.move(fromOffsets: from, toOffset: to)
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
-                    }
+                    editingIngredients.move(fromOffsets: from, toOffset: to)
+                    hasChanges = true
                 }
             }
             #if os(macOS)
@@ -56,16 +53,13 @@ struct IngredientsEditView: View {
             
             // Detail editor
             VStack {
-                if let selectedIndex = selectedIndex, selectedIndex < recipe.ingredients.count {
+                if let selectedIndex = selectedIndex, selectedIndex < editingIngredients.count {
                     IngredientDetailEditView(
                         ingredient: Binding(
-                            get: { recipe.ingredients[selectedIndex] },
+                            get: { editingIngredients[selectedIndex] },
                             set: { newValue in
-                                recipe.ingredients[selectedIndex] = newValue
-                                try? database.write { db in
-                                    try Recipe.upsert(Recipe.Draft(recipe))
-                                        .execute(db)
-                                }
+                                editingIngredients[selectedIndex] = newValue
+                                hasChanges = true
                             }
                         )
                     )
@@ -80,23 +74,26 @@ struct IngredientsEditView: View {
             
             // Add button
             Button {
-                try? database.write { db in
-                    recipe.ingredients.append(Ingredient(
-                        id: UUID().uuidString,
-                        isHeading: false,
-                        text: "New ingredient"
-                    ))
-                    try Recipe.upsert(Recipe.Draft(recipe))
-                        .execute(db)
-                }
+                editingIngredients.append(Ingredient(
+                    id: UUID().uuidString,
+                    isHeading: false,
+                    text: "New ingredient"
+                ))
+                hasChanges = true
                 // Select the newly added item
-                selectedIndex = recipe.ingredients.count - 1
+                selectedIndex = editingIngredients.count - 1
             } label: {
                 Label("Add Ingredient", systemImage: "plus")
                     .buttonStyle(.bordered)
             }
             .buttonStyle(.bordered)
             .padding()
+        }
+        .onAppear {
+            editingIngredients = recipe.ingredients
+        }
+        .onChange(of: editingIngredients) { _, _ in
+            recipe.ingredients = editingIngredients
         }
         #if os(macOS)
         .frame(minWidth: 400, minHeight: 400)

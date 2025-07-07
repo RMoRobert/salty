@@ -12,11 +12,14 @@ struct PreparationTimesEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @State private var selectedIndex: Int? = nil
+    @State private var editingPreparationTimes: [PreparationTime] = []
+    @State private var hasChanges: Bool = false
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack {
             List(selection: $selectedIndex) {
-                ForEach(Array(recipe.preparationTimes.enumerated()), id: \.element.id) { index, preparationTime in
+                ForEach(Array(editingPreparationTimes.enumerated()), id: \.element.id) { index, preparationTime in
                     HStack {
                         Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
                         Spacer()
@@ -24,24 +27,18 @@ struct PreparationTimesEditView: View {
                     .tag(index)
                 }
                 .onDelete { indexSet in
-                    try? database.write { db in
-                        for index in indexSet.sorted(by: >) {
-                            recipe.preparationTimes.remove(at: index)
-                        }
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
+                    for index in indexSet.sorted(by: >) {
+                        editingPreparationTimes.remove(at: index)
                     }
+                    hasChanges = true
                     // Clear selection if deleted item was selected
                     if let selectedIndex = selectedIndex, indexSet.contains(selectedIndex) {
                         self.selectedIndex = nil
                     }
                 }
                 .onMove { from, to in
-                    try? database.write { db in
-                        recipe.preparationTimes.move(fromOffsets: from, toOffset: to)
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
-                    }
+                    editingPreparationTimes.move(fromOffsets: from, toOffset: to)
+                    hasChanges = true
                 }
             }
             #if os(macOS)
@@ -50,16 +47,13 @@ struct PreparationTimesEditView: View {
             
             // Detail editor
             VStack {
-                if let selectedIndex = selectedIndex, selectedIndex < recipe.preparationTimes.count {
+                if let selectedIndex = selectedIndex, selectedIndex < editingPreparationTimes.count {
                     PreparationTimeDetailEditView(
                         preparationTime: Binding(
-                            get: { recipe.preparationTimes[selectedIndex] },
+                            get: { editingPreparationTimes[selectedIndex] },
                             set: { newValue in
-                                recipe.preparationTimes[selectedIndex] = newValue
-                                try? database.write { db in
-                                    try Recipe.upsert(Recipe.Draft(recipe))
-                                        .execute(db)
-                                }
+                                editingPreparationTimes[selectedIndex] = newValue
+                                hasChanges = true
                             }
                         )
                     )
@@ -74,21 +68,24 @@ struct PreparationTimesEditView: View {
             
             // Add button
             Button {
-                try? database.write { db in
-                    recipe.preparationTimes.append(PreparationTime(
-                        id: UUID().uuidString,
-                        type: "New Time",
-                        timeString: "0 minutes"
-                    ))
-                    try Recipe.upsert(Recipe.Draft(recipe))
-                        .execute(db)
-                }
+                editingPreparationTimes.append(PreparationTime(
+                    id: UUID().uuidString,
+                    type: "New Time",
+                    timeString: "0 minutes"
+                ))
+                hasChanges = true
                 // Select the newly added item
-                selectedIndex = recipe.preparationTimes.count - 1
+                selectedIndex = editingPreparationTimes.count - 1
             } label: {
                 Label("Add Preparation Time", systemImage: "plus")
             }
             .padding()
+        }
+        .onAppear {
+            editingPreparationTimes = recipe.preparationTimes
+        }
+        .onChange(of: editingPreparationTimes) { _, _ in
+            recipe.preparationTimes = editingPreparationTimes
         }
         #if os(macOS)
         .frame(minWidth: 400, minHeight: 400)

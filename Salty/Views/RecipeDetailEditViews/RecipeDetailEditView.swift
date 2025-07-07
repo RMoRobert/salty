@@ -17,6 +17,17 @@ struct RecipeDetailEditView: View {
     @State private var showingEditDirectionsSheet = false
     @State private var showingEditPreparationTimes = false
     @State private var showingEditNotesSheet = false
+    @State private var originalRecipe: Recipe
+    @State private var showingCancelAlert = false
+    
+    init(recipe: Recipe) {
+        self._recipe = State(initialValue: recipe)
+        self._originalRecipe = State(initialValue: recipe)
+    }
+    
+    private var hasUnsavedChanges: Bool {
+        return recipe != originalRecipe
+    }
 
     var body: some View {
         ScrollView {
@@ -293,7 +304,11 @@ struct RecipeDetailEditView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button("Cancel") {
-                    dismiss()
+                    if hasUnsavedChanges {
+                        showingCancelAlert = true
+                    } else {
+                        dismiss()
+                    }
                 }
                 .buttonStyle(.bordered)
                 .foregroundColor(.secondary)
@@ -309,6 +324,22 @@ struct RecipeDetailEditView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.accentColor)
             }
+        }
+        .alert("Discard Changes?", isPresented: $showingCancelAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Discard", role: .destructive) {
+                dismiss()
+            }
+        } message: {
+            Text("You have unsaved changes. Are you sure you want to discard them?")
+        }
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onKeyPress(.escape) {
+            if hasUnsavedChanges {
+                showingCancelAlert = true
+                return .handled
+            }
+            return .ignored
         }
     }
 }

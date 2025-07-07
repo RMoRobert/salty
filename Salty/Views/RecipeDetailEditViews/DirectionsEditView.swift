@@ -12,11 +12,14 @@ struct DirectionsEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @State private var selectedIndex: Int? = nil
+    @State private var editingDirections: [Direction] = []
+    @State private var hasChanges: Bool = false
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack {
             List(selection: $selectedIndex) {
-                ForEach(Array(recipe.directions.enumerated()), id: \.element.id) { index, direction in
+                ForEach(Array(editingDirections.enumerated()), id: \.element.id) { index, direction in
                     HStack(alignment: .top) {
                         Text("\(index + 1).")
                             .font(.title2)
@@ -36,24 +39,18 @@ struct DirectionsEditView: View {
                     .tag(index)
                 }
                 .onDelete { indexSet in
-                    try? database.write { db in
-                        for index in indexSet.sorted(by: >) {
-                            recipe.directions.remove(at: index)
-                        }
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
+                    for index in indexSet.sorted(by: >) {
+                        editingDirections.remove(at: index)
                     }
+                    hasChanges = true
                     // Clear selection if deleted item was selected
                     if let selectedIndex = selectedIndex, indexSet.contains(selectedIndex) {
                         self.selectedIndex = nil
                     }
                 }
                 .onMove { from, to in
-                    try? database.write { db in
-                        recipe.directions.move(fromOffsets: from, toOffset: to)
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                            .execute(db)
-                    }
+                    editingDirections.move(fromOffsets: from, toOffset: to)
+                    hasChanges = true
                 }
             }
             #if os(macOS)
@@ -62,16 +59,13 @@ struct DirectionsEditView: View {
             
             // Detail editor
             VStack {
-                if let selectedIndex = selectedIndex, selectedIndex < recipe.directions.count {
+                if let selectedIndex = selectedIndex, selectedIndex < editingDirections.count {
                     DirectionDetailEditView(
                         direction: Binding(
-                            get: { recipe.directions[selectedIndex] },
+                            get: { editingDirections[selectedIndex] },
                             set: { newValue in
-                                recipe.directions[selectedIndex] = newValue
-                                try? database.write { db in
-                                    try Recipe.upsert(Recipe.Draft(recipe))
-                                        .execute(db)
-                                }
+                                editingDirections[selectedIndex] = newValue
+                                hasChanges = true
                             }
                         )
                     )
@@ -86,22 +80,25 @@ struct DirectionsEditView: View {
             
             // Add button
             Button {
-                try? database.write { db in
-                    recipe.directions.append(Direction(
-                        id: UUID().uuidString,
-                        stepName: "",
-                        text: "New step"
-                    ))
-                    try Recipe.upsert(Recipe.Draft(recipe))
-                        .execute(db)
-                }
+                editingDirections.append(Direction(
+                    id: UUID().uuidString,
+                    stepName: "",
+                    text: "New step"
+                ))
+                hasChanges = true
                 // Select the newly added item
-                selectedIndex = recipe.directions.count - 1
+                selectedIndex = editingDirections.count - 1
             } label: {
                 Label("Add Step", systemImage: "plus")
             }
             .buttonStyle(.bordered)
             .padding()
+        }
+        .onAppear {
+            editingDirections = recipe.directions
+        }
+        .onChange(of: editingDirections) { _, _ in
+            recipe.directions = editingDirections
         }
         #if os(macOS)
         .frame(minWidth: 500, minHeight: 500)
