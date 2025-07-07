@@ -24,8 +24,8 @@ class RecipeNavigationSplitViewModel {
     @ObservationIgnored
     @FetchAll var recipes: [Recipe]
     @ObservationIgnored
-    @FetchAll var categories: [Category]
-    
+    @FetchAll(Category.order(by: \.name)) var categories: [Category]
+            
     // MARK: - State
     var searchString = ""
     var selectedSidebarItemId: String?

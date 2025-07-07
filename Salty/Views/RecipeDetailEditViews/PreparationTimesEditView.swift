@@ -6,10 +6,9 @@
 //
 
 import SwiftUI
-import SharingGRDB
 
 struct PreparationTimesEditView: View {
-    @Dependency(\.defaultDatabase) private var database
+    //@Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @State private var selectedIndex: Int? = nil
     @State private var editingPreparationTimes: [PreparationTime] = []

@@ -9,7 +9,7 @@ import SwiftUI
 
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
-    @AppStorage("webPreviews") private var useWebRecipeDetailView = true
+    @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     
 //    init(previewData: (recipes: [Recipe], categories: [Category])? = nil) {
 //        if let previewData = previewData {

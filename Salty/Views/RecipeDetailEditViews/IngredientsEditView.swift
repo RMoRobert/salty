@@ -6,10 +6,8 @@
 //
 
 import SwiftUI
-import SharingGRDB
 
 struct IngredientsEditView: View {
-    @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @State private var selectedIndex: Int? = nil
     @State private var editingIngredients: [Ingredient] = []

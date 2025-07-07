@@ -8,6 +8,7 @@
 import SwiftUI
 import SharingGRDB
 
+// TODO: Make iOS-specific view based on Form instead, keep this tuned for Mac?
 struct RecipeDetailEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Environment(\.dismiss) var dismiss

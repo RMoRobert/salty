@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import SharingGRDB
 
 struct DifficultyEditView: View {
     @Binding var recipe: Recipe
