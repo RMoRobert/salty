@@ -28,15 +28,28 @@ struct RecipeDetailEditView: View {
                         .fontWeight(.semibold)
                         .padding(.bottom, 4)
                     
+                    #if os(macOS)
                     Form {
                         TextField("Name:", text: $recipe.name)
                         TextField("Source:", text: $recipe.source)
                         TextField("Source Details:", text: $recipe.sourceDetails)
                         TextField("Yield:", text: $recipe.yield)
                     }
+                    #else
+                    VStack(spacing: 6) {
+                        TextField("Name", text: $recipe.name)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Source", text: $recipe.source)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Source Details", text: $recipe.sourceDetails)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Yield", text: $recipe.yield)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    #endif
                     
                     VStack {
-                        // Rating and Difficulty in a row
+                        #if os(macOS)
                         HStack(alignment: .firstTextBaseline, spacing: 16) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Rating:")
@@ -60,6 +73,30 @@ struct RecipeDetailEditView: View {
                                 CategoryEditView(recipe: $recipe)
                             }
                         }
+                        #else
+                        VStack {
+                                HStack {
+                                    Text("Rating:")
+                                        .frame(width: 80, alignment: .leading)
+                                    RatingEditView(recipe: $recipe)
+                                }
+                                
+                                HStack {
+                                    Text("Difficulty:")
+                                        .frame(width: 80, alignment: .leading)
+                                    DifficultyEditView(recipe: $recipe)
+                                }
+                                HStack {
+                                    Button("Edit Categories") {
+                                        showingEditCategoriesSheet.toggle()
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .popover(isPresented: $showingEditCategoriesSheet) {
+                                    CategoryEditView(recipe: $recipe)
+                                }
+                            }
+                        #endif
                         
                         VStack {
                             Text("Image:")
