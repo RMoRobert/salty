@@ -156,10 +156,12 @@ struct RecipeNavigationSplitView: View {
         .navigationTitle("Recipes")
         .sheet(isPresented: $showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
-                RecipeDetailEditView(recipe: recipe)
-                    #if os(macOS)
-                    .frame(minWidth: 600, minHeight: 500)
-                    #endif
+                NavigationStack {
+                    RecipeDetailEditView(recipe: recipe)
+                }
+                #if os(macOS)
+                .frame(minWidth: 600, minHeight: 500)
+                #endif
             }
         }
         .sheet(isPresented: $showingImportFromFileSheet) {
