@@ -112,25 +112,25 @@ struct RecipeDetailEditMobileView: View {
             }
             
             Section(header: Text("Preparation Time")) {
-                Button("Edit Times") {
-                    viewModel.showingEditPreparationTimes.toggle()
-                }
-                .popover(isPresented: $viewModel.showingEditPreparationTimes) {
-                    PreparationTimesEditView(recipe: $viewModel.recipe)
-                }
-                
-                if viewModel.recipe.preparationTimes.isEmpty {
-                    Text("No preparation times added")
+                    Button("Edit Times") {
+                        viewModel.showingEditPreparationTimes.toggle()
+                    }
+                    .popover(isPresented: $viewModel.showingEditPreparationTimes) {
+                        PreparationTimesEditView(recipe: $viewModel.recipe)
+                    }
+                    
+                    if viewModel.recipe.preparationTimes.isEmpty {
+                        Text("No preparation times added")
                         .foregroundColor(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(viewModel.recipe.preparationTimes) { preparationTime in
-                            Text("\(preparationTime.type)")
-                                .font(.caption)
-                            Text("\(preparationTime.timeString)")
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(viewModel.recipe.preparationTimes) { preparationTime in
+                                Text("\(preparationTime.type)")
+                                    .font(.caption)
+                                Text("\(preparationTime.timeString)")
+                            }
                         }
                     }
-                }
             }
             
             Section(header: Text("Notes")) {
