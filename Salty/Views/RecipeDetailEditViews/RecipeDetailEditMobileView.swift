@@ -20,21 +20,21 @@ struct RecipeDetailEditMobileView: View {
     var body: some View {
         Form {
             Section(header: Text("Basic Information")) {
-                TextField("Name:", text: $viewModel.recipe.name)
-                TextField("Source:", text: $viewModel.recipe.source)
-                TextField("Source Details:", text: $viewModel.recipe.sourceDetails)
-                TextField("Yield:", text: $viewModel.recipe.yield)
-                Toggle("Favorite:", isOn: $viewModel.recipe.isFavorite)
+                TextField("Name", text: $viewModel.recipe.name)
+                TextField("Source", text: $viewModel.recipe.source)
+                TextField("Source Details", text: $viewModel.recipe.sourceDetails)
+                TextField("Yield", text: $viewModel.recipe.yield)
+                Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
-                LabeledContent("Rating:") {
+                LabeledContent("Rating") {
                     RatingEditView(recipe: $viewModel.recipe)
                         .frame(maxWidth: 200)
                 }
-                LabeledContent("Difficulty:") {
+                LabeledContent("Difficulty") {
                     DifficultyEditView(recipe: $viewModel.recipe)
                         .frame(maxWidth: 200)
                 }
-                LabeledContent("Categories:") {
+                LabeledContent("Categories") {
                     Button("Select Categories") {
                         viewModel.showingEditCategoriesSheet.toggle()
                     }
@@ -43,36 +43,34 @@ struct RecipeDetailEditMobileView: View {
                     RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
                 } label: {
                     VStack {
-                        Text("Image:")
+                        Text("Photo")
                     }
                 }
-                TextField("Introduction:", text: $viewModel.recipe.introduction, axis: .vertical)
+                TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                     .lineLimit(5...10)
             }
             Section(header: Text("Ingredients")) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Button("Edit Ingredients") {
-                        viewModel.showingEditIngredientsSheet.toggle()
-                    }
-                    .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
-                        IngredientsEditView(recipe: $viewModel.recipe)
-                    }
-                    if viewModel.recipe.ingredients.isEmpty {
-                        Text("No ingredients added")
+                Button("Edit Ingredients") {
+                    viewModel.showingEditIngredientsSheet.toggle()
+                }
+                .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
+                    IngredientsEditView(recipe: $viewModel.recipe)
+                }
+                if viewModel.recipe.ingredients.isEmpty {
+                    Text("No ingredients added")
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 8)
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(viewModel.recipe.ingredients) { ingredient in
-                                if ingredient.isHeading {
-                                    Text(ingredient.text)
-                                        .font(.callout)
-                                        .fontWeight(.semibold)
-                                        //.padding(.top, 8)
-                                } else {
-                                    Text(ingredient.text)
-                                        .font(.body)
-                                }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(viewModel.recipe.ingredients) { ingredient in
+                            if ingredient.isHeading {
+                                Text(ingredient.text)
+                                    .font(.callout)
+                                    .fontWeight(.semibold)
+                                //.padding(.top, 8)
+                            } else {
+                                Text(ingredient.text)
+                                    .font(.body)
                             }
                         }
                     }
@@ -90,49 +88,46 @@ struct RecipeDetailEditMobileView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
                 } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
-                            HStack(alignment: .top, spacing: 12) {
-                                Text("\(index + 1).")
-                                    .font(.body)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 24, alignment: .leading)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    if let stepName = direction.stepName, !stepName.isEmpty {
-                                        Text(stepName)
-                                            .font(.callout)
-                                            .fontWeight(.semibold)
-                                    }
-                                    Text(direction.text)
-                                        .font(.body)
+                    ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text("\(index + 1).")
+                                .font(.body)
+                            //.fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                                .frame(width: 15, alignment: .leading)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let stepName = direction.stepName, !stepName.isEmpty {
+                                    Text(stepName)
+                                        .font(.callout)
+                                        .fontWeight(.semibold)
                                 }
+                                Text(direction.text)
+                                    .font(.body)
                             }
-                            .padding(.vertical, 2)
                         }
+                        .padding(.vertical, 2)
                     }
                 }
             }
             
             Section(header: Text("Preparation Time")) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Button("Edit Times") {
-                        viewModel.showingEditPreparationTimes.toggle()
-                    }
-                    .popover(isPresented: $viewModel.showingEditPreparationTimes) {
-                        PreparationTimesEditView(recipe: $viewModel.recipe)
-                    }
-                    
-                    if viewModel.recipe.preparationTimes.isEmpty {
-                        Text("No preparation times added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(viewModel.recipe.preparationTimes) { preparationTime in
-                                Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
-                            }
+                Button("Edit Times") {
+                    viewModel.showingEditPreparationTimes.toggle()
+                }
+                .popover(isPresented: $viewModel.showingEditPreparationTimes) {
+                    PreparationTimesEditView(recipe: $viewModel.recipe)
+                }
+                
+                if viewModel.recipe.preparationTimes.isEmpty {
+                    Text("No preparation times added")
+                        .foregroundColor(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(viewModel.recipe.preparationTimes) { preparationTime in
+                            Text("\(preparationTime.type)")
+                                .font(.caption)
+                            Text("\(preparationTime.timeString)")
                         }
                     }
                 }
@@ -152,22 +147,14 @@ struct RecipeDetailEditMobileView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(viewModel.recipe.notes) { note in
-                            VStack(alignment: .leading, spacing: 4) {
-                                if !note.title.isEmpty {
-                                    Text(note.title)
-                                        .fontWeight(.semibold)
-                                }
-                                Text(note.content)
-                                    .font(.body)
-                                    .lineLimit(6)
-                            }
-                            .padding(.vertical, 4)
+                            Text(note.title)
+                                .font(.caption)
+                            Text(note.content)
                         }
                     }
                 }
             }
         }
-        .padding()
         .toolbar {
             ToolbarItemGroup {
                 Button("Cancel") {

@@ -59,7 +59,7 @@ struct RecipeDetailEditDesktopView: View {
                             }
                         }
                         VStack {
-                            Text("Image:")
+                            Text("Photo:")
                             RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
                         }
                         
