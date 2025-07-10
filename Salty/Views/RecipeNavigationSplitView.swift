@@ -47,6 +47,7 @@ struct RecipeNavigationSplitView: View {
                     ForEach(viewModel.categories) { category in
                         Label(category.name, systemImage: "doc.plaintext")
                             .tag(category.id)
+                            .font(.caption)
                     }
                 } header: {
                     Text("Categories")
@@ -162,11 +163,13 @@ struct RecipeNavigationSplitView: View {
         .sheet(isPresented: $showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
                 NavigationStack {
-                    RecipeDetailEditView(recipe: recipe)
-                }
                 #if os(macOS)
-                .frame(minWidth: 600, minHeight: 500)
+                    RecipeDetailEditDesktopView(recipe: recipe)
+                    .frame(minWidth: 600, minHeight: 500)
+                #else
+                    RecipeDetailEditMobileView(recipe: recipe)
                 #endif
+                }
             }
         }
         .sheet(isPresented: $showingImportFromFileSheet) {

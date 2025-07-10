@@ -1,33 +1,22 @@
+
 //
 //  RecipeDetailView.swift
 //  Salty
 //
 //  Created by Robert on 10/21/22.
 //
+//  This view is geard towards macOS; see iOS view for mobile-friendly
+//
 
 import SwiftUI
-import SharingGRDB
 
 // TODO: Make iOS-specific view based on Form instead, keep this tuned for Mac?
-struct RecipeDetailEditView: View {
-    @Dependency(\.defaultDatabase) private var database
+struct RecipeDetailEditDesktopView: View {
     @Environment(\.dismiss) var dismiss
-    @State var recipe: Recipe
-    @State private var showingEditCategoriesSheet = false
-    @State private var showingEditIngredientsSheet = false
-    @State private var showingEditDirectionsSheet = false
-    @State private var showingEditPreparationTimes = false
-    @State private var showingEditNotesSheet = false
-    @State private var originalRecipe: Recipe
-    @State private var showingCancelAlert = false
+    @State private var viewModel: RecipeDetailEditViewModel
     
     init(recipe: Recipe) {
-        self._recipe = State(initialValue: recipe)
-        self._originalRecipe = State(initialValue: recipe)
-    }
-    
-    private var hasUnsavedChanges: Bool {
-        return recipe != originalRecipe
+        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe))
     }
 
     var body: some View {
@@ -39,85 +28,44 @@ struct RecipeDetailEditView: View {
                         .font(.title2)
                         .fontWeight(.semibold)
                         .padding(.bottom, 4)
-                    
-                    #if os(macOS)
                     Form {
-                        TextField("Name:", text: $recipe.name)
-                        TextField("Source:", text: $recipe.source)
-                        TextField("Source Details:", text: $recipe.sourceDetails)
-                        TextField("Yield:", text: $recipe.yield)
+                        TextField("Name:", text: $viewModel.recipe.name)
+                        TextField("Source:", text: $viewModel.recipe.source)
+                        TextField("Source Details:", text: $viewModel.recipe.sourceDetails)
+                        TextField("Yield:", text: $viewModel.recipe.yield)
                     }
-                    #else
-                    VStack(spacing: 6) {
-                        TextField("Name", text: $recipe.name)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("Source", text: $recipe.source)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("Source Details", text: $recipe.sourceDetails)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("Yield", text: $recipe.yield)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    #endif
-                    
                     VStack {
-                        #if os(macOS)
                         HStack(alignment: .firstTextBaseline, spacing: 16) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Rating:")
                                     .frame(width: 80, alignment: .leading)
-                                RatingEditView(recipe: $recipe)
+                                RatingEditView(recipe: $viewModel.recipe)
                             }
                             
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Difficulty:")
                                     .frame(width: 80, alignment: .leading)
-                                DifficultyEditView(recipe: $recipe)
+                                DifficultyEditView(recipe: $viewModel.recipe)
                             }
                             VStack(alignment: .leading) {
                                 Text("Categories:")
                                 Button("Edit Categories") {
-                                    showingEditCategoriesSheet.toggle()
+                                    viewModel.showingEditCategoriesSheet.toggle()
                                 }
                             }
                             .buttonStyle(.bordered)
-                            .popover(isPresented: $showingEditCategoriesSheet) {
-                                CategoryEditView(recipe: $recipe)
+                            .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
+                                CategoryEditView(recipe: $viewModel.recipe)
                             }
                         }
-                        #else
-                        VStack {
-                                HStack {
-                                    Text("Rating:")
-                                        .frame(width: 80, alignment: .leading)
-                                    RatingEditView(recipe: $recipe)
-                                }
-                                
-                                HStack {
-                                    Text("Difficulty:")
-                                        .frame(width: 80, alignment: .leading)
-                                    DifficultyEditView(recipe: $recipe)
-                                }
-                                HStack {
-                                    Button("Edit Categories") {
-                                        showingEditCategoriesSheet.toggle()
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .popover(isPresented: $showingEditCategoriesSheet) {
-                                    CategoryEditView(recipe: $recipe)
-                                }
-                            }
-                        #endif
-                        
                         VStack {
                             Text("Image:")
-                            RecipeImageEditView(recipe: $recipe, imageFrameSize: 100)
+                            RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
                         }
                         
                         HOrVStack() {
-                            Toggle("Is favorite?", isOn: $recipe.isFavorite)
-                            Toggle("Want to make", isOn: $recipe.wantToMake)
+                            Toggle("Is favorite?", isOn: $viewModel.recipe.isFavorite)
+                            Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                         }
                     }
                 }
@@ -133,7 +81,7 @@ struct RecipeDetailEditView: View {
                         .padding(.bottom, 4)
                     
                     VStack(spacing: 12) {
-                        TextField("Introduction", text: $recipe.introduction, axis: .vertical)
+                        TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                             .lineLimit(5...10)
                     }
                 }
@@ -149,18 +97,18 @@ struct RecipeDetailEditView: View {
                             .fontWeight(.semibold)
                         Spacer()
                         Button("Edit Directions") {
-                            showingEditDirectionsSheet.toggle()
+                            viewModel.showingEditDirectionsSheet.toggle()
                         }
                         .buttonStyle(.bordered)
                     }
                     
-                    if recipe.directions.isEmpty {
+                    if viewModel.recipe.directions.isEmpty {
                         Text("No directions added")
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 8)
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(Array(recipe.directions.enumerated()), id: \.element.id) { index, direction in
+                            ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
                                 HStack(alignment: .top, spacing: 12) {
                                     Text("\(index + 1).")
                                         .font(.body)
@@ -183,8 +131,8 @@ struct RecipeDetailEditView: View {
                         }
                     }
                 }
-                .popover(isPresented: $showingEditDirectionsSheet) {
-                    DirectionsEditView(recipe: $recipe)
+                .popover(isPresented: $viewModel.showingEditDirectionsSheet) {
+                    DirectionsEditView(recipe: $viewModel.recipe)
                 }
                 .padding(.bottom, 8)
                 
@@ -198,18 +146,18 @@ struct RecipeDetailEditView: View {
                             .fontWeight(.semibold)
                         Spacer()
                         Button("Edit Ingredients") {
-                            showingEditIngredientsSheet.toggle()
+                            viewModel.showingEditIngredientsSheet.toggle()
                         }
                         .buttonStyle(.bordered)
                     }
                     
-                    if recipe.ingredients.isEmpty {
+                    if viewModel.recipe.ingredients.isEmpty {
                         Text("No ingredients added")
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 8)
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(recipe.ingredients) { ingredient in
+                            ForEach(viewModel.recipe.ingredients) { ingredient in
                                 if ingredient.isHeading {
                                     Text(ingredient.text)
                                         .font(.callout)
@@ -223,8 +171,8 @@ struct RecipeDetailEditView: View {
                         }
                     }
                 }
-                .popover(isPresented: $showingEditIngredientsSheet) {
-                    IngredientsEditView(recipe: $recipe)
+                .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
+                    IngredientsEditView(recipe: $viewModel.recipe)
                 }
                 .padding(.bottom, 8)
                 
@@ -238,25 +186,25 @@ struct RecipeDetailEditView: View {
                             .fontWeight(.semibold)
                         Spacer()
                         Button("Edit Times") {
-                            showingEditPreparationTimes.toggle()
+                            viewModel.showingEditPreparationTimes.toggle()
                         }
                         .buttonStyle(.bordered)
                     }
                     
-                    if recipe.preparationTimes.isEmpty {
+                    if viewModel.recipe.preparationTimes.isEmpty {
                         Text("No preparation times added")
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(recipe.preparationTimes) { preparationTime in
+                            ForEach(viewModel.recipe.preparationTimes) { preparationTime in
                                 Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
                             }
                         }
                     }
                 }
-                .popover(isPresented: $showingEditPreparationTimes) {
-                    PreparationTimesEditView(recipe: $recipe)
+                .popover(isPresented: $viewModel.showingEditPreparationTimes) {
+                    PreparationTimesEditView(recipe: $viewModel.recipe)
                 }
                 .padding(.bottom, 8)
                 
@@ -270,18 +218,18 @@ struct RecipeDetailEditView: View {
                             .fontWeight(.semibold)
                         Spacer()
                         Button("Edit Notes") {
-                            showingEditNotesSheet.toggle()
+                            viewModel.showingEditNotesSheet.toggle()
                         }
                         .buttonStyle(.bordered)
                     }
                     
-                    if recipe.notes.isEmpty {
+                    if viewModel.recipe.notes.isEmpty {
                         Text("No notes added")
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
                     } else {
                         VStack(alignment: .leading, spacing: 12) {
-                            ForEach(recipe.notes) { note in
+                            ForEach(viewModel.recipe.notes) { note in
                                 VStack(alignment: .leading, spacing: 4) {
                                     if !note.title.isEmpty {
                                         Text(note.title)
@@ -296,8 +244,8 @@ struct RecipeDetailEditView: View {
                         }
                     }
                 }
-                .popover(isPresented: $showingEditNotesSheet) {
-                    NotesEditView(recipe: $recipe)
+                .popover(isPresented: $viewModel.showingEditNotesSheet) {
+                    NotesEditView(recipe: $viewModel.recipe)
                 }
             }
             .padding()
@@ -305,8 +253,8 @@ struct RecipeDetailEditView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button("Cancel") {
-                    if hasUnsavedChanges {
-                        showingCancelAlert = true
+                    if viewModel.hasUnsavedChanges {
+                        viewModel.showingCancelAlert = true
                     } else {
                         dismiss()
                     }
@@ -315,29 +263,26 @@ struct RecipeDetailEditView: View {
                 .foregroundColor(.secondary)
                 
                 Button("Save") {
-                    recipe.lastModifiedDate = Date()
-                    try? database.write { db in
-                        try Recipe.upsert(Recipe.Draft(recipe))
-                        .execute(db)
-                    }
+                    viewModel.saveRecipe()
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.accentColor)
             }
         }
-        .alert("Discard Changes?", isPresented: $showingCancelAlert) {
+        .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Discard", role: .destructive) {
+                viewModel.discardChanges()
                 dismiss()
             }
         } message: {
             Text("You have unsaved changes. Are you sure you want to discard them?")
         }
-        .interactiveDismissDisabled(hasUnsavedChanges)
+        .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
-            if hasUnsavedChanges {
-                showingCancelAlert = true
+            if viewModel.hasUnsavedChanges {
+                viewModel.showingCancelAlert = true
                 return .handled
             }
             return .ignored
@@ -345,27 +290,7 @@ struct RecipeDetailEditView: View {
     }
 }
 
-// Custom view for consistent label and text field layout
-struct LabeledTextField: View {
-    let label: String
-    @Binding var text: String
-    var axis: Axis = .horizontal
-    
-    var body: some View {
-        HStack(alignment: .top) {
-            Text(label)
-                //.font(.subheadline)
-                //.fontWeight(.medium)
-                .frame(width: 120, alignment: .leading)
-                .accessibilityHidden(true)
-            
-            TextField(label, text: $text, axis: axis)
-                //.textFieldStyle(.roundedBorder)
-                .accessibilityLabel(label)
-        }
-    }
-}
 
 #Preview {
-    RecipeDetailEditView(recipe: SampleData.sampleRecipes[0])
+    RecipeDetailEditDesktopView(recipe: SampleData.sampleRecipes[0])
 }
