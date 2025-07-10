@@ -138,6 +138,7 @@ struct RecipeNavigationSplitView: View {
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
+                #if os(macOS)
                 if useWebRecipeDetailView == true {
                     RecipeDetailWebView(recipe: recipe)
                         .id(recipeId) // seems to be needed to force full reload when recipe changes?
@@ -146,6 +147,10 @@ struct RecipeNavigationSplitView: View {
                     RecipeDetailView(recipe: recipe)
                         .id(recipeId) // seems to be needed to force full reload when recipe changes?
                 }
+                #else
+                    RecipeDetailView(recipe: recipe)
+                        .id(recipeId) // seems to be needed to force full reload when recipe changes?
+                #endif
             } else {
                 Text("No recipe selected")
                     .foregroundStyle(.tertiary)

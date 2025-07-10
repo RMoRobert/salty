@@ -28,7 +28,7 @@ struct SampleData {
             rating: .four,
             imageFilename: nil,
             imageThumbnailData: nil,
-            isFavorite: false,
+            isFavorite: true,
             wantToMake: false,
             yield: "2 dozen",
             directions: [
