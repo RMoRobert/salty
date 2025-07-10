@@ -2,7 +2,7 @@
 //  RecipeDetailView.swift
 //  Salty
 //
-//  Created by Robert on 10/21/22.
+//  Created by Robert on 10/21/22, forked from combined view on 7/9/25
 //
 //  This view is geared towards iOS; see RecipeDetailEditDesktopView for macOS-tailored view.
 //
@@ -76,6 +76,7 @@ struct RecipeDetailEditMobileView: View {
                     }
                 }
             }
+            // TODO: Make this whole section (and others below) and ediable list, with moving/deleting/editing/adding right in place?
             Section(header: Text("Directions")) {
                 Button("Edit Directions") {
                     viewModel.showingEditDirectionsSheet.toggle()

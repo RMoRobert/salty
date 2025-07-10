@@ -2,7 +2,7 @@
 //  RecipeNavigationSplitView.swift
 //  Salty
 //
-//  Created by Robert on 10/25/22, re-creaated 7/24/23 and 6/10/25
+//  Created by Robert on 10/25/22, substantial re-creations on 7/24/23 and 6/10/25
 //
 
 import SwiftUI
@@ -47,7 +47,6 @@ struct RecipeNavigationSplitView: View {
                     ForEach(viewModel.categories) { category in
                         Label(category.name, systemImage: "doc.plaintext")
                             .tag(category.id)
-                            .font(.caption)
                     }
                 } header: {
                     Text("Categories")

@@ -3,7 +3,7 @@
 //  RecipeDetailView.swift
 //  Salty
 //
-//  Created by Robert on 10/21/22.
+//  Created by Robert on 10/21/22, forked from combined view on 7/9/25
 //
 //  This view is geard towards macOS; see iOS view for mobile-friendly
 //
@@ -24,15 +24,25 @@ struct RecipeDetailEditDesktopView: View {
             VStack(alignment: .leading, spacing: 24) {
                 // Basic Information Section
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Basic Information")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .padding(.bottom, 4)
+//                    Text("Basic Information")
+//                        .modifier(TitleStyle())
                     Form {
                         TextField("Name:", text: $viewModel.recipe.name)
                         TextField("Source:", text: $viewModel.recipe.source)
                         TextField("Source Details:", text: $viewModel.recipe.sourceDetails)
                         TextField("Yield:", text: $viewModel.recipe.yield)
+                        HStack {
+                            Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
+                            Spacer()
+                            Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
+                            Spacer()
+                            Button("Edit Categories") {
+                                viewModel.showingEditCategoriesSheet.toggle()
+                            }
+                            .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
+                                CategoryEditView(recipe: $viewModel.recipe)
+                            }
+                        }
                     }
                     VStack {
                         HStack(alignment: .firstTextBaseline, spacing: 16) {
@@ -40,22 +50,14 @@ struct RecipeDetailEditDesktopView: View {
                                 Text("Rating:")
                                     .frame(width: 80, alignment: .leading)
                                 RatingEditView(recipe: $viewModel.recipe)
+                                    .frame(maxWidth: 250)
                             }
-                            
+                            Spacer()
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Difficulty:")
                                     .frame(width: 80, alignment: .leading)
                                 DifficultyEditView(recipe: $viewModel.recipe)
-                            }
-                            VStack(alignment: .leading) {
-                                Text("Categories:")
-                                Button("Edit Categories") {
-                                    viewModel.showingEditCategoriesSheet.toggle()
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                            .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
-                                CategoryEditView(recipe: $viewModel.recipe)
+                                    .frame(maxWidth: 250)
                             }
                         }
                         VStack {
@@ -63,38 +65,28 @@ struct RecipeDetailEditDesktopView: View {
                             RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
                         }
                         
-                        HOrVStack() {
-                            Toggle("Is favorite?", isOn: $viewModel.recipe.isFavorite)
-                            Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
-                        }
                     }
                 }
                 .padding(.bottom, 8)
-                
-                Divider()
-                
-                // Introduction Section 
+                                
+                // Introduction Section
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Introduction")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .padding(.bottom, 4)
+                    Text("Introduction:")
+                        .modifier(TitleStyle())
                     
                     VStack(spacing: 12) {
                         TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                             .lineLimit(5...10)
+                            .labelStyle(.titleOnly)
                     }
                 }
                 .padding(.bottom, 8)
-                
-                Divider()
-                
+                                
                 // Directions Section
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text("Directions")
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                        Text("Directions:")
+                            .modifier(TitleStyle())
                         Spacer()
                         Button("Edit Directions") {
                             viewModel.showingEditDirectionsSheet.toggle()
@@ -136,14 +128,11 @@ struct RecipeDetailEditDesktopView: View {
                 }
                 .padding(.bottom, 8)
                 
-                Divider()
-                
                 // Ingredients Section
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text("Ingredients")
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                        Text("Ingredients:")
+                            .modifier(TitleStyle())
                         Spacer()
                         Button("Edit Ingredients") {
                             viewModel.showingEditIngredientsSheet.toggle()
@@ -176,14 +165,11 @@ struct RecipeDetailEditDesktopView: View {
                 }
                 .padding(.bottom, 8)
                 
-                Divider()
-                
                 // Preparation Times Section
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text("Preparation Times")
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                        Text("Preparation Times:")
+                            .modifier(TitleStyle())
                         Spacer()
                         Button("Edit Times") {
                             viewModel.showingEditPreparationTimes.toggle()
@@ -198,7 +184,7 @@ struct RecipeDetailEditDesktopView: View {
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(viewModel.recipe.preparationTimes) { preparationTime in
-                                Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
+                                Text("\(preparationTime.type): \(preparationTime.timeString)")
                             }
                         }
                     }
@@ -208,14 +194,11 @@ struct RecipeDetailEditDesktopView: View {
                 }
                 .padding(.bottom, 8)
                 
-                Divider()
-                
                 // Notes Section
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text("Notes")
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                        Text("Notes:")
+                            .modifier(TitleStyle())
                         Spacer()
                         Button("Edit Notes") {
                             viewModel.showingEditNotesSheet.toggle()
@@ -287,6 +270,15 @@ struct RecipeDetailEditDesktopView: View {
             }
             return .ignored
         }
+    }
+}
+
+struct TitleStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            //.font(.title3)
+            .font(.title2.smallCaps())
+            .foregroundColor(.secondary)
     }
 }
 
