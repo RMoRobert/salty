@@ -26,19 +26,26 @@ struct RecipeDetailEditMobileView: View {
                 TextField("Yield", text: $viewModel.recipe.yield)
                 Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
+                
                 LabeledContent("Rating") {
                     RatingEditView(recipe: $viewModel.recipe)
                         .frame(maxWidth: 200)
                 }
+                
                 LabeledContent("Difficulty") {
                     DifficultyEditView(recipe: $viewModel.recipe)
                         .frame(maxWidth: 200)
                 }
+                
                 LabeledContent("Categories") {
                     Button("Select Categories") {
                         viewModel.showingEditCategoriesSheet.toggle()
-                    }
+                    } 
                 }
+                .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
+                    CategoryEditView(recipe: $viewModel.recipe)
+                }
+                
                 LabeledContent {
                     RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
                 } label: {
@@ -46,6 +53,7 @@ struct RecipeDetailEditMobileView: View {
                         Text("Photo")
                     }
                 }
+                
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                     .lineLimit(5...10)
             }

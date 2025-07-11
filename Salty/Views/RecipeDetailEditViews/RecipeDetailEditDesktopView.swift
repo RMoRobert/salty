@@ -277,8 +277,9 @@ struct TitleStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             //.font(.title3)
-            .font(.title2.smallCaps())
-            .foregroundColor(.secondary)
+            .font(.title2)
+            .fontWeight(.semibold)
+            //.foregroundColor(.secondary)
     }
 }
 

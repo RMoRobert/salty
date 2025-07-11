@@ -37,6 +37,7 @@ struct RecipeDetailView: View {
                         if !recipe.source.isEmpty {
                             HStack {
                                 Image(systemName: "text.book.closed")
+                                    .modifier(IconShadowModifier())
                                 Text(recipe.source)
                             }
                             .accessibilityElement(children: .combine)
@@ -53,6 +54,7 @@ struct RecipeDetailView: View {
                         if !recipe.yield.isEmpty {
                             HStack {
                                 Image(systemName: "person.2")
+                                    .modifier(IconShadowModifier())
                                 Text(recipe.yield)
                             }
                             .accessibilityElement(children: .combine)
@@ -73,6 +75,7 @@ struct RecipeDetailView: View {
                         ForEach(recipe.preparationTimes) { prepTime in
                             HStack {
                                 Image(systemName: "clock")
+                                    .modifier(IconShadowModifier())
                                 Text("\(prepTime.type): \(prepTime.timeString)")
                             }
                             .accessibilityElement(children: .combine)
@@ -88,6 +91,7 @@ struct RecipeDetailView: View {
                         HStack {
                             Image(systemName: "heart.fill")
                                 .foregroundColor(.red)
+                                .modifier(IconShadowModifier())
                             Text("Favorite")
                         }
                         .accessibilityElement(children: .combine)
@@ -97,6 +101,7 @@ struct RecipeDetailView: View {
                         HStack {
                             Image(systemName: "checkmark.diamond")
                                 .foregroundColor(Color.green.opacity(0.8))
+                                .modifier(IconShadowModifier())
                             Text("Want to Make")
                         }
                         .accessibilityElement(children: .combine)
@@ -210,6 +215,20 @@ struct RecipeDetailView: View {
 //            RecipeDetailEditView(recipe: recipe)
 //                .frame(minWidth: 600, minHeight: 500)
 //        }
+    }
+}
+
+struct IconShadowModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .shadow(radius: 0.5, x:0.5, y:1)
+    }
+}
+
+struct NoModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .shadow(radius: 0.5, x:0.5, y:1)
     }
 }
 

@@ -63,7 +63,7 @@ struct RecipeRowView: View {
                                 Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
                                     .foregroundColor(.secondary)
                                     .font(.caption2)
-                                    .shadow(radius: 1, x:0.5, y:1)
+                                    .modifier(IconShadowModifier())
                                     .accessibilityHidden(true)
                             }
                         }
@@ -86,7 +86,7 @@ struct RecipeRowView: View {
                     Image(systemName: recipe.isFavorite ? "heart.fill" : "heart.slash")
                         .font(.caption)
                         .foregroundColor(.red)
-                        .shadow(radius: 1, x:0.5, y:1)
+                        .modifier(IconShadowModifier())
                         .opacity(recipe.isFavorite ? 100 : 0)
                         .accessibilityHint(recipe.isFavorite ? "Is Favorite" : "Not Favorite")
                 }
@@ -95,6 +95,7 @@ struct RecipeRowView: View {
         }
     }
 }
+
 
 #Preview {
     RecipeRowView(recipe: SampleData.sampleRecipes[0])

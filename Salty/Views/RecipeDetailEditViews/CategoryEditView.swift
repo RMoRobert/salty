@@ -43,7 +43,9 @@ struct CategoryEditView: View {
             }
         }
         .frame(minWidth: 200, minHeight: 300)
+        #if os(macOS)
         .padding([.top, .leading, .trailing])
+        #endif
         .onAppear {
             loadSelectedCategories()
         }

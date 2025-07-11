@@ -14,16 +14,13 @@ struct RatingView: View {
     let recipe: Recipe
     
     var body: some View {
-        HStack {
+        HStack(spacing: 2) {
             ForEach(1..<6) { val in
-                if recipe.rating.rawValue >= val {
-                    Image(systemName: "star.fill")
-                        .symbolRenderingMode(.multicolor)
-                }
-                else {
-                    Image(systemName: "star")
-                        .foregroundStyle(.gray)
-                }
+                let isStarInRange = recipe.rating.rawValue >= val
+                Image(systemName: isStarInRange ? "star.fill" : "star")
+                    .symbolRenderingMode(isStarInRange ? .hierarchical : nil)
+                    .foregroundColor(isStarInRange ? .yellow : .gray)
+                    .shadow(radius: isStarInRange ? 0.5 : 0, x: isStarInRange ? 0.5 : 0, y: isStarInRange ? 1 : 0)                
             }
         }
         .accessibilityLabel("Rating: \(recipe.rating.rawValue) star(s)")
