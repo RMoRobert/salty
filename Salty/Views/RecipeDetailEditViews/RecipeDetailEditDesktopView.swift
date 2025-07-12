@@ -143,8 +143,17 @@ struct RecipeDetailEditDesktopView: View {
                             viewModel.showingEditIngredientsSheet.toggle()
                         }
                         .buttonStyle(.bordered)
+                        
+                        Menu {
+                            Button("Bulk Edit") {
+                                viewModel.showingBulkEditIngredientsSheet.toggle()
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.accentColor)
                     }
-                    
                     if viewModel.recipe.ingredients.isEmpty {
                         Text("No ingredients added")
                             .foregroundStyle(.secondary)
@@ -167,6 +176,9 @@ struct RecipeDetailEditDesktopView: View {
                 }
                 .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
                     IngredientsEditView(recipe: $viewModel.recipe)
+                }
+                .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
+                    RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
                 }
                 .padding(.bottom, 8)
                 

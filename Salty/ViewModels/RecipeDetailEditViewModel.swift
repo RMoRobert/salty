@@ -27,6 +27,7 @@ class RecipeDetailEditViewModel {
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
     var showingEditCategoriesSheet = false
     var showingEditIngredientsSheet = false
+    var showingBulkEditIngredientsSheet = false
     var showingEditDirectionsSheet = false
     var showingEditPreparationTimes = false
     var showingEditNotesSheet = false

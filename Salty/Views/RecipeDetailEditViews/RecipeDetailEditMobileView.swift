@@ -96,11 +96,10 @@ struct RecipeDetailEditMobileView: View {
                         }
                         
                         Button(action: {
-                            // TODO: Implement bulk edit
+                            viewModel.showingBulkEditIngredientsSheet.toggle()
                         }) {
                             Label("Bulk Edit", systemImage: "text.alignleft")
                         }
-                        .disabled(true)
                     } label: {
                         Label("More", systemImage: "ellipsis.circle")
                     }
@@ -297,6 +296,9 @@ struct RecipeDetailEditMobileView: View {
             Text("You have unsaved changes. Are you sure you want to discard them?")
         }
 
+        .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
+            RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
+        }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
