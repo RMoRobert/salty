@@ -46,6 +46,7 @@ struct SaltyApp: App {
                 .frame(idealWidth: 800)
                 .navigationTitle("Import Recipe from Web")
         }
+
         #if os(macOS)
         Settings {
             SettingsView()

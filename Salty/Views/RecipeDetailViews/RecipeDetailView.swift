@@ -204,7 +204,7 @@ struct RecipeDetailView: View {
         }
         .sheet(isPresented: $showingFullImage) {
             RecipeFullImageView(recipe: recipe)
-                .frame(minWidth: 400, minHeight: 400)
+                .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
         }
 //        .toolbar {
 //            ToolbarItem {
