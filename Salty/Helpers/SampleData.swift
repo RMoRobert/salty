@@ -76,6 +76,7 @@ struct SampleData {
             directions: [
                 Direction(id: UUID().uuidString, text: "First, prepare all your ingredients. This step is crucial for success."),
                 Direction(id: UUID().uuidString, text: "Next, combine the dry ingredients in a large bowl."),
+                Direction(id: UUID().uuidString, isHeading: true, text: "Next Steps"),
                 Direction(id: UUID().uuidString, text: "In a separate bowl, whisk together the wet ingredients until well combined."),
                 Direction(id: UUID().uuidString, text: "Gradually add the wet ingredients to the dry ingredients, stirring gently."),
                 Direction(id: UUID().uuidString, text: "Pour the batter into a prepared pan and bake until done.")

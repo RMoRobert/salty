@@ -158,19 +158,24 @@ struct RecipeDetailView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                             .padding(.bottom)
-                        // TODO: Align step name with text, not number (i.e., farther right)?
                         ForEach(recipe.directions.indices, id: \.self) { index in
-                            if (recipe.directions[index].stepName != nil && recipe.directions[index].stepName != "") {
-                                Text(recipe.directions[index].stepName!)
-                                    .font(.callout)
-                                    .fontWeight(.semibold)
-                            }
                             HStack(alignment: .top) {
-                                Text("\(index+1).")
-                                    .fontWeight(.semibold)
-                                Text(recipe.directions[index].text)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.bottom, 2)
+                                if recipe.directions[index].isHeading != true {
+                                    Text("\(recipe.directions.prefix(index + 1).filter { $0.isHeading != true }.count).")
+                                        .fontWeight(.semibold)
+                                } else {
+                                    Spacer()
+                                        .frame(width: 20)
+                                }
+                                if recipe.directions[index].isHeading == true {
+                                    Text(recipe.directions[index].text)
+                                        .font(.callout)
+                                        .fontWeight(.semibold)
+                                } else {
+                                    Text(recipe.directions[index].text)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .padding(.bottom, 2)
+                                }
                             }
                         }
                     }

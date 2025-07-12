@@ -19,18 +19,25 @@ struct DirectionsEditView: View {
             List(selection: $selectedIndex) {
                 ForEach(Array(editingDirections.enumerated()), id: \.element.id) { index, direction in
                     HStack(alignment: .top) {
-                        Text("\(index + 1).")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .frame(width: 30, alignment: .leading)
+                        if direction.isHeading != true {
+                            Text("\(editingDirections.prefix(index + 1).filter { $0.isHeading != true }.count).")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .frame(width: 30, alignment: .leading)
+                        } else {
+                            Spacer()
+                                .frame(width: 30)
+                        }
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            if let stepName = direction.stepName, !stepName.isEmpty {
-                                Text(stepName)
+                            if direction.isHeading == true {
+                                Text(direction.text)
                                     .fontWeight(.semibold)
+                                    .font(.headline)
+                            } else {
+                                Text(direction.text)
+                                    .lineLimit(3)
                             }
-                            Text(direction.text)
-                                .lineLimit(3)
                         }
                         Spacer()
                     }
@@ -80,7 +87,7 @@ struct DirectionsEditView: View {
             Button {
                 editingDirections.append(Direction(
                     id: UUID().uuidString,
-                    stepName: "",
+                    isHeading: false,
                     text: "New step"
                 ))
                 hasChanges = true
@@ -112,27 +119,15 @@ struct DirectionDetailEditView: View {
             Text("Edit Direction")
                 .font(.headline)
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Step Name (optional):")
-//                    .font(.subheadline)
-//                    .fontWeight(.medium)
-                TextField("Step name", text: Binding(
-                    get: { direction.stepName ?? "" },
-                    set: { newValue in
-                        direction.stepName = newValue.isEmpty ? nil : newValue
-                    }
-                ))
-#if os(iOS)
-.textFieldStyle(.roundedBorder)
-#endif
-            }
+            Toggle("Is Heading", isOn: Binding(
+                get: { direction.isHeading ?? false },
+                set: { direction.isHeading = $0 }
+            ))
+            .padding(.bottom, 8)
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("Step Text:")
-//                    .font(.subheadline)
-//                    .fontWeight(.medium)
-                TextField("Step text", text: $direction.text, axis: .vertical)
-                    //.textFieldStyle(.roundedBorder)
+                Text(direction.isHeading == true ? "Heading Text:" : "Step Text:")
+                TextField(direction.isHeading == true ? "Heading" : "Step text", text: $direction.text, axis: .vertical)
                     .lineLimit(4...12)
                     .frame(minHeight: 60)
                 #if os(iOS)
@@ -143,6 +138,8 @@ struct DirectionDetailEditView: View {
         .padding()
     }
 }
+
+
 
 #Preview {
     DirectionsEditView(recipe: .constant(SampleData.sampleRecipes[0]))

@@ -102,20 +102,25 @@ struct RecipeDetailEditDesktopView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
                                 HStack(alignment: .top, spacing: 12) {
-                                    Text("\(index + 1).")
-                                        .font(.body)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 24, alignment: .leading)
-                                    
+                                    if direction.isHeading != true {
+                                        Text("\(viewModel.recipe.directions.prefix(index + 1).filter { $0.isHeading != true }.count).")
+                                            .font(.body)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.secondary)
+                                            .frame(width: 24, alignment: .leading)
+                                    } else {
+                                        Spacer()
+                                            .frame(width: 24)
+                                    }
                                     VStack(alignment: .leading, spacing: 4) {
-                                        if let stepName = direction.stepName, !stepName.isEmpty {
-                                            Text(stepName)
+                                        if direction.isHeading == true {
+                                            Text(direction.text)
                                                 .font(.callout)
                                                 .fontWeight(.semibold)
+                                        } else {
+                                            Text(direction.text)
+                                                .font(.body)
                                         }
-                                        Text(direction.text)
-                                            .font(.body)
                                     }
                                 }
                                 .padding(.vertical, 2)

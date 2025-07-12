@@ -79,11 +79,10 @@ extension Recipe {
                             H2("Directions").id("recipe-directions-heading")
                             Ul {
                                 for direction in directions {
-                                    if direction.stepName != "" {
+                                    if let isHeading = direction.isHeading, isHeading {
                                         Li {
-                                            Span(direction.stepName)
-                                            Span(" ")
-                                            Span(direction.text)
+                                            Li(direction.text)
+                                                .class("recipe-directions-heading")
                                         }
                                         .class("recipe-directions-step-with-name")
                                     }

@@ -178,7 +178,7 @@ extension Course: FetchableRecord, PersistableRecord {
 
 struct Direction: Codable, Hashable, Equatable, Identifiable  {
     var id: String
-    var stepName: String?
+    var isHeading: Bool?
     var text: String
 }
 
@@ -442,9 +442,8 @@ func appDatabase() throws -> any DatabaseWriter {
         }
     }
     
-
-    
     try migrator.migrate(database)
+    
 #if DEBUG
     if context == .preview {
       try database.write { db in
@@ -452,9 +451,9 @@ func appDatabase() throws -> any DatabaseWriter {
       }
     }
 #endif
+    
     return database
 }
-
 
 
 #if DEBUG

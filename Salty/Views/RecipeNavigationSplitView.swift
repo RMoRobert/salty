@@ -10,6 +10,7 @@ import SwiftUI
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    @AppStorage("mobileEditViews") private var useMobileEditViews = false
     
 //    init(previewData: (recipes: [Recipe], categories: [Category])? = nil) {
 //        if let previewData = previewData {
@@ -162,12 +163,17 @@ struct RecipeNavigationSplitView: View {
         .sheet(isPresented: $showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
                 NavigationStack {
-                #if os(macOS)
-                    RecipeDetailEditDesktopView(recipe: recipe)
-                    .frame(minWidth: 600, minHeight: 500)
-                #else
+                    #if os(macOS)
+                    if useMobileEditViews {
+                        RecipeDetailEditMobileView(recipe: recipe)
+                            .frame(minWidth: 600, minHeight: 500)
+                    } else {
+                        RecipeDetailEditDesktopView(recipe: recipe)
+                            .frame(minWidth: 600, minHeight: 500)
+                    }
+                    #else
                     RecipeDetailEditMobileView(recipe: recipe)
-                #endif
+                    #endif
                 }
             }
         }

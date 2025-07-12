@@ -18,8 +18,8 @@ struct RecipeDetailEditMobileView: View {
     }
 
     var body: some View {
-        Form {
-            Section(header: Text("Basic Information")) {
+        List {
+            Section("Basic Information") {
                 TextField("Name", text: $viewModel.recipe.name)
                 TextField("Source", text: $viewModel.recipe.source)
                 TextField("Source Details", text: $viewModel.recipe.sourceDetails)
@@ -27,143 +27,246 @@ struct RecipeDetailEditMobileView: View {
                 Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                 
-                LabeledContent("Rating") {
+                HStack {
+                    Text("Rating")
+                    Spacer()
                     RatingEditView(recipe: $viewModel.recipe)
-                        .frame(maxWidth: 200)
                 }
                 
-                LabeledContent("Difficulty") {
+                HStack {
+                    Text("Difficulty")
+                    Spacer()
                     DifficultyEditView(recipe: $viewModel.recipe)
-                        .frame(maxWidth: 200)
                 }
                 
-                LabeledContent("Categories") {
+                HStack {
+                    Text("Categories")
+                    Spacer()
                     Button("Select Categories") {
                         viewModel.showingEditCategoriesSheet.toggle()
-                    } 
+                    }
                 }
                 .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
                     CategoryEditView(recipe: $viewModel.recipe)
                 }
                 
-                LabeledContent {
-                    RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
-                } label: {
-                    VStack {
-                        Text("Photo")
-                    }
-                }
                 
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                     .lineLimit(5...10)
             }
-            Section(header: Text("Ingredients")) {
-                Button("Edit Ingredients") {
-                    viewModel.showingEditIngredientsSheet.toggle()
-                }
-                .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
-                    IngredientsEditView(recipe: $viewModel.recipe)
-                }
-                if viewModel.recipe.ingredients.isEmpty {
-                    Text("No ingredients added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(viewModel.recipe.ingredients) { ingredient in
-                            if ingredient.isHeading {
-                                Text(ingredient.text)
-                                    .font(.callout)
-                                    .fontWeight(.semibold)
-                                //.padding(.top, 8)
-                            } else {
-                                Text(ingredient.text)
-                                    .font(.body)
-                            }
-                        }
-                    }
-                }
-            }
-            // TODO: Make this whole section (and others below) and ediable list, with moving/deleting/editing/adding right in place?
-            Section(header: Text("Directions")) {
-                Button("Edit Directions") {
-                    viewModel.showingEditDirectionsSheet.toggle()
-                }
-                .popover(isPresented: $viewModel.showingEditDirectionsSheet) {
-                    DirectionsEditView(recipe: $viewModel.recipe)
-                }
-                if viewModel.recipe.directions.isEmpty {
-                    Text("No directions added")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-                } else {
-                    ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
-                        HStack(alignment: .top, spacing: 12) {
-                            Text("\(index + 1).")
-                                .font(.body)
-                            //.fontWeight(.medium)
-                                .foregroundColor(.secondary)
-                                .frame(width: 15, alignment: .leading)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                if let stepName = direction.stepName, !stepName.isEmpty {
-                                    Text(stepName)
-                                        .font(.callout)
-                                        .fontWeight(.semibold)
-                                }
-                                Text(direction.text)
-                                    .font(.body)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
             
-            Section(header: Text("Preparation Time")) {
-                    Button("Edit Times") {
-                        viewModel.showingEditPreparationTimes.toggle()
+            Section("Ingredients") {
+                ForEach($viewModel.recipe.ingredients) { $ingredient in
+                    TextField("Ingredient", text: $ingredient.text)
+                        .font(ingredient.isHeading ? .headline : .body)
+                        .fontWeight(ingredient.isHeading ? .semibold : .regular)
+                }
+                .onDelete { indexSet in
+                    viewModel.recipe.ingredients.remove(atOffsets: indexSet)
+                }
+                .onMove { from, to in
+                    viewModel.recipe.ingredients.move(fromOffsets: from, toOffset: to)
+                }
+                HStack {
+                    Button(action: {
+                        viewModel.recipe.ingredients.append(Ingredient(
+                            id: UUID().uuidString,
+                            isHeading: false,
+                            isMain: false,
+                            text: "New ingredient"
+                        ))
+                    }) {
+                        Label("Add Ingredient", systemImage: "plus.circle.fill")
                     }
-                    .popover(isPresented: $viewModel.showingEditPreparationTimes) {
-                        PreparationTimesEditView(recipe: $viewModel.recipe)
-                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.bordered)
                     
-                    if viewModel.recipe.preparationTimes.isEmpty {
-                        Text("No preparation times added")
-                        .foregroundColor(.secondary)
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(viewModel.recipe.preparationTimes) { preparationTime in
-                                Text("\(preparationTime.type)")
-                                    .font(.caption)
-                                Text("\(preparationTime.timeString)")
-                            }
+                    Spacer()
+                    
+                    Menu {
+                        Button(action: {
+                            viewModel.recipe.ingredients.append(Ingredient(
+                                id: UUID().uuidString,
+                                isHeading: true,
+                                isMain: false,
+                                text: "New Heading"
+                            ))
+                        }) {
+                            Label("Add Heading", systemImage: "paragraphsign")
                         }
+                        
+                        Button(action: {
+                            // TODO: Implement bulk edit
+                        }) {
+                            Label("Bulk Edit", systemImage: "text.alignleft")
+                        }
+                        .disabled(true)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
                     }
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+                    .buttonStyle(.plain)
+                }
             }
             
-            Section(header: Text("Notes")) {
-                Button("Edit Notes") {
-                    viewModel.showingEditNotesSheet.toggle()
+            Section("Directions") {
+                ForEach($viewModel.recipe.directions) { $direction in
+                    TextField("Direction", text: $direction.text)
+                        .font(direction.isHeading == true ? .headline : .body)
+                        .fontWeight(direction.isHeading == true ? .semibold : .regular)
                 }
-                .popover(isPresented: $viewModel.showingEditNotesSheet) {
-                    NotesEditView(recipe: $viewModel.recipe)
+                .onDelete { indexSet in
+                    viewModel.recipe.directions.remove(atOffsets: indexSet)
                 }
-                if viewModel.recipe.notes.isEmpty {
-                    Text("No notes added")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.recipe.notes) { note in
-                            Text(note.title)
-                                .font(.caption)
-                            Text(note.content)
+                .onMove { from, to in
+                    viewModel.recipe.directions.move(fromOffsets: from, toOffset: to)
+                }
+                HStack {
+                    Button(action: {
+                        viewModel.recipe.directions.append(Direction(
+                            id: UUID().uuidString,
+                            isHeading: false,
+                            text: "New step"
+                        ))
+                    }) {
+                        Label("Add Step", systemImage: "plus.circle.fill")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.bordered)
+                    
+                    Spacer()
+                    
+                    Menu {
+                        Button(action: {
+                            viewModel.recipe.directions.append(Direction(
+                                id: UUID().uuidString,
+                                isHeading: true,
+                                text: "New Heading"
+                            ))
+                        }) {
+                            Label("Add Heading", systemImage: "paragraphsign")
                         }
+                        
+                        Button(action: {
+                            // TODO: Implement bulk edit
+                        }) {
+                            Label("Bulk Edit", systemImage: "text.alignleft")
+                        }
+                        .disabled(true)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            Section("Preparation Time") {
+                ForEach($viewModel.recipe.preparationTimes) { $preparationTime in
+                    HStack {
+                        TextField("Type", text: $preparationTime.type)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        TextField("Time", text: $preparationTime.timeString)
+                            .font(.body)
                     }
                 }
+                .onDelete { indexSet in
+                    viewModel.recipe.preparationTimes.remove(atOffsets: indexSet)
+                }
+                .onMove { from, to in
+                    viewModel.recipe.preparationTimes.move(fromOffsets: from, toOffset: to)
+                }
+                
+                HStack {
+                    Button(action: {
+                        viewModel.recipe.preparationTimes.append(PreparationTime(
+                            id: UUID().uuidString,
+                            type: "New Time",
+                            timeString: "0 minutes"
+                        ))
+                    }) {
+                        Label("Add Time", systemImage: "plus.circle.fill")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.bordered)
+                    
+                    Spacer()
+                    
+                    Menu {
+                        Button(action: {
+                            // TODO: Implement bulk edit
+                        }) {
+                            Label("Bulk Edit", systemImage: "text.alignleft")
+                        }
+                        .disabled(true)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            Section("Notes") {
+                ForEach($viewModel.recipe.notes) { $note in
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Note title", text: $note.title)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        TextField("Note content", text: $note.content, axis: .vertical)
+                            .font(.body)
+                            .lineLimit(3...6)
+                    }
+                }
+                .onDelete { indexSet in
+                    viewModel.recipe.notes.remove(atOffsets: indexSet)
+                }
+                .onMove { from, to in
+                    viewModel.recipe.notes.move(fromOffsets: from, toOffset: to)
+                }
+                
+                HStack {
+                    Button(action: {
+                        viewModel.recipe.notes.append(Note(
+                            id: UUID().uuidString,
+                            title: "",
+                            content: "New note content"
+                        ))
+                    }) {
+                        Label("Add Note", systemImage: "plus.circle.fill")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.bordered)
+                    
+                    Spacer()
+                    
+                    Menu {
+                        Button(action: {
+                            // TODO: Implement bulk edit
+                        }) {
+                            Label("Bulk Edit", systemImage: "text.alignleft")
+                        }
+                        .disabled(true)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            Section("Photo") {
+                RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
             }
         }
+        #if os(iOS)
+        .environment(\.editMode, .constant(.active))
+        #endif
         .toolbar {
             ToolbarItemGroup {
                 Button("Cancel") {
@@ -193,6 +296,7 @@ struct RecipeDetailEditMobileView: View {
         } message: {
             Text("You have unsaved changes. Are you sure you want to discard them?")
         }
+
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -203,7 +307,6 @@ struct RecipeDetailEditMobileView: View {
         }
     }
 }
-
 
 #Preview {
     RecipeDetailEditMobileView(recipe: SampleData.sampleRecipes[0])

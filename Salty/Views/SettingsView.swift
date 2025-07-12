@@ -24,10 +24,12 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    @AppStorage("mobileEditViews") private var useMobileEditViews = false
     
     var body: some View {
         Form {
             Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
+            Toggle("Use mobile-friendly recipe edit form (instead of desktop-oriented form)", isOn: $useMobileEditViews)
         }
     }
 }

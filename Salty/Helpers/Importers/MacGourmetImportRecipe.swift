@@ -238,18 +238,34 @@ struct MacGourmetImportRecipe: Decodable {
         }
         
         if let directions = directions {
-            recipe.directions = directions.map { mgDirection in
-                Direction(
-                    id: UUID().uuidString,
-                    stepName: mgDirection.labelText,
-                    text: mgDirection.directionText ?? ""
-                )
+            recipe.directions = directions.flatMap { mgDirection in
+                var result: [Direction] = []
+                
+                // If labelText exists and is not empty, create a heading direction
+                if let labelText = mgDirection.labelText, !labelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    result.append(Direction(
+                        id: UUID().uuidString,
+                        isHeading: true,
+                        text: labelText
+                    ))
+                }
+                
+                // Always create the main direction (unless directionText is blank)
+                if let directionText = mgDirection.directionText, !directionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    result.append(Direction(
+                        id: UUID().uuidString,
+                        isHeading: false,
+                        text: directionText
+                    ))
+                }
+                
+                return result
             }
         }
         
         if let ingredients = ingredients {
             recipe.ingredients = ingredients.map { mgIngredient in
-                print("1. \(mgIngredient)")
+                //print("1. \(mgIngredient)")
                 let isHeading = mgIngredient.isDivider ?? false
                 let isMain = mgIngredient.isMain ?? false
                 
@@ -274,7 +290,7 @@ struct MacGourmetImportRecipe: Decodable {
                     isMain: isMain,
                     text: text
                 )
-                print("2. \(ingredient)")
+                //print("2. \(ingredient)")
                 return ingredient
             }
         }

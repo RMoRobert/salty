@@ -11,28 +11,27 @@ struct DifficultyEditView: View {
     @Binding var recipe: Recipe
     
     var body: some View {
-        VStack(alignment: .center) {
-            Slider(
-                value: Binding(
-                    get: { recipe.difficulty.asIndex },
-                    set: { newValue in
-                        recipe.difficulty = Difficulty(index: newValue)
-                    }
-                ),
-                in: 0...Double(Difficulty.allCases.count - 1),
-                step: 1
-            ) {
-                //Text("Difficulty")
-                // TODO: Show difficulty value!
-            } minimumValueLabel: {
-                Text("Not Set")
-            } maximumValueLabel: {
-                Text("Difficult")
-            }
-            .accessibilityLabel("Difficulty")
-            Text(recipe.difficulty.stringValue().localizedCapitalized)
-                .font(.caption)
+        Picker("Difficulty", selection: $recipe.difficulty) {
+            Text("(not set)")
+                .tag(Difficulty.notSet)
+            
+            Text("Easy")
+                .tag(Difficulty.easy)
+            
+            Text("Somewhat Easy")
+                .tag(Difficulty.somewhatEasy)
+            
+            Text("Medium")
+                .tag(Difficulty.medium)
+            
+            Text("Slightly Difficult")
+                .tag(Difficulty.slightlyDifficult)
+            
+            Text("Difficult")
+                .tag(Difficulty.difficult)
         }
+        .pickerStyle(.menu)
+        .labelsHidden()
     }
 }
 

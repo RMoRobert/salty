@@ -15,16 +15,23 @@ struct RecipeDirectionView: View {
             Grid(alignment: .leading) {
                 ForEach(Array(recipe.directions.enumerated()), id: \.element.hashValue) { index, direction in
                     GridRow(alignment: .top) {
-                        Text("\(index+1).")
-                            .font(.title)
+                        if direction.isHeading != true {
+                            Text("\(recipe.directions.prefix(index + 1).filter { $0.isHeading != true }.count).")
+                                .font(.title)
+                        } else {
+                            Spacer()
+                                .frame(width: 30)
+                        }
                         VStack(alignment: .leading) {
-                            if direction.stepName != nil && direction.stepName != "" {
-                                Text(direction.stepName!)
+                            if direction.isHeading == true {
+                                Text(direction.text)
                                     .fontWeight(.semibold)
+                                    .font(.callout)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text(direction.text)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
-                            Text(direction.text)
-                                .fixedSize(horizontal: false, vertical: true)
                             Spacer().frame(maxHeight: 10)
                         }
                     }
