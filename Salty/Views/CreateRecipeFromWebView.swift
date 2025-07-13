@@ -6,37 +6,475 @@
 //
 
 import SwiftUI
+import WebViewKit
 
 struct CreateRecipeFromWebView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var viewModel = CreateRecipeFromWebViewModel()
+    @State private var webView: WebViewCoordinator?
     
     var body: some View {
         NavigationStack {
-            VStack {
-                Text("Create Recipe from Web")
-                    .font(.title)
-                    .padding()
+            HSplitView {
+                // Left side - Web Browser
+                WebBrowserView(viewModel: viewModel, webView: $webView)
+                    .frame(minWidth: 400, idealWidth: 600)
                 
-                Text("This feature is coming soon!")
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Button("Close") {
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .padding()
+                // Right side - Recipe Editor
+                RecipeEditorView(viewModel: viewModel)
+                    .frame(minWidth: 400, idealWidth: 500)
             }
-            .navigationTitle("Create from Web")
-            //.navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Create Recipe from Web")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
                     Button("Cancel") {
-                        dismiss()
+                        if viewModel.hasRecipeData {
+                            viewModel.showingCancelAlert = true
+                        } else {
+                            dismiss()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button("Save Recipe") {
+                        if viewModel.hasRecipeData {
+                            viewModel.saveRecipe()
+                            dismiss()
+                        } else {
+                            viewModel.showingSaveAlert = true
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .onKeyPress(.init("1"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("1")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("2"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("2")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("3"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("3")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("4"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("4")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("5"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("5")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("6"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("6")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("7"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("7")
+            }
+            return .ignored
+        }
+        .onKeyPress(.init("8"), phases: .down) { keyPress in
+            if keyPress.modifiers.contains(.command) {
+                return handleKeyPress("8")
+            }
+            return .ignored
+        }
+        .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Discard", role: .destructive) {
+                dismiss()
+            }
+        } message: {
+            Text("You have unsaved recipe data. Are you sure you want to discard it?")
+        }
+        .alert("No Recipe Data", isPresented: $viewModel.showingSaveAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Please add recipe information before saving.")
+        }
+    }
+    
+    private func handleKeyPress(_ key: String) -> KeyPress.Result {
+        print("🔑 Keyboard shortcut pressed: Cmd+\(key)")
+        
+        let fieldMap: [String: RecipeField] = [
+            "1": .name,
+            "2": .source,
+            "3": .sourceDetails,
+            "4": .servings,
+            "5": .ingredients,
+            "6": .directions,
+            "7": .yield,
+            "8": .introduction
+        ]
+        
+        if let field = fieldMap[key] {
+            print("🎯 Extracting text to field: \(field.rawValue)")
+            extractSelectedTextToField(field)
+            return .handled
+        }
+        return .ignored
+    }
+    
+    private func extractSelectedTextToField(_ field: RecipeField, retryCount: Int = 0) {
+        guard let webView = webView else {
+            if retryCount < 5 {
+                print("❌ WebView is not initialized, trying again in 0.1 seconds... (attempt \(retryCount + 1)/5)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.extractSelectedTextToField(field, retryCount: retryCount + 1)
+                }
+            } else {
+                print("❌ WebView failed to initialize after 5 attempts")
+            }
+            return
+        }
+        
+        print("✅ WebView is ready, extracting text...")
+        webView.getSelectedText { selectedText in
+            DispatchQueue.main.async {
+                if let text = selectedText, !text.isEmpty {
+                    print("📝 Extracted text: \(String(text.prefix(50)))...")
+                    self.viewModel.extractTextToField(text, field: field)
+                } else {
+                    print("❌ No text selected or text is empty")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Web Browser View
+struct WebBrowserView: View {
+    @Bindable var viewModel: CreateRecipeFromWebViewModel
+    @Binding var webView: WebViewCoordinator?
+    @State private var urlText: String = ""
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // URL Bar and Navigation Controls
+            HStack {
+                Button(action: { webView?.goBack() }) {
+                    Image(systemName: "chevron.left")
+                }
+                .disabled(!viewModel.canGoBack)
+                
+                Button(action: { webView?.goForward() }) {
+                    Image(systemName: "chevron.right")
+                }
+                .disabled(!viewModel.canGoForward)
+                
+                Button(action: { webView?.reload() }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(viewModel.isLoading)
+                
+                TextField("Enter URL", text: $urlText)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        viewModel.navigateToURL(urlText)
+                    }
+                    .onAppear {
+                        urlText = viewModel.currentURL
+                    }
+                    .onChange(of: viewModel.currentURL) { _, newURL in
+                        urlText = newURL
+                    }
+                
+                if viewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+            .padding()
+            
+            // Web View
+            WebViewRepresentable(
+                url: viewModel.currentURL,
+                coordinator: $webView,
+                onNavigationStateChange: { canGoBack, canGoForward, isLoading in
+                    viewModel.updateNavigationState(
+                        canGoBack: canGoBack,
+                        canGoForward: canGoForward,
+                        isLoading: isLoading
+                    )
+                },
+                onURLChange: { newURL in
+                    viewModel.currentURL = newURL
+                }
+            )
+            .onChange(of: webView) { _, newWebView in
+                if let webView = newWebView {
+                    print("✅ WebView coordinator set: \(webView)")
+                } else {
+                    print("❌ WebView coordinator is nil")
+                }
+            }
+        }
+        .background(Color(.windowBackgroundColor))
+    }
+}
+
+// MARK: - Recipe Editor View
+struct RecipeEditorView: View {
+    @Bindable var viewModel: CreateRecipeFromWebViewModel
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Recipe Editor")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .padding(.bottom, 8)
+                
+                // Basic Information
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Basic Information")
+                        .font(.headline)
+                    
+                    HStack {
+                        Text("Name:")
+                        TextField("Recipe name", text: $viewModel.recipe.name)
+                            .textFieldStyle(.roundedBorder)
+                        Text("(⌘1)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        if viewModel.lastExtractedField == .name {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    HStack {
+                        Text("Source:")
+                        TextField("Source", text: $viewModel.recipe.source)
+                            .textFieldStyle(.roundedBorder)
+                        Text("(⌘2)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        if viewModel.lastExtractedField == .source {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    HStack {
+                        Text("Source Details:")
+                        TextField("Source details", text: $viewModel.recipe.sourceDetails)
+                            .textFieldStyle(.roundedBorder)
+                        Text("(⌘3)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    
+                    HStack {
+                        Text("Servings:")
+                        TextField("Servings", value: $viewModel.recipe.servings, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                        Text("(⌘4)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    
+                    HStack {
+                        Text("Yield:")
+                        TextField("Yield", text: $viewModel.recipe.yield)
+                            .textFieldStyle(.roundedBorder)
+                        Text("(⌘7)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
                     }
                 }
+                .padding(.bottom, 16)
+                
+                // Photo Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Photo")
+                        .font(.headline)
+                    
+                    RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 120)
+                }
+                .padding(.bottom, 16)
+                
+                // Categories Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Categories")
+                        .font(.headline)
+                    
+                    Button("Edit Categories") {
+                        viewModel.showingCategoriesSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.bottom, 16)
+                
+                // Preparation Times Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Preparation Times")
+                        .font(.headline)
+                    
+                    if viewModel.recipe.preparationTimes.isEmpty {
+                        Text("No preparation times added")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.recipe.preparationTimes) { time in
+                            Text("\(time.type): \(time.timeString)")
+                        }
+                    }
+                    
+                    Button("Edit Times") {
+                        viewModel.showingPreparationTimesSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.bottom, 16)
+                
+                // Introduction Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Introduction")
+                            .font(.headline)
+                        Spacer()
+                        Text("(⌘8)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    
+                    TextEditor(text: $viewModel.recipe.introduction)
+                        .frame(minHeight: 60)
+                        .border(Color.secondary.opacity(0.3))
+                }
+                .padding(.bottom, 16)
+                
+                // Ingredients Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Ingredients")
+                            .font(.headline)
+                        Spacer()
+                        Text("(⌘5)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        if viewModel.lastExtractedField == .ingredients {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    if viewModel.recipe.ingredients.isEmpty {
+                        Text("No ingredients added")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.recipe.ingredients) { ingredient in
+                            Text("• \(ingredient.text)")
+                                .font(.body)
+                        }
+                    }
+                    
+                    Button("Edit Ingredients") {
+                        viewModel.showingBulkEditIngredientsSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.bottom, 16)
+                
+                // Directions Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Directions")
+                            .font(.headline)
+                        Spacer()
+                        Text("(⌘6)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        if viewModel.lastExtractedField == .directions {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    if viewModel.recipe.directions.isEmpty {
+                        Text("No directions added")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
+                            Text("\(index + 1). \(direction.text)")
+                                .font(.body)
+                        }
+                    }
+                    
+                    Button("Edit Directions") {
+                        viewModel.showingBulkEditDirectionsSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.bottom, 16)
+                
+                // Notes Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Notes")
+                        .font(.headline)
+                    
+                    if viewModel.recipe.notes.isEmpty {
+                        Text("No notes added")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.recipe.notes) { note in
+                            VStack(alignment: .leading) {
+                                if !note.title.isEmpty {
+                                    Text(note.title)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                }
+                                Text(note.content)
+                                    .font(.body)
+                            }
+                        }
+                    }
+                    
+                    Button("Edit Notes") {
+                        viewModel.showingNotesSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
+            .padding()
+        }
+        .background(Color(.controlBackgroundColor))
+        .sheet(isPresented: $viewModel.showingCategoriesSheet) {
+            CategoryEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
+            PreparationTimesEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
+            RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
+            RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingNotesSheet) {
+            NotesEditView(recipe: $viewModel.recipe)
         }
     }
 }

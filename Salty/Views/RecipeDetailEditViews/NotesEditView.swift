@@ -1,8 +1,8 @@
 //
-//  NotesView.swift
+//  NotesEditView.swift
 //  Salty
 //
-//  Created by Robert on 5/29/23.
+//  Created by Assistant on 1/27/25.
 //
 
 import SwiftUI
@@ -18,54 +18,18 @@ struct NotesEditView: View {
         VStack {
             List(selection: $selectedIndex) {
                 ForEach(Array(editingNotes.enumerated()), id: \.element.id) { index, note in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            if !note.title.isEmpty {
-                                Text(note.title)
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
-                            } else {
-                                Text("Untitled Note")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.secondary)
-                            }
-                            Text(note.content)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .lineLimit(2)
+                    VStack(alignment: .leading) {
+                        if !note.title.isEmpty {
+                            Text(note.title)
+                                .font(.headline)
+                                .fontWeight(.semibold)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        Button(role: .destructive) {
-                            editingNotes.remove(at: index)
-                            hasChanges = true
-                            if selectedIndex == index {
-                                selectedIndex = nil
-                            }
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
-                        }
-                        .buttonStyle(.plain)
-                        .allowsHitTesting(true)
-                        .onTapGesture {
-                            // Prevent the tap from selecting the row
-                        }
+                        Text(note.content)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .lineLimit(3)
                     }
                     .tag(index)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            editingNotes.remove(at: index)
-                            hasChanges = true
-                            if selectedIndex == index {
-                                selectedIndex = nil
-                            }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
                 }
                 .onDelete { indexSet in
                     for index in indexSet.sorted(by: >) {
@@ -104,15 +68,15 @@ struct NotesEditView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .frame(minHeight: 120, idealHeight: 150)
+            .frame(minHeight: 100, idealHeight: 150)
             .padding()
             
             // Add button
             Button {
                 editingNotes.append(Note(
                     id: UUID().uuidString,
-                    title: "",
-                    content: "New note content"
+                    title: "New Note",
+                    content: "Note content"
                 ))
                 hasChanges = true
                 // Select the newly added item
@@ -120,25 +84,18 @@ struct NotesEditView: View {
             } label: {
                 Label("Add Note", systemImage: "plus")
             }
+            .buttonStyle(.bordered)
             .padding()
         }
-        #if os(macOS)
-        .frame(minWidth: 500, minHeight: 500)
-        #endif
         .onAppear {
             editingNotes = recipe.notes
         }
         .onChange(of: editingNotes) { _, _ in
             recipe.notes = editingNotes
         }
-        .onKeyPress(.delete) {
-            if let selectedIndex = selectedIndex, selectedIndex < editingNotes.count {
-                editingNotes.remove(at: selectedIndex)
-                hasChanges = true
-                self.selectedIndex = nil
-            }
-            return .handled
-        }
+        #if os(macOS)
+        .frame(minWidth: 500, minHeight: 400)
+        #endif
     }
 }
 
@@ -152,24 +109,18 @@ struct NoteDetailEditView: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 Text("Title:")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
                 TextField("Note title", text: $note.title)
                     .textFieldStyle(.roundedBorder)
             }
             
             VStack(alignment: .leading, spacing: 8) {
                 Text("Content:")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                TextField("Note content", text: $note.content, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(4...8)
+                TextEditor(text: $note.content)
+                    .frame(minHeight: 60)
+                    .border(Color.secondary.opacity(0.3))
             }
         }
         .padding()
-        //.background(Color(.systemGray6))
-        //.cornerRadius(8)
     }
 }
 
