@@ -29,12 +29,12 @@ struct Menus: Commands {
                openWindow(id: "import-from-file-window")
            }
        }
-       //#if os(macOS)
+       #if os(macOS)
        CommandGroup(before: .windowList) {
            Button("Edit Categories") {
                openWindow(id: "edit-categories-window")
            }
        }
-       //#endif
+       #endif
   }
 }

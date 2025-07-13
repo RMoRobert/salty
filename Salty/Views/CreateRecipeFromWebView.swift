@@ -2,14 +2,42 @@
 //  CreateRecipeFromWebView.swift
 //  Salty
 //
-//  Created by Robert on 7/6/25.
+//  Created by Assistant on 1/27/25.
 //
 
 import SwiftUI
 
 struct CreateRecipeFromWebView: View {
+    @Environment(\.dismiss) private var dismiss
+    
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        NavigationStack {
+            VStack {
+                Text("Create Recipe from Web")
+                    .font(.title)
+                    .padding()
+                
+                Text("This feature is coming soon!")
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Button("Close") {
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .padding()
+            }
+            .navigationTitle("Create from Web")
+            //.navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 

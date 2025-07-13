@@ -115,7 +115,7 @@ struct RecipeNavigationSplitView: View {
                         showingCreateFromWebSheet.toggle()
                     }
                     Button("Create Recipe from Image…") {
-                        showingCreateFromWebSheet.toggle()
+                        showingCreateFromImageSheet.toggle()
                     }
                     Button("Import Recipes from File…") {
                         showingImportFromFileSheet.toggle()
