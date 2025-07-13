@@ -60,11 +60,6 @@ struct RecipeDetailEditDesktopView: View {
                                     .frame(maxWidth: 250)
                             }
                         }
-                        VStack {
-                            Text("Photo:")
-                            RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
-                        }
-                        
                     }
                 }
                 .padding(.bottom, 8)
@@ -81,6 +76,58 @@ struct RecipeDetailEditDesktopView: View {
                     }
                 }
                 .padding(.bottom, 8)
+
+                
+                // Ingredients Section
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("Ingredients:")
+                            .modifier(TitleStyle())
+                        Spacer()
+                        Button("Edit Ingredients") {
+                            viewModel.showingEditIngredientsSheet.toggle()
+                        }
+                        .buttonStyle(.bordered)
+                        
+                        Menu {
+                            Button("Edit as Text (Bulk Edit)") {
+                                viewModel.showingBulkEditIngredientsSheet.toggle()
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .controlSize(.large)
+                        }
+                        .buttonStyle(.plain)
+                        //.foregroundColor(.accentColor)
+                    }
+                    if viewModel.recipe.ingredients.isEmpty {
+                        Text("No ingredients added")
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(viewModel.recipe.ingredients) { ingredient in
+                                if ingredient.isHeading {
+                                    Text(ingredient.text)
+                                        .font(.callout)
+                                        .fontWeight(.semibold)
+                                        //.padding(.top, 8)
+                                } else {
+                                    Text(ingredient.text)
+                                        .font(.body)
+                                }
+                            }
+                        }
+                    }
+                }
+                .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
+                    IngredientsEditView(recipe: $viewModel.recipe)
+                }
+                .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
+                    RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
+                }
+                .padding(.bottom, 8)
+                
                                 
                 // Directions Section
                 VStack(alignment: .leading, spacing: 16) {
@@ -92,6 +139,16 @@ struct RecipeDetailEditDesktopView: View {
                             viewModel.showingEditDirectionsSheet.toggle()
                         }
                         .buttonStyle(.bordered)
+                        
+                        Menu {
+                            Button("Edit as Text (Bulk Edit)") {
+                                viewModel.showingBulkEditDirectionsSheet.toggle()
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .controlSize(.large)
+                        }
+                        .buttonStyle(.plain)
                     }
                     
                     if viewModel.recipe.directions.isEmpty {
@@ -131,56 +188,12 @@ struct RecipeDetailEditDesktopView: View {
                 .popover(isPresented: $viewModel.showingEditDirectionsSheet) {
                     DirectionsEditView(recipe: $viewModel.recipe)
                 }
+                .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
+                    RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
+                }
                 .padding(.bottom, 8)
                 
-                // Ingredients Section
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Ingredients:")
-                            .modifier(TitleStyle())
-                        Spacer()
-                        Button("Edit Ingredients") {
-                            viewModel.showingEditIngredientsSheet.toggle()
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Menu {
-                            Button("Bulk Edit") {
-                                viewModel.showingBulkEditIngredientsSheet.toggle()
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.accentColor)
-                    }
-                    if viewModel.recipe.ingredients.isEmpty {
-                        Text("No ingredients added")
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(viewModel.recipe.ingredients) { ingredient in
-                                if ingredient.isHeading {
-                                    Text(ingredient.text)
-                                        .font(.callout)
-                                        .fontWeight(.semibold)
-                                        //.padding(.top, 8)
-                                } else {
-                                    Text(ingredient.text)
-                                        .font(.body)
-                                }
-                            }
-                        }
-                    }
-                }
-                .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
-                    IngredientsEditView(recipe: $viewModel.recipe)
-                }
-                .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
-                    RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
-                }
-                .padding(.bottom, 8)
+                
                 
                 // Preparation Times Section
                 VStack(alignment: .leading, spacing: 16) {
@@ -247,6 +260,15 @@ struct RecipeDetailEditDesktopView: View {
                 .popover(isPresented: $viewModel.showingEditNotesSheet) {
                     NotesEditView(recipe: $viewModel.recipe)
                 }
+                
+                // Photo
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Photo:")
+                        .modifier(TitleStyle())
+                    RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 150)
+                }
+                
             }
             .padding()
         }

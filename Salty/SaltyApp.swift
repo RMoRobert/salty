@@ -22,17 +22,25 @@ struct SaltyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
-                //.environment(\.managedObjectContext, persistenceController.container.viewContext)
 
         }
         .commands {
             Menus()
         }
+        
         // "Edit Categories" window
         WindowGroup(id: "edit-categories-window") {
             LibraryCategoriesEditView()
                 .frame(idealWidth: 300)
                 .navigationTitle("Category Editor")
+        }
+        // "Open Database" window
+        WindowGroup(id: "open-database-window") {
+            OpenDBView()
+                #if os(macOS)
+                .frame(minWidth: 300, minHeight: 400)
+                #endif
+                .navigationTitle("Open Database")
         }
         // "Import from File" window
         WindowGroup(id: "import-from-file-window") {

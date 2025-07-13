@@ -151,11 +151,10 @@ struct RecipeDetailEditMobileView: View {
                         }
                         
                         Button(action: {
-                            // TODO: Implement bulk edit
+                            viewModel.showingBulkEditDirectionsSheet.toggle()
                         }) {
                             Label("Bulk Edit", systemImage: "text.alignleft")
                         }
-                        .disabled(true)
                     } label: {
                         Label("More", systemImage: "ellipsis.circle")
                     }
@@ -301,6 +300,9 @@ struct RecipeDetailEditMobileView: View {
 
         .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
             RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
+            RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
         }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {

@@ -1,13 +1,13 @@
 //
-//  RecipeIngredientsBulkEditView.swift
+//  RecipeDirectionsBulkEditView.swift
 //  Salty
 //
-//  Created by Robert on 7/12/25.
+//  Created by Robert on 7/13/25.
 //
 
 import SwiftUI
 
-struct RecipeIngredientsBulkEditView: View {
+struct RecipeDirectionsBulkEditView: View {
     @Binding var recipe: Recipe
     @Environment(\.dismiss) private var dismiss
     @State private var showingHelp = false
@@ -17,7 +17,7 @@ struct RecipeIngredientsBulkEditView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Edit Ingredients")
+                Text("Edit Directions")
                     .font(.title2)
                     .fontWeight(.semibold)
                 
@@ -47,14 +47,14 @@ struct RecipeIngredientsBulkEditView: View {
                     .alert("How to Use Editor", isPresented: $showingHelp) {
                         Button("OK", role: .cancel) {}
                     } message: {
-                        Text("Edit ingredients as plain text. Each line represents one ingredient. Add a blank line before any lines that are to be interpreted as headings, or end those lines with a colon. Select \"Clean Up\" to remove list delimiters and trim whitespace.")
+                        Text("Edit directions as plain text. Each line represents one direction step. Single blank lines separate directions. Use double blank lines before any lines that are to be interpreted as section headings, or end those lines with a colon. Select \"Clean Up\" to remove list delimiters and trim whitespace.")
                     }
                     
                     
                     Spacer()
                     
                     Button("Save") {
-                        saveIngredients()
+                        saveDirections()
                         dismiss()
                     }
                     .buttonStyle(.borderedProminent)
@@ -66,21 +66,22 @@ struct RecipeIngredientsBulkEditView: View {
             .frame(minWidth: 500, minHeight: 400)
             #endif
             .onAppear {
-                loadIngredients()
+                loadDirections()
             }
         }
     }
     
-    private func loadIngredients() {
+    private func loadDirections() {
         var lines: [String] = []
         
-        for ingredient in recipe.ingredients {
-            if ingredient.isHeading {
-                // Add blank line before heading
+        for direction in recipe.directions {
+            if direction.isHeading == true {
+                // Add double blank line before heading
                 lines.append("")
-                lines.append(ingredient.text)
+                lines.append("")
+                lines.append(direction.text)
             } else {
-                lines.append(ingredient.text)
+                lines.append(direction.text)
             }
         }
         
@@ -88,15 +89,9 @@ struct RecipeIngredientsBulkEditView: View {
         hasChanges = false
     }
     
-    private func saveIngredients() {
+    private func saveDirections() {
         let lines = textContent.components(separatedBy: .newlines)
-        var newIngredients: [Ingredient] = []
-        var isMainPreservation: [String: Bool] = [:]
-        
-        // Create a mapping of existing ingredient text to isMain value for preservation
-        for ingredient in recipe.ingredients {
-            isMainPreservation[ingredient.text] = ingredient.isMain
-        }
+        var newDirections: [Direction] = []
         
         var i = 0
         while i < lines.count {
@@ -108,28 +103,29 @@ struct RecipeIngredientsBulkEditView: View {
                 continue
             }
             
-            // Check if this line is preceded by a blank line, making it a heading:
-            let isHeadingByLine = i > 0 && lines[i - 1].trimmingCharacters(in: .whitespaces).isEmpty
-            // Check if this line ends with a colon, makng it a heading using the alternate format:
+            // Check if this line is preceded by two blank lines, making it a heading:
+            let isHeadingByDoubleLine = i > 1 && 
+                lines[i - 1].trimmingCharacters(in: .whitespaces).isEmpty && 
+                lines[i - 2].trimmingCharacters(in: .whitespaces).isEmpty
+            // Check if this line ends with a colon, making it a heading using the alternate format:
             let isHeadingByColon = line.hasSuffix(":")
             if isHeadingByColon {
                 // strip colon for cleanliness
                 line = String(line.dropLast())
             }
-            let isHeading = isHeadingByLine || isHeadingByColon
+            let isHeading = isHeadingByDoubleLine || isHeadingByColon
             
-            let ingredient = Ingredient(
+            let direction = Direction(
                 id: UUID().uuidString,
                 isHeading: isHeading,
-                isMain: (isMainPreservation[line] ?? false) && !isHeading, // Preserve isMain if possible
                 text: line
             )
             
-            newIngredients.append(ingredient)
+            newDirections.append(direction)
             i += 1
         }
         
-        recipe.ingredients = newIngredients
+        recipe.directions = newDirections
         hasChanges = false
     }
     
@@ -155,5 +151,5 @@ struct RecipeIngredientsBulkEditView: View {
 
 #Preview {
     @Previewable @State var recipe = SampleData.sampleRecipes[0]
-    RecipeIngredientsBulkEditView(recipe: $recipe)
+    RecipeDirectionsBulkEditView(recipe: $recipe)
 }

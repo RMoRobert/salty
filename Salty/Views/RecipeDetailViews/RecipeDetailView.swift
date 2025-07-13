@@ -13,7 +13,7 @@ struct RecipeDetailView: View {
     let recipe: Recipe
     @Environment(\.openWindow) private var openWindow
     @State private var showingFullImage = false
-    //@State private var showingEditSheet = false
+    @State private var showingEditSheet = false
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     #else
@@ -84,9 +84,9 @@ struct RecipeDetailView: View {
                                 .accessibilityHidden(true)
                             }
                             .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
-                            .background(Color.secondary.opacity(0.2))
+                            .background(Color.secondary.opacity(0.1))
                             .clipShape(Capsule())
-                            .padding(EdgeInsets(top: 0, leading: 2, bottom: 9, trailing: 3))
+                            .padding(EdgeInsets(top: 2, leading: 4, bottom: 10, trailing: 6))
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel("Preparation time: type: \(prepTime.type), duration: \(prepTime.timeString)")
                         }
@@ -215,20 +215,24 @@ struct RecipeDetailView: View {
             RecipeFullImageView(recipe: recipe)
                 .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
         }
-//        .toolbar {
-//            ToolbarItem {
-//                Button(action: {
-//                    showingEditSheet = true
-//                }) {
-//                    Label("Edit Recipe", systemImage: "info.circle")
-//                }
-//                .keyboardShortcut("e", modifiers: .command)
-//            }
-//        }
-//        .sheet(isPresented: $showingEditSheet) {
-//            RecipeDetailEditView(recipe: recipe)
-//                .frame(minWidth: 600, minHeight: 500)
-//        }
+        .sheet(isPresented: $showingEditSheet) {
+            #if os(macOS)
+            RecipeDetailEditDesktopView(recipe: recipe)
+                .frame(minWidth: 600, minHeight: 500)
+            #else
+            RecipeDetailEditMobileView(recipe: recipe)
+            #endif
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    showingEditSheet = true
+                }) {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .keyboardShortcut("e", modifiers: .command)
+            }
+        }
     }
 }
 

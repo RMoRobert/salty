@@ -14,6 +14,10 @@ struct Menus: Commands {
        ToolbarCommands()
        SidebarCommands()
        CommandGroup(after: .newItem) {
+           Button("Open Database…") {
+               openWindow(id: "open-database-window")
+           }
+           Divider()
            Button("Import from Web…") {
                openWindow(id: "import-from-web-window")
            }

@@ -6,11 +6,16 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import PhotosUI
+#endif
 
 struct RecipeImageEditView: View {
     @Binding var recipe: Recipe
     @State private var dragOver = false
-    @State private var showingImagePicker = false
+    @State private var showingImageFilePicker = false
+    @State private var showingPhotoPicker = false
+    @State private var showingImageMenu = false
     
     @State var imageFrameSize: CGFloat = 100
     
@@ -34,6 +39,33 @@ struct RecipeImageEditView: View {
                         .scaledToFit()
                         .frame(width: imageFrameSize, height: imageFrameSize, alignment: .center)
                         .border(.thickMaterial)
+                        #if os(macOS)
+                        .contextMenu {
+                            Button("Delete", role: .destructive) {
+                                recipe.removeImage()
+                            }
+                            Button("Select a File") {
+                                showingImageFilePicker = true
+                            }
+                        }
+                        #else
+                        .onTapGesture {
+                            showingImageMenu = true
+                        }
+                        .confirmationDialog("Image Options", isPresented: $showingImageMenu) {
+                            Button("Delete", role: .destructive) {
+                                recipe.removeImage()
+                            }
+                            
+                            Button("Select a File") {
+                                showingImageFilePicker = true
+                            }
+                            
+                            Button("Select a Photo") {
+                                showingPhotoPicker = true
+                            }
+                        }
+                        #endif
                         .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                             providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
                                 if let data = data
@@ -43,18 +75,6 @@ struct RecipeImageEditView: View {
                             })
                             return true
                         }
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                recipe.removeImage()
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                //}
-//                placeholder: {
-//                    ProgressView()
-//                        .frame(width: 100, height: 100, alignment: .center)
-//                }
             }
             else {
                 RoundedRectangle(cornerRadius: 10)
@@ -68,9 +88,26 @@ struct RecipeImageEditView: View {
                         .foregroundColor(.gray)
                         .labelStyle(.iconOnly)
                     )
+                    #if os(iOS)
                     .onTapGesture {
-                        showingImagePicker = true
+                        showingImageMenu = true
                     }
+                    .confirmationDialog("Add Image", isPresented: $showingImageMenu) {
+                        Button("Select a File") {
+                            showingImageFilePicker = true
+                        }
+                        
+                        Button("Select a Photo") {
+                            showingPhotoPicker = true
+                        }
+                    }
+                    #else
+                    .contextMenu {
+                        Button("Select a File") {
+                            showingImageFilePicker = true
+                        }
+                    }
+                    #endif
                     .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                         providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
                             if let data = data
@@ -80,10 +117,21 @@ struct RecipeImageEditView: View {
                         })
                         return true
                     }
+                    .contextMenu {
+                        Button("Select a File") {
+                            showingImageFilePicker = true
+                        }
+                        
+                        #if os(iOS)
+                        Button("Select a Photo") {
+                            showingPhotoPicker = true
+                        }
+                        #endif
+                    }
             }
         }
         .fileImporter(
-            isPresented: $showingImagePicker,
+            isPresented: $showingImageFilePicker,
             allowedContentTypes: [.image],
             allowsMultipleSelection: false
         ) { result in
@@ -111,6 +159,21 @@ struct RecipeImageEditView: View {
                 print("Error selecting image: \(error.localizedDescription)")
             }
         }
+        #if os(iOS)
+        .photosPicker(
+            isPresented: $showingPhotoPicker,
+            selection: .init(get: { nil }, set: { item in
+                Task {
+                    if let item = item {
+                        if let data = try? await item.loadTransferable(type: Data.self) {
+                            recipe.setImage(data)
+                        }
+                    }
+                }
+            }),
+            matching: .images
+        )
+        #endif
     }
 }
 

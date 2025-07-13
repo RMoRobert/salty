@@ -29,6 +29,7 @@ class RecipeDetailEditViewModel {
     var showingEditIngredientsSheet = false
     var showingBulkEditIngredientsSheet = false
     var showingEditDirectionsSheet = false
+    var showingBulkEditDirectionsSheet = false
     var showingEditPreparationTimes = false
     var showingEditNotesSheet = false
     var showingCancelAlert = false

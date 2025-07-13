@@ -103,18 +103,7 @@ struct RecipeNavigationSplitView: View {
                 }) {
                     Label("New Recipe", systemImage: "plus")
                 }
-                
-                Button(action: {
-                    if let firstSelectedID = viewModel.selectedRecipeIDs.first {
-                        recipeToEditID = firstSelectedID
-                        showingEditSheet = true
-                    }
-                }) {
-                    Label("Edit Recipe", systemImage: "pencil")
-                }
-                .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                .keyboardShortcut("e", modifiers: [.command])
-                
+                #if !os(macOS)  // find in macOS menu bar instead
                 Menu(content: {
                     Button("Import Recipe from Web…") {
                         showingImportFromWebSheet.toggle()
@@ -128,6 +117,7 @@ struct RecipeNavigationSplitView: View {
                 }, label: {
                     Label("More", systemImage: "ellipsis.circle")
                 })
+                #endif
             }
             #if os(macOS)
             .onDeleteCommand {
