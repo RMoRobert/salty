@@ -67,6 +67,7 @@ struct RecipeDetailEditMobileView: View {
                 .onMove { from, to in
                     viewModel.recipe.ingredients.move(fromOffsets: from, toOffset: to)
                 }
+                
                 HStack {
                     Button(action: {
                         viewModel.recipe.ingredients.append(Ingredient(
@@ -79,10 +80,9 @@ struct RecipeDetailEditMobileView: View {
                         Label("Add Ingredient", systemImage: "plus.circle.fill")
                     }
                     .labelStyle(.titleAndIcon)
-                    .buttonStyle(.bordered)
+                    //.buttonStyle(.bordered)
                     
                     Spacer()
-                    
                     Menu {
                         Button(action: {
                             viewModel.recipe.ingredients.append(Ingredient(
@@ -98,14 +98,17 @@ struct RecipeDetailEditMobileView: View {
                         Button(action: {
                             viewModel.showingBulkEditIngredientsSheet.toggle()
                         }) {
-                            Label("Bulk Edit", systemImage: "text.alignleft")
+                            Label("Edit as Text (Bulk Edit)", systemImage: "text.alignleft")
                         }
                     } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis")
+                            .padding([.top, .bottom], 5)
                     }
                     .labelStyle(.iconOnly)
-                    .foregroundColor(.accentColor)
-                    .buttonStyle(.plain)
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .padding(.trailing, -6)
                 }
             }
             
