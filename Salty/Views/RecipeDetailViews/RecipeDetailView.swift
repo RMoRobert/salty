@@ -231,7 +231,9 @@ struct RecipeDetailView: View {
             RecipeDetailEditDesktopView(recipe: recipe)
                 .frame(minWidth: 600, minHeight: 500)
             #else
-            RecipeDetailEditMobileView(recipe: recipe)
+            NavigationStack {
+                RecipeDetailEditMobileView(recipe: recipe)
+            }
             #endif
         }
         .toolbar {

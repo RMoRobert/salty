@@ -277,6 +277,8 @@ struct RecipeDetailEditMobileView: View {
         }
         #if os(iOS)
         .environment(\.editMode, .constant(.active))
+        .navigationTitle("Edit Recipe")
+        .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
             ToolbarItemGroup {
