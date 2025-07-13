@@ -76,8 +76,17 @@ struct RecipeDetailView: View {
                             HStack {
                                 Image(systemName: "clock")
                                     .modifier(IconShadowModifier())
-                                Text("\(prepTime.type): \(prepTime.timeString)")
+                                VStack {
+                                    Text("\(prepTime.type)")
+                                        .font(.callout)
+                                    Text("\(prepTime.timeString)")
+                                }
+                                .accessibilityHidden(true)
                             }
+                            .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
+                            .background(Color.secondary.opacity(0.2))
+                            .clipShape(Capsule())
+                            .padding(EdgeInsets(top: 0, leading: 2, bottom: 9, trailing: 3))
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel("Preparation time: type: \(prepTime.type), duration: \(prepTime.timeString)")
                         }

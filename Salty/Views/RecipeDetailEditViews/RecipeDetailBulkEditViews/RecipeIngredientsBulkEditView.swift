@@ -20,7 +20,7 @@ struct RecipeIngredientsBulkEditView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 
-                Text("Edit ingredients as plain text. Each line represents one ingredient. Add a blank line before any lines that are to be interpreted as headings. Select \"Clean Up\" to remove list delimiters and trim whitespace.")
+                Text("Edit ingredients as plain text. Each line represents one ingredient. Add a blank line before any lines that are to be interpreted as headings, or end those lines with a colon. Select \"Clean Up\" to remove list delimiters and trim whitespace.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 
@@ -90,7 +90,7 @@ struct RecipeIngredientsBulkEditView: View {
         
         var i = 0
         while i < lines.count {
-            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            var line = lines[i].trimmingCharacters(in: .whitespaces)
             
             if line.isEmpty {
                 // Skip empty lines
@@ -98,13 +98,20 @@ struct RecipeIngredientsBulkEditView: View {
                 continue
             }
             
-            // Check if this line is followed by a blank line, making it a heading
-            let isHeading = i > 0 && lines[i - 1].trimmingCharacters(in: .whitespaces).isEmpty
+            // Check if this line is preceded by a blank line, making it a heading:
+            let isHeadingByLine = i > 0 && lines[i - 1].trimmingCharacters(in: .whitespaces).isEmpty
+            // Check if this line ends with a colon, makng it a heading using the alternate format:
+            let isHeadingByColon = line.hasSuffix(":")
+            if isHeadingByColon {
+                // strip colon for cleanliness
+                line = String(line.dropLast())
+            }
+            let isHeading = isHeadingByLine || isHeadingByColon
             
             let ingredient = Ingredient(
                 id: UUID().uuidString,
                 isHeading: isHeading,
-                isMain: isMainPreservation[line] ?? false, // Preserve isMain if possible
+                isMain: (isMainPreservation[line] ?? false) && !isHeading, // Preserve isMain if possible
                 text: line
             )
             
