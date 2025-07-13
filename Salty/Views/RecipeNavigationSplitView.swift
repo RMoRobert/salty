@@ -18,7 +18,8 @@ struct RecipeNavigationSplitView: View {
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
-    @State private var showingImportFromWebSheet = false
+    @State private var showingCreateFromWebSheet = false
+    @State private var showingCreateFromImageSheet = false
     @State private var showingDeleteConfirmation = false
     
     var body: some View {
@@ -109,10 +110,12 @@ struct RecipeNavigationSplitView: View {
                 }) {
                     Label("New Recipe", systemImage: "plus")
                 }
-                #if !os(macOS)  // find in macOS menu bar instead
                 Menu(content: {
-                    Button("Import Recipe from Web…") {
-                        showingImportFromWebSheet.toggle()
+                    Button("Create Recipe from Web…") {
+                        showingCreateFromWebSheet.toggle()
+                    }
+                    Button("Create Recipe from Image…") {
+                        showingCreateFromWebSheet.toggle()
                     }
                     Button("Import Recipes from File…") {
                         showingImportFromFileSheet.toggle()
@@ -123,7 +126,6 @@ struct RecipeNavigationSplitView: View {
                 }, label: {
                     Label("More", systemImage: "ellipsis.circle")
                 })
-                #endif
             }
             #if os(macOS)
             .onDeleteCommand {
@@ -190,8 +192,14 @@ struct RecipeNavigationSplitView: View {
             .frame(minWidth: 400, minHeight: 500)
             #endif
         }
-        .sheet(isPresented: $showingImportFromWebSheet) {
-            ImportRecipeFromWebView()
+        .sheet(isPresented: $showingCreateFromWebSheet) {
+            CreateRecipeFromWebView()
+            #if os(macOS)
+                .frame(minWidth: 800, minHeight: 700)
+            #endif
+        }
+        .sheet(isPresented: $showingCreateFromImageSheet) {
+            CreateRecipeFromImageView()
             #if os(macOS)
                 .frame(minWidth: 800, minHeight: 700)
             #endif

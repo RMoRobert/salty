@@ -49,10 +49,16 @@ struct SaltyApp: App {
                 .navigationTitle("Import Recipes from File")
         }
         // "Import from Web" window
-        WindowGroup(id: "import-from-web-window") {
-            ImportRecipeFromWebView()
+        WindowGroup(id: "create-recipe-from-web-window") {
+            CreateRecipeFromWebView()
                 .frame(idealWidth: 800)
                 .navigationTitle("Import Recipe from Web")
+        }
+        // "Import from Image" window
+        WindowGroup(id: "create-recipe-from-image-window") {
+            CreateRecipeFromImageView()
+                .frame(idealWidth: 800)
+                .navigationTitle("Import Recipe from Image")
         }
 
         #if os(macOS)

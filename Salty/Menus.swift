@@ -18,19 +18,23 @@ struct Menus: Commands {
                openWindow(id: "open-database-window")
            }
            Divider()
-           Button("Import from Web…") {
-               openWindow(id: "import-from-web-window")
+           Button("Create Recipe from Web…") {
+               openWindow(id: "create-recipe-from-web-window")
            }
+           Button("Create Recipe from Image…") {
+               openWindow(id: "create-recipe-from-image-window")
+           }
+           Divider()
            Button("Import from File…") {
                openWindow(id: "import-from-file-window")
            }
        }
-       #if os(macOS)
+       //#if os(macOS)
        CommandGroup(before: .windowList) {
            Button("Edit Categories") {
                openWindow(id: "edit-categories-window")
            }
        }
-       #endif
+       //#endif
   }
 }
