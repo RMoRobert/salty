@@ -74,13 +74,17 @@ struct RecipeDirectionsBulkEditView: View {
     private func loadDirections() {
         var lines: [String] = []
         
-        for direction in recipe.directions {
+        for (index, direction) in recipe.directions.enumerated() {
             if direction.isHeading == true {
-                // Add double blank line before heading
+                // Add double blank line before heading (two empty lines)
                 lines.append("")
                 lines.append("")
                 lines.append(direction.text)
             } else {
+                // Add single blank line before regular directions (except the first one)
+                if index > 0 && !lines.isEmpty {
+                    lines.append("")
+                }
                 lines.append(direction.text)
             }
         }
@@ -115,14 +119,51 @@ struct RecipeDirectionsBulkEditView: View {
             }
             let isHeading = isHeadingByDoubleLine || isHeadingByColon
             
+            // Collect all text until we hit a double line break or another heading
+            var directionText = line
+            var j = i + 1
+            
+            // If this line is a heading (ends with colon), don't collect additional text
+            if !isHeading {
+                while j < lines.count {
+                    let nextLine = lines[j].trimmingCharacters(in: .whitespaces)
+                    
+                    // Check if we've hit a double line break (empty line followed by content)
+                    if nextLine.isEmpty {
+                        // Look ahead to see if there's content after this empty line
+                        var k = j + 1
+                        while k < lines.count && lines[k].trimmingCharacters(in: .whitespaces).isEmpty {
+                            k += 1
+                        }
+                        
+                        // If we found content after empty line(s), this is a break point
+                        if k < lines.count {
+                            break
+                        }
+                        // Otherwise, skip this empty line and continue
+                        j += 1
+                        continue
+                    }
+                    
+                    // Check if next line is a heading (ends with colon)
+                    if nextLine.hasSuffix(":") {
+                        break
+                    }
+                    
+                    // Add this line to current direction (with a space separator)
+                    directionText += " " + nextLine
+                    j += 1
+                }
+            }
+            
             let direction = Direction(
                 id: UUID().uuidString,
                 isHeading: isHeading,
-                text: line
+                text: directionText
             )
             
             newDirections.append(direction)
-            i += 1
+            i = j
         }
         
         recipe.directions = newDirections
@@ -142,6 +183,12 @@ struct RecipeDirectionsBulkEditView: View {
                     break
                 }
             }
+            
+            // Remove numbered prefixes like "1.", "2)", etc.
+            if let range = cleanedLine.range(of: "^\\d+[.)]\\s*", options: .regularExpression) {
+                cleanedLine = String(cleanedLine[range.upperBound...])
+            }
+            
             return cleanedLine.trimmingCharacters(in: .whitespaces)
         }
         textContent = cleanedLines.joined(separator: "\n")
