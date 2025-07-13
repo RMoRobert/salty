@@ -22,7 +22,7 @@ class RecipeNavigationSplitViewModel {
     
     // MARK: - Data (using SharingGRDB property wrappers)
     @ObservationIgnored
-    @FetchAll var recipes: [Recipe]
+    @FetchAll(Recipe.order(by: \.name)) var recipes: [Recipe]
     @ObservationIgnored
     @FetchAll(Category.order(by: \.name)) var categories: [Category]
             
@@ -30,6 +30,9 @@ class RecipeNavigationSplitViewModel {
     var searchString = ""
     var selectedSidebarItemId: String?
     var selectedRecipeIDs = Set<String>()
+    var showingEditSheet = false
+    var recipeToEditID: String?
+    var shouldScrollToNewRecipe = false
     
     var filteredRecipes: [Recipe] {
         var recipesToFilter: [Recipe]
@@ -87,7 +90,7 @@ class RecipeNavigationSplitViewModel {
     
     // MARK: - Public Methods
     func addNewRecipe() {
-        try? database.write { db in
+        do {
             let newRecipe = Recipe(
                 id: UUID().uuidString,
                 name: "New Recipe",
@@ -97,7 +100,20 @@ class RecipeNavigationSplitViewModel {
                 isFavorite: false,
                 wantToMake: false
             )
-            try? newRecipe.insert(db)
+            
+            try database.write { db in
+                try newRecipe.insert(db)
+            }
+            
+            // Select the newly created recipe and show editor
+            selectedRecipeIDs = [newRecipe.id]
+            recipeToEditID = newRecipe.id
+            showingEditSheet = true
+            shouldScrollToNewRecipe = true
+            
+            logger.info("New recipe created and selected: \(newRecipe.id)")
+        } catch {
+            logger.error("Error creating new recipe: \(error)")
         }
     }
     

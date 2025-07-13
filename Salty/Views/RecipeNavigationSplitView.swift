@@ -11,21 +11,10 @@ struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
-    
-//    init(previewData: (recipes: [Recipe], categories: [Category])? = nil) {
-//        if let previewData = previewData {
-//            self._viewModel = State(initialValue: PreviewRecipeNavigationSplitViewModel(previewData: previewData))
-//        } else {
-//            self._viewModel = State(initialValue: RecipeNavigationSplitViewModel())
-//        }
-//    }
-    //@Environment(\.openWindow) private var openWindow
-    @State private var recipeToEditID: String?
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     //@State private var showEditRecipeView = false
-    @State private var showingEditSheet = false
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
@@ -64,21 +53,38 @@ struct RecipeNavigationSplitView: View {
                 viewModel.selectedSidebarItemId = viewModel.allRecipesID
             }
         } content: {
-            List(selection: $viewModel.selectedRecipeIDs) {
-                ForEach(viewModel.filteredRecipes) { recipe in
-                    RecipeRowView(recipe: recipe)
-                        .contextMenu {
-                            Button("Edit") {
-                                recipeToEditID = recipe.id
-                                showingEditSheet = true
+            ScrollViewReader { proxy in
+                List(selection: $viewModel.selectedRecipeIDs) {
+                    ForEach(viewModel.filteredRecipes) { recipe in
+                        RecipeRowView(recipe: recipe)
+                            .id(recipe.id)
+                            .contextMenu {
+                                Button("Edit") {
+                                    viewModel.recipeToEditID = recipe.id
+                                    viewModel.showingEditSheet = true
+                                }
+                                Button(role: .destructive, action: {
+                                    viewModel.deleteRecipe(id: recipe.id)
+                                }) {
+                                    Text("Delete")
+                                }
+                                .keyboardShortcut(.delete, modifiers: [.command])
                             }
-                            Button(role: .destructive, action: {
-                                viewModel.deleteRecipe(id: recipe.id)
-                            }) {
-                                Text("Delete")
+                    }
+                }
+                .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
+                    if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
+                        // Wait a bit for the recipe to appear in the list before scrolling
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            if viewModel.filteredRecipes.contains(where: { $0.id == newId }) {
+                                withAnimation {
+                                    proxy.scrollTo(newId)
+                                }
                             }
-                            .keyboardShortcut(.delete, modifiers: [.command])
                         }
+                        // Reset the flag after attempting to scroll
+                        viewModel.shouldScrollToNewRecipe = false
+                    }
                 }
             }
             .navigationTitle(viewModel.navigationTitle)
@@ -150,8 +156,8 @@ struct RecipeNavigationSplitView: View {
         }
         .searchable(text: $viewModel.searchString)
         .navigationTitle("Recipes")
-        .sheet(isPresented: $showingEditSheet) {
-            if let recipe = viewModel.recipeToEdit(recipeId: recipeToEditID) {
+        .sheet(isPresented: $viewModel.showingEditSheet) {
+            if let recipe = viewModel.recipeToEdit(recipeId: viewModel.recipeToEditID) {
                 NavigationStack {
                     #if os(macOS)
                     if useMobileEditViews {
@@ -173,9 +179,9 @@ struct RecipeNavigationSplitView: View {
                 .frame(minWidth: 500, minHeight: 400)
                 #endif
         }
-        .onChange(of: showingEditSheet) { _, isPresented in
+        .onChange(of: viewModel.showingEditSheet) { _, isPresented in
             if !isPresented {
-                recipeToEditID = nil
+                viewModel.recipeToEditID = nil
             }
         }
         .sheet(isPresented: $showingOpenDBSheet) {
