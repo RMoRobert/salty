@@ -30,6 +30,13 @@ struct RecipeDetailEditDesktopView: View {
                         TextField("Name:", text: $viewModel.recipe.name)
                         TextField("Source:", text: $viewModel.recipe.source)
                         TextField("Source Details:", text: $viewModel.recipe.sourceDetails)
+                        TextField("Servings:", text: Binding(
+                            get: { viewModel.recipe.servings?.description ?? "" },
+                            set: { 
+                                let filtered = $0.filter { $0.isNumber }
+                                viewModel.recipe.servings = filtered.isEmpty ? nil : Int(filtered)
+                            }
+                        ))
                         TextField("Yield:", text: $viewModel.recipe.yield)
                         HStack {
                             Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)

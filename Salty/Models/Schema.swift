@@ -36,6 +36,7 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
     var isFavorite: Bool = false
     var wantToMake: Bool = false
     var yield: String = ""
+    var servings: Int?
     @Column(as: [Direction].JSONRepresentation.self)
     var directions: [Direction] = []
     @Column(as: [Ingredient].JSONRepresentation.self)
@@ -388,9 +389,9 @@ func appDatabase() throws -> any DatabaseWriter {
         database = try DatabasePool(path: path, configuration: configuration)
     }
     var migrator = DatabaseMigrator()
-#if DEBUG
-    migrator.eraseDatabaseOnSchemaChange = true
-#endif
+//#if DEBUG
+//    migrator.eraseDatabaseOnSchemaChange = false
+//#endif
     migrator.registerMigration("Create initial tables") { db in
         try db.create(table: "recipe") { t in
             t.primaryKey("id", .text)
@@ -408,6 +409,7 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("isFavorite", .boolean)
             t.column("wantToMake", .boolean)
             t.column("yield", .text)
+            t.column("servings", .integer)
             t.column("directions", .jsonText)
             t.column("ingredients", .jsonText)
             t.column("notes", .jsonText)
@@ -441,6 +443,13 @@ func appDatabase() throws -> any DatabaseWriter {
             t.primaryKey(["recipeId", "tagId"])
         }
     }
+    
+    //Example of what can do:
+//    migrator.registerMigration("Add servings column to recipes table") { db in
+//        try db.alter(table: "recipe") { t in
+//            t.add(column: "servings", .integer)
+//        }
+//    }
     
     try migrator.migrate(database)
     

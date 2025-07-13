@@ -23,6 +23,16 @@ struct RecipeDetailEditMobileView: View {
                 TextField("Name", text: $viewModel.recipe.name)
                 TextField("Source", text: $viewModel.recipe.source)
                 TextField("Source Details", text: $viewModel.recipe.sourceDetails)
+                Stepper(viewModel.recipe.servings != nil ?
+                        (viewModel.recipe.servings! > 1 ? "\(viewModel.recipe.servings!.description) servings"
+                        : "\(viewModel.recipe.servings!.description) serving")
+                        : "Servings",
+                       value: Binding(
+                           get: { viewModel.recipe.servings ?? 0 },
+                           set: { viewModel.recipe.servings = $0 == 0 ? nil : $0 }
+                       ),
+                       in: 0...2000)
+                    .foregroundColor(viewModel.recipe.servings != nil ? .primary : .secondary)
                 TextField("Yield", text: $viewModel.recipe.yield)
                 Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)

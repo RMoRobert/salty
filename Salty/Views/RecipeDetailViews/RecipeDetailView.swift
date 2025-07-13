@@ -51,14 +51,25 @@ struct RecipeDetailView: View {
                                 Text(recipe.sourceDetails)
                             }
                         }
-                        if !recipe.yield.isEmpty {
-                            HStack {
-                                Image(systemName: "person.2")
-                                    .modifier(IconShadowModifier())
-                                Text(recipe.yield)
+                        HStack(spacing: 15) {
+                            if !recipe.yield.isEmpty {
+                                HStack {
+                                    Image(systemName: "circle.grid.2x2")
+                                        .modifier(IconShadowModifier())
+                                    Text(recipe.yield)
+                                }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("Yield: \(recipe.yield)")
                             }
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Yield: \(recipe.yield)")
+                            if let servings = recipe.servings, servings > 0 {
+                                HStack {
+                                    Image(systemName: "person.2")
+                                        .modifier(IconShadowModifier())
+                                    Text(servings.description)
+                                }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("Servings: \(servings)")
+                            }
                         }
                     }
                     .padding()
@@ -86,7 +97,7 @@ struct RecipeDetailView: View {
                             .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
                             .background(Color.secondary.opacity(0.1))
                             .clipShape(Capsule())
-                            .padding(EdgeInsets(top: 2, leading: 4, bottom: 10, trailing: 6))
+                            .padding(EdgeInsets(top: 1, leading: 4, bottom: 10, trailing: 6))
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel("Preparation time: type: \(prepTime.type), duration: \(prepTime.timeString)")
                         }

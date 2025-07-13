@@ -339,6 +339,11 @@ struct MacGourmetImportRecipe: Decodable {
             arrCategories = cats
         }
         
+        // Set servings on the recipe if it's a valid positive number (see if need to check? haven't so far...)
+        if let servingsValue = servings, servingsValue > 0 {
+            recipe.servings = servingsValue
+        }
+        
         return recipe
     }
 }

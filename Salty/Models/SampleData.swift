@@ -31,6 +31,7 @@ struct SampleData {
             isFavorite: true,
             wantToMake: false,
             yield: "2 dozen",
+            servings: 36,
             directions: [
                 Direction(id: UUID().uuidString, text: "Do the first step. We'll make this text a bit longer so there is a chance that it will need to wrap or show other text rendering nuances. Lorem ipsum dolor sit amet consectetur adipisicing elit. Quo, molestias! Quasi, voluptatem. Now, let's move on to the next step -- but not before adding a bit more here just in case. Wow, what a long step!"),
                 Direction(id: UUID().uuidString, text: "Now, do the second step."),
