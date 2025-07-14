@@ -2,9 +2,10 @@
 //  CreateRecipeFromWebView.swift
 //  Salty
 //
-//  Created by Assistant on 1/27/25.
+//  Created by Robert on 1/13/25.
 //
 
+#if os(macOS)
 import SwiftUI
 import WebViewKit
 
@@ -482,3 +483,5 @@ struct RecipeEditorView: View {
 #Preview {
     CreateRecipeFromWebView()
 }
+
+#endif

@@ -111,9 +111,11 @@ struct RecipeNavigationSplitView: View {
                     Label("New Recipe", systemImage: "plus")
                 }
                 Menu(content: {
+                    #if os(macOS)
                     Button("Create Recipe from Web…") {
                         showingCreateFromWebSheet.toggle()
                     }
+                    #endif
                     Button("Create Recipe from Image…") {
                         showingCreateFromImageSheet.toggle()
                     }
@@ -192,12 +194,12 @@ struct RecipeNavigationSplitView: View {
             .frame(minWidth: 400, minHeight: 500)
             #endif
         }
+        #if os(macOS)
         .sheet(isPresented: $showingCreateFromWebSheet) {
             CreateRecipeFromWebView()
-            #if os(macOS)
                 .frame(minWidth: 800, minHeight: 700)
-            #endif
         }
+        #endif
         .sheet(isPresented: $showingCreateFromImageSheet) {
             CreateRecipeFromImageView()
             #if os(macOS)
