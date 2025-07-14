@@ -33,6 +33,7 @@ class RecipeNavigationSplitViewModel {
     var showingEditSheet = false
     var recipeToEditID: String?
     var shouldScrollToNewRecipe = false
+    var draftRecipe: Recipe?
     
     var filteredRecipes: [Recipe] {
         var recipesToFilter: [Recipe]
@@ -90,31 +91,22 @@ class RecipeNavigationSplitViewModel {
     
     // MARK: - Public Methods
     func addNewRecipe() {
-        do {
-            let newRecipe = Recipe(
-                id: UUID().uuidString,
-                name: "New Recipe",
-                createdDate: Date(),
-                lastModifiedDate: Date(),
-                lastPrepared: Date(timeIntervalSinceNow: 0-60*24*45),
-                isFavorite: false,
-                wantToMake: false
-            )
-            
-            try database.write { db in
-                try newRecipe.insert(db)
-            }
-            
-            // Select the newly created recipe and show editor
-            selectedRecipeIDs = [newRecipe.id]
-            recipeToEditID = newRecipe.id
-            showingEditSheet = true
-            shouldScrollToNewRecipe = true
-            
-            logger.info("New recipe created and selected: \(newRecipe.id)")
-        } catch {
-            logger.error("Error creating new recipe: \(error)")
-        }
+        let newRecipe = Recipe(
+            id: UUID().uuidString,
+            name: "New Recipe",
+            createdDate: Date(),
+            lastModifiedDate: Date(),
+            lastPrepared: Date(timeIntervalSinceNow: 0-60*24*45),
+            isFavorite: false,
+            wantToMake: false
+        )
+        
+        // Store as draft - don't save to database yet
+        draftRecipe = newRecipe
+        recipeToEditID = newRecipe.id
+        showingEditSheet = true
+        
+        logger.info("New recipe draft created: \(newRecipe.id)")
     }
     
     func deleteSelectedRecipes() {
@@ -146,7 +138,37 @@ class RecipeNavigationSplitViewModel {
     
     func recipeToEdit(recipeId: String?) -> Recipe? {
         guard let recipeId = recipeId else { return nil }
+        
+        // Check if this is a draft recipe first
+        if let draftRecipe = draftRecipe, draftRecipe.id == recipeId {
+            return draftRecipe
+        }
+        
+        // Otherwise, find existing recipe
         return recipes.first(where: { $0.id == recipeId })
+    }
+    
+    func clearDraftRecipe() {
+        draftRecipe = nil
+    }
+    
+    func isDraftRecipe(_ recipeId: String?) -> Bool {
+        guard let recipeId = recipeId else { return false }
+        return draftRecipe?.id == recipeId
+    }
+    
+    func handleNewRecipeSaved(recipeId: String) {
+        // Switch to "All Recipes" view so the new recipe will be visible
+        selectedSidebarItemId = allRecipesID
+        
+        // Select the newly saved recipe and scroll to it
+        selectedRecipeIDs = [recipeId]
+        shouldScrollToNewRecipe = true
+        
+        // Clear the draft since it's now persisted
+        draftRecipe = nil
+        
+        logger.info("New recipe saved and selected: \(recipeId)")
     }
 }
 

@@ -204,7 +204,10 @@ struct CreateRecipeFromImageView: View {
         .sheet(isPresented: $showingRecipeEditor) {
             if let recipe = parsedRecipe {
                 NavigationStack {
-                    RecipeDetailEditDesktopView(recipe: recipe)
+                    RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
+                        // Close the sheet after saving
+                        showingRecipeEditor = false
+                    })
                         .frame(minWidth: 600, minHeight: 500)
                 }
             }

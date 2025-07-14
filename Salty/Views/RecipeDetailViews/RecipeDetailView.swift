@@ -228,11 +228,11 @@ struct RecipeDetailView: View {
         }
         .sheet(isPresented: $showingEditSheet) {
             #if os(macOS)
-            RecipeDetailEditDesktopView(recipe: recipe)
+            RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: false)
                 .frame(minWidth: 600, minHeight: 500)
             #else
             NavigationStack {
-                RecipeDetailEditMobileView(recipe: recipe)
+                RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: false)
             }
             #endif
         }

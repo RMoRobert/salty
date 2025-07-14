@@ -15,8 +15,8 @@ struct RecipeDetailEditDesktopView: View {
     @Environment(\.dismiss) var dismiss
     @State private var viewModel: RecipeDetailEditViewModel
     
-    init(recipe: Recipe) {
-        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe))
+    init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
+        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
     }
 
     var body: some View {
@@ -331,5 +331,5 @@ struct TitleStyle: ViewModifier {
 
 
 #Preview {
-    RecipeDetailEditDesktopView(recipe: SampleData.sampleRecipes[0])
+    RecipeDetailEditDesktopView(recipe: SampleData.sampleRecipes[0], isNewRecipe: false, onNewRecipeSaved: nil)
 }

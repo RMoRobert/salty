@@ -13,6 +13,7 @@ struct RecipeNavigationSplitView: View {
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isEditMode = false
     
     //@State private var showEditRecipeView = false
     @State private var showingEditLibCategoriesSheet = false
@@ -65,14 +66,37 @@ struct RecipeNavigationSplitView: View {
                                     viewModel.showingEditSheet = true
                                 }
                                 Button(role: .destructive, action: {
-                                    viewModel.deleteRecipe(id: recipe.id)
+                                    withAnimation {
+                                        viewModel.deleteRecipe(id: recipe.id)
+                                    }
                                 }) {
                                     Text("Delete")
                                 }
                                 .keyboardShortcut(.delete, modifiers: [.command])
                             }
                     }
+                    #if !os(macOS)
+                    .onDelete { indexSet in
+                        withAnimation {
+                            let recipesToDelete = indexSet.compactMap { index in
+                                viewModel.filteredRecipes.indices.contains(index) ? viewModel.filteredRecipes[index] : nil
+                            }
+                            for recipe in recipesToDelete {
+                                viewModel.deleteRecipe(id: recipe.id)
+                            }
+                        }
+                    }
+                    #endif
                 }
+                #if !os(macOS)
+                .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
+                .onChange(of: isEditMode) { _, newValue in
+                    if !newValue {
+                        // Clear selection when exiting edit mode
+                        viewModel.selectedRecipeIDs.removeAll()
+                    }
+                }
+                #endif
                 .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
                     if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
                         // Wait a bit for the recipe to appear in the list before scrolling
@@ -90,44 +114,96 @@ struct RecipeNavigationSplitView: View {
             }
             .navigationTitle(viewModel.navigationTitle)
             .toolbar {
-                Button(role: .destructive, action: {
-                    showingDeleteConfirmation = true
-                }) {
-                    Label("Delete Recipe", systemImage: "minus")
+                #if !os(macOS)
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    if isEditMode && !viewModel.selectedRecipeIDs.isEmpty {
+                        Button(role: .destructive, action: {
+                            showingDeleteConfirmation = true
+                        }) {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    
+                    Button(action: {
+                        viewModel.addNewRecipe()
+                    }) {
+                        Label("New Recipe", systemImage: "plus")
+                    }
+                    .disabled(isEditMode)
+                    
+                    Menu(content: {
+                        Button(action: {
+                            isEditMode.toggle()
+                        }) {
+                            Label(isEditMode ? "Done" : "Edit", systemImage: "pencil")
+                        }
+                        
+                        if !isEditMode {
+                            Divider()
+                        }
+                        
+                        Button("Create Recipe from Image…") {
+                            showingCreateFromImageSheet.toggle()
+                        }
+                        Button("Import Recipes from File…") {
+                            showingImportFromFileSheet.toggle()
+                        }
+                        Button("Open Database…") {
+                            showingOpenDBSheet.toggle()
+                        }
+                    }, label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    })
                 }
-                .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
-                    Button("Cancel", role: .cancel) { }
-                    Button("Delete", role: .destructive) {
+                #else
+                ToolbarItemGroup(placement: .primaryAction) {
+//                    Button(role: .destructive, action: {
+//                        showingDeleteConfirmation = true
+//                    }) {
+//                        Label("Delete Recipe", systemImage: "trash")
+//                    }
+//                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    
+                    Button(action: {
+                        viewModel.addNewRecipe()
+                    }) {
+                        Label("New Recipe", systemImage: "plus")
+                    }
+                    
+                    Menu(content: {
+                        Button("Create Recipe from Web…") {
+                            showingCreateFromWebSheet.toggle()
+                        }
+                        Button("Create Recipe from Image…") {
+                            showingCreateFromImageSheet.toggle()
+                        }
+                        Button("Import Recipes from File…") {
+                            showingImportFromFileSheet.toggle()
+                        }
+                        Button("Open Database…") {
+                            showingOpenDBSheet.toggle()
+                        }
+                    }, label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    })
+                }
+                #endif
+            }
+            .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    withAnimation {
                         viewModel.deleteSelectedRecipes()
                     }
-                } message: {
-                    Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
-                }
-                
-                Button(action: {
-                    viewModel.addNewRecipe()
-                }) {
-                    Label("New Recipe", systemImage: "plus")
-                }
-                Menu(content: {
-                    #if os(macOS)
-                    Button("Create Recipe from Web…") {
-                        showingCreateFromWebSheet.toggle()
+                    #if !os(macOS)
+                    // Delay exiting edit mode to let deletion animation complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        isEditMode = false
                     }
                     #endif
-                    Button("Create Recipe from Image…") {
-                        showingCreateFromImageSheet.toggle()
-                    }
-                    Button("Import Recipes from File…") {
-                        showingImportFromFileSheet.toggle()
-                    }
-                    Button("Open Database…") {
-                        showingOpenDBSheet.toggle()
-                    }
-                }, label: {
-                    Label("More", systemImage: "ellipsis.circle")
-                })
+                }
+            } message: {
+                Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
             }
             #if os(macOS)
             .onDeleteCommand {
@@ -162,17 +238,18 @@ struct RecipeNavigationSplitView: View {
         .navigationTitle("Recipes")
         .sheet(isPresented: $viewModel.showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: viewModel.recipeToEditID) {
+                let isNewRecipe = viewModel.isDraftRecipe(viewModel.recipeToEditID)
                 NavigationStack {
                     #if os(macOS)
                     if useMobileEditViews {
-                        RecipeDetailEditMobileView(recipe: recipe)
+                        RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
                             .frame(minWidth: 600, minHeight: 500)
                     } else {
-                        RecipeDetailEditDesktopView(recipe: recipe)
+                        RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
                             .frame(minWidth: 600, minHeight: 500)
                     }
                     #else
-                    RecipeDetailEditMobileView(recipe: recipe)
+                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
                     #endif
                 }
             }
@@ -185,6 +262,7 @@ struct RecipeNavigationSplitView: View {
         }
         .onChange(of: viewModel.showingEditSheet) { _, isPresented in
             if !isPresented {
+                viewModel.clearDraftRecipe()
                 viewModel.recipeToEditID = nil
             }
         }

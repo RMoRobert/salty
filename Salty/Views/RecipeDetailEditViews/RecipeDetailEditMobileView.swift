@@ -13,8 +13,8 @@ struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss
     @State private var viewModel: RecipeDetailEditViewModel
     
-    init(recipe: Recipe) {
-        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe))
+    init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
+        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
     }
 
     var body: some View {
@@ -275,7 +275,7 @@ struct RecipeDetailEditMobileView: View {
                 RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
             }
         }
-        #if os(iOS)
+        #if !os(macOS)
         .environment(\.editMode, .constant(.active))
         .navigationTitle("Edit Recipe")
         .navigationBarTitleDisplayMode(.inline)
