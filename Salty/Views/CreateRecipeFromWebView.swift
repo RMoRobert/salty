@@ -113,8 +113,6 @@ struct CreateRecipeFromWebView: View {
     }
     
     private func handleKeyPress(_ key: String) -> KeyPress.Result {
-        print("🔑 Keyboard shortcut pressed: Cmd+\(key)")
-        
         let fieldMap: [String: RecipeField] = [
             "1": .name,
             "2": .source,
@@ -127,7 +125,6 @@ struct CreateRecipeFromWebView: View {
         ]
         
         if let field = fieldMap[key] {
-            print("🎯 Extracting text to field: \(field.rawValue)")
             extractSelectedTextToField(field)
             return .handled
         }
@@ -137,24 +134,17 @@ struct CreateRecipeFromWebView: View {
     private func extractSelectedTextToField(_ field: RecipeField, retryCount: Int = 0) {
         guard let webView = webView else {
             if retryCount < 5 {
-                print("❌ WebView is not initialized, trying again in 0.1 seconds... (attempt \(retryCount + 1)/5)")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.extractSelectedTextToField(field, retryCount: retryCount + 1)
                 }
-            } else {
-                print("❌ WebView failed to initialize after 5 attempts")
             }
             return
         }
         
-        print("✅ WebView is ready, extracting text...")
         webView.getSelectedText { selectedText in
             DispatchQueue.main.async {
                 if let text = selectedText, !text.isEmpty {
-                    print("📝 Extracted text: \(String(text.prefix(50)))...")
                     self.viewModel.extractTextToField(text, field: field)
-                } else {
-                    print("❌ No text selected or text is empty")
                 }
             }
         }
@@ -220,13 +210,6 @@ struct RecipeWebBrowserView: View {
                     viewModel.currentURL = newURL
                 }
             )
-            .onChange(of: webView) { _, newWebView in
-                if let webView = newWebView {
-                    print("✅ WebView coordinator set: \(webView)")
-                } else {
-                    print("❌ WebView coordinator is nil")
-                }
-            }
         }
         .background(Color(.windowBackgroundColor))
     }
