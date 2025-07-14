@@ -72,83 +72,17 @@ struct RecipeIngredientsBulkEditView: View {
     }
     
     private func loadIngredients() {
-        var lines: [String] = []
-        
-        for ingredient in recipe.ingredients {
-            if ingredient.isHeading {
-                // Add blank line before heading
-                lines.append("")
-                lines.append(ingredient.text)
-            } else {
-                lines.append(ingredient.text)
-            }
-        }
-        
-        textContent = lines.joined(separator: "\n")
+        textContent = IngredientTextParser.formatIngredients(recipe.ingredients)
         hasChanges = false
     }
     
     private func saveIngredients() {
-        let lines = textContent.components(separatedBy: .newlines)
-        var newIngredients: [Ingredient] = []
-        var isMainPreservation: [String: Bool] = [:]
-        
-        // Create a mapping of existing ingredient text to isMain value for preservation
-        for ingredient in recipe.ingredients {
-            isMainPreservation[ingredient.text] = ingredient.isMain
-        }
-        
-        var i = 0
-        while i < lines.count {
-            var line = lines[i].trimmingCharacters(in: .whitespaces)
-            
-            if line.isEmpty {
-                // Skip empty lines
-                i += 1
-                continue
-            }
-            
-            // Check if this line is preceded by a blank line, making it a heading:
-            let isHeadingByLine = i > 0 && lines[i - 1].trimmingCharacters(in: .whitespaces).isEmpty
-            // Check if this line ends with a colon, makng it a heading using the alternate format:
-            let isHeadingByColon = line.hasSuffix(":")
-            if isHeadingByColon {
-                // strip colon for cleanliness
-                line = String(line.dropLast())
-            }
-            let isHeading = isHeadingByLine || isHeadingByColon
-            
-            let ingredient = Ingredient(
-                id: UUID().uuidString,
-                isHeading: isHeading,
-                isMain: (isMainPreservation[line] ?? false) && !isHeading, // Preserve isMain if possible
-                text: line
-            )
-            
-            newIngredients.append(ingredient)
-            i += 1
-        }
-        
-        recipe.ingredients = newIngredients
+        recipe.ingredients = IngredientTextParser.parseIngredients(from: textContent, preservingMainStatusFrom: recipe.ingredients)
         hasChanges = false
     }
     
     private func cleanUpText() {
-        let lines = textContent.components(separatedBy: .newlines)
-        let cleanedLines = lines.map { line in
-            var cleanedLine = line.trimmingCharacters(in: .whitespaces)
-            
-            // Remove common list markers from the beginning
-            let markers = ["*", "-", "•", "○", "▪", "▫", "‣", "⁃"]
-            for marker in markers {
-                if cleanedLine.hasPrefix(marker) {
-                    cleanedLine = String(cleanedLine.dropFirst(marker.count))
-                    break
-                }
-            }
-            return cleanedLine.trimmingCharacters(in: .whitespaces)
-        }
-        textContent = cleanedLines.joined(separator: "\n")
+        textContent = IngredientTextParser.cleanUpText(textContent)
         hasChanges = true
     }
 }

@@ -23,7 +23,7 @@ class CreateRecipeFromWebViewModel {
     var recipe: Recipe
     
     // MARK: - Web Browser State
-    var currentURL: String = "https://www.google.com"
+    var currentURL: String = "https://github.com/smeckledorfed/Recipes-Master-List?tab=readme-ov-file#community"  // TODO: Change to sensible default
     var canGoBack = false
     var canGoForward = false
     var isLoading = false
@@ -37,7 +37,6 @@ class CreateRecipeFromWebViewModel {
     var showingBulkEditDirectionsSheet = false
     var showingSaveAlert = false
     var showingCancelAlert = false
-    var lastExtractedField: RecipeField?
     
     // MARK: - Computed Properties
     var hasRecipeData: Bool {
@@ -92,7 +91,7 @@ class CreateRecipeFromWebViewModel {
             return 
         }
         
-        logger.info("🔄 Extracting text to \(field.rawValue): \(String(cleanText.prefix(100)))")
+        logger.info("Extracting text to \(field.rawValue): \(String(cleanText.prefix(100)))")
         
         switch field {
         case .name:
@@ -116,46 +115,20 @@ class CreateRecipeFromWebViewModel {
             appendToDirections(cleanText)
         }
         
-        logger.info("✅ Successfully extracted text to \(field.rawValue): \(String(cleanText.prefix(100)))")
+        logger.info("Successfully extracted text to \(field.rawValue): \(String(cleanText.prefix(100)))")
         
-        // Update the last extracted field for UI feedback
-        lastExtractedField = field
-        
-        // Clear the feedback after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.lastExtractedField = nil
-        }
     }
     
     private func appendToIngredients(_ text: String) {
-        let lines = text.components(separatedBy: .newlines)
-        for line in lines {
-            let cleanLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !cleanLine.isEmpty {
-                let ingredient = Ingredient(
-                    id: UUID().uuidString,
-                    isHeading: false,
-                    isMain: false,
-                    text: cleanLine
-                )
-                recipe.ingredients.append(ingredient)
-            }
-        }
+        // Use the simple parsing for web extraction (no heading detection)
+        let newIngredients = IngredientTextParser.parseIngredientsSimple(from: text)
+        recipe.ingredients.append(contentsOf: newIngredients)
     }
     
     private func appendToDirections(_ text: String) {
-        let lines = text.components(separatedBy: .newlines)
-        for line in lines {
-            let cleanLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !cleanLine.isEmpty {
-                let direction = Direction(
-                    id: UUID().uuidString,
-                    isHeading: false,
-                    text: cleanLine
-                )
-                recipe.directions.append(direction)
-            }
-        }
+        // Use the simple parsing for web extraction (no heading detection)
+        let newDirections = DirectionTextParser.parseDirectionsSimple(from: text)
+        recipe.directions.append(contentsOf: newDirections)
     }
     
     // MARK: - URL Navigation

@@ -66,7 +66,7 @@ extension FileManager {
     static var customSaltyLibraryFullPath: URL? {
         let databaseLocation = saltyLibraryDirectory
         #if os(macOS)
-        databaseLocation.startAccessingSecurityScopedResource()
+        let _ = databaseLocation.startAccessingSecurityScopedResource()
         #endif
         // defer { baseURL!.stopAccessingSecurityScopedResource() }
         print("databaseLocation = \(databaseLocation.absoluteString)")

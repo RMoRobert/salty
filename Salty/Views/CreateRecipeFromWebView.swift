@@ -18,11 +18,11 @@ struct CreateRecipeFromWebView: View {
         NavigationStack {
             HSplitView {
                 // Left side - Web Browser
-                WebBrowserView(viewModel: viewModel, webView: $webView)
+                RecipeWebBrowserView(viewModel: viewModel, webView: $webView)
                     .frame(minWidth: 400, idealWidth: 600)
                 
                 // Right side - Recipe Editor
-                RecipeEditorView(viewModel: viewModel)
+                RecipeWebImportEditView(viewModel: viewModel)
                     .frame(minWidth: 400, idealWidth: 500)
             }
             .navigationTitle("Create Recipe from Web")
@@ -161,8 +161,8 @@ struct CreateRecipeFromWebView: View {
     }
 }
 
-// MARK: - Web Browser View
-struct WebBrowserView: View {
+// MARK: - Recipe Web Browser View
+struct RecipeWebBrowserView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     @Binding var webView: WebViewCoordinator?
     @State private var urlText: String = ""
@@ -200,10 +200,10 @@ struct WebBrowserView: View {
                 
                 if viewModel.isLoading {
                     ProgressView()
-                        .scaleEffect(0.8)
+                        .controlSize(.small)
                 }
             }
-            .padding()
+            .padding(4)
             
             // Web View
             WebViewRepresentable(
@@ -232,88 +232,105 @@ struct WebBrowserView: View {
     }
 }
 
-// MARK: - Recipe Editor View
-struct RecipeEditorView: View {
+// MARK: - Recipe Web Import Edit View
+struct RecipeWebImportEditView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     
     var body: some View {
         ScrollView {
+            
             VStack(alignment: .leading, spacing: 16) {
-                Text("Recipe Editor")
+                Text("Import Recipe Contents")
                     .font(.title2)
                     .fontWeight(.semibold)
-                    .padding(.bottom, 8)
+                    .frame(alignment: .leading)
                 
-                // Basic Information
+                Text("Basic Information")
+                    .font(.headline)
+                
+                
+                Form {
+                    
+                    TextField("Name:", text: $viewModel.recipe.name, prompt: Text("Name (⌘1)"))
+                    TextField("Source:", text: $viewModel.recipe.source, prompt: Text("Source (⌘2)"))
+                    TextField("Source Details:", text: $viewModel.recipe.sourceDetails, prompt: Text("Source Details (⌘3)"))
+                    TextField("Servings", value: $viewModel.recipe.servings, format: .number, prompt: Text("Servings (⌘4)"))
+                    TextField("Yield", text: $viewModel.recipe.yield, prompt: Text("Yield (⌘7)"))
+                }
+                
+                // Introduction Section
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Basic Information")
-                        .font(.headline)
-                    
                     HStack {
-                        Text("Name:")
-                        TextField("Recipe name", text: $viewModel.recipe.name)
-                            .textFieldStyle(.roundedBorder)
-                        Text("(⌘1)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                        if viewModel.lastExtractedField == .name {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                        }
-                    }
-                    
-                    HStack {
-                        Text("Source:")
-                        TextField("Source", text: $viewModel.recipe.source)
-                            .textFieldStyle(.roundedBorder)
-                        Text("(⌘2)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                        if viewModel.lastExtractedField == .source {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                        }
-                    }
-                    
-                    HStack {
-                        Text("Source Details:")
-                        TextField("Source details", text: $viewModel.recipe.sourceDetails)
-                            .textFieldStyle(.roundedBorder)
-                        Text("(⌘3)")
+                        Text("Introduction")
+                            .font(.headline)
+                        Spacer()
+                        Text("(⌘8)")
                             .foregroundColor(.secondary)
                             .font(.caption)
                     }
                     
-                    HStack {
-                        Text("Servings:")
-                        TextField("Servings", value: $viewModel.recipe.servings, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                        Text("(⌘4)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    
-                    HStack {
-                        Text("Yield:")
-                        TextField("Yield", text: $viewModel.recipe.yield)
-                            .textFieldStyle(.roundedBorder)
-                        Text("(⌘7)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
+                    TextEditor(text: $viewModel.recipe.introduction)
+                        .frame(minHeight: 60)
+                        .border(Color.secondary.opacity(0.3))
                 }
                 .padding(.bottom, 16)
                 
-                // Photo Section
+                // Ingredients Section
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Photo")
-                        .font(.headline)
+                    HStack {
+                        Text("Ingredients")
+                            .font(.headline)
+                        Spacer()
+                        Text("(⌘5)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
                     
-                    RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 120)
+                    if viewModel.recipe.ingredients.isEmpty {
+                        Text("No ingredients added")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.recipe.ingredients) { ingredient in
+                            Text("• \(ingredient.text)")
+                                .font(.body)
+                        }
+                    }
+                    
+                    Button("Edit Ingredients") {
+                        viewModel.showingBulkEditIngredientsSheet = true
+                    }
+                    .buttonStyle(.bordered)
                 }
                 .padding(.bottom, 16)
+                
+                // Directions Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Directions")
+                            .font(.headline)
+                        Spacer()
+                        Text("(⌘6)")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    
+                    if viewModel.recipe.directions.isEmpty {
+                        Text("No directions added")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
+                            Text("\(index + 1). \(direction.text)")
+                                .font(.body)
+                        }
+                    }
+                    
+                    Button("Edit Directions") {
+                        viewModel.showingBulkEditDirectionsSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.bottom, 16)
+                
                 
                 // Categories Section
                 VStack(alignment: .leading, spacing: 12) {
@@ -348,89 +365,6 @@ struct RecipeEditorView: View {
                 }
                 .padding(.bottom, 16)
                 
-                // Introduction Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Introduction")
-                            .font(.headline)
-                        Spacer()
-                        Text("(⌘8)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    
-                    TextEditor(text: $viewModel.recipe.introduction)
-                        .frame(minHeight: 60)
-                        .border(Color.secondary.opacity(0.3))
-                }
-                .padding(.bottom, 16)
-                
-                // Ingredients Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Ingredients")
-                            .font(.headline)
-                        Spacer()
-                        Text("(⌘5)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                        if viewModel.lastExtractedField == .ingredients {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                        }
-                    }
-                    
-                    if viewModel.recipe.ingredients.isEmpty {
-                        Text("No ingredients added")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(viewModel.recipe.ingredients) { ingredient in
-                            Text("• \(ingredient.text)")
-                                .font(.body)
-                        }
-                    }
-                    
-                    Button("Edit Ingredients") {
-                        viewModel.showingBulkEditIngredientsSheet = true
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.bottom, 16)
-                
-                // Directions Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Directions")
-                            .font(.headline)
-                        Spacer()
-                        Text("(⌘6)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                        if viewModel.lastExtractedField == .directions {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                        }
-                    }
-                    
-                    if viewModel.recipe.directions.isEmpty {
-                        Text("No directions added")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
-                            Text("\(index + 1). \(direction.text)")
-                                .font(.body)
-                        }
-                    }
-                    
-                    Button("Edit Directions") {
-                        viewModel.showingBulkEditDirectionsSheet = true
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.bottom, 16)
-                
                 // Notes Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Notes")
@@ -458,6 +392,19 @@ struct RecipeEditorView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                
+                
+                
+                // Photo Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Photo")
+                        .font(.headline)
+                    
+                    RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 120)
+                }
+                .padding(.bottom, 16)
+                
+                
             }
             .padding()
         }
