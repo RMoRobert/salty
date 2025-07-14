@@ -7,9 +7,6 @@
 
 #if os(macOS)
 import SwiftUI
-import WebViewKit
-
-
 import WebKit
 
 struct WebViewRepresentable: NSViewRepresentable {
@@ -35,18 +32,17 @@ struct WebViewRepresentable: NSViewRepresentable {
             self.coordinator = coord
         }
         
-        print("🌐 WebView initialized with coordinator: \(coord)")
-        
         return webView
     }
     
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        if let currentURL = nsView.url?.absoluteString, currentURL != url {
-            print("🔄 Loading new URL: \(url)")
+        let currentURL = nsView.url?.absoluteString ?? ""
+        let isLoading = nsView.isLoading
+        
+        // Only load if URL is different AND we're not currently loading
+        if currentURL != url && !isLoading {
             if let newURL = URL(string: url) {
                 nsView.load(URLRequest(url: newURL))
-            } else {
-                print("❌ Invalid URL: \(url)")
             }
         }
     }
@@ -62,11 +58,6 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
         self.onNavigationStateChange = onNavigationStateChange
         self.onURLChange = onURLChange
         super.init()
-        
-        // Load initial URL
-        if let url = URL(string: "https://www.google.com") {
-            webView.load(URLRequest(url: url))
-        }
     }
     
     func goBack() {
@@ -82,19 +73,15 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
     }
     
     func getSelectedText(completion: @escaping (String?) -> Void) {
-        print("🔍 Getting selected text from webView")
         webView.evaluateJavaScript("window.getSelection().toString()") { result, error in
             if let error = error {
-                print("❌ JavaScript error: \(error)")
                 completion(nil)
                 return
             }
             
             if let text = result as? String {
-                print("✅ Selected text from JS: '\(text)'")
                 completion(text)
             } else {
-                print("❌ No text result from JavaScript")
                 completion(nil)
             }
         }
@@ -115,6 +102,24 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
     
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         updateNavigationState()
+    }
+    
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        updateNavigationState()
+    }
+    
+    // MARK: - Navigation Policy
+    
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        
+        // Allow all navigation by default
+        decisionHandler(.allow)
+    }
+    
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        
+        // Allow all responses by default
+        decisionHandler(.allow)
     }
     
     private func updateNavigationState() {

@@ -22,6 +22,10 @@ class CreateRecipeFromWebViewModel {
     // MARK: - Recipe State
     var recipe: Recipe
     
+    // MARK: - Plain Text State for Import
+    var ingredientsText: String = ""
+    var directionsText: String = ""
+    
     // MARK: - Web Browser State
     var currentURL: String = "https://github.com/smeckledorfed/Recipes-Master-List?tab=readme-ov-file#community"  // TODO: Change to sensible default
     var canGoBack = false
@@ -33,20 +37,24 @@ class CreateRecipeFromWebViewModel {
     var showingPreparationTimesSheet = false
     var showingImageEditSheet = false
     var showingNotesSheet = false
-    var showingBulkEditIngredientsSheet = false
-    var showingBulkEditDirectionsSheet = false
     var showingSaveAlert = false
     var showingCancelAlert = false
     
     // MARK: - Computed Properties
     var hasRecipeData: Bool {
-        return !recipe.name.isEmpty || 
-               !recipe.source.isEmpty || 
-               !recipe.sourceDetails.isEmpty || 
-               !recipe.introduction.isEmpty ||
-               !recipe.ingredients.isEmpty ||
-               !recipe.directions.isEmpty ||
-               !recipe.notes.isEmpty
+        let hasBasicInfo = !recipe.name.isEmpty || 
+                          !recipe.source.isEmpty || 
+                          !recipe.sourceDetails.isEmpty || 
+                          !recipe.introduction.isEmpty
+        
+        let hasStructuredContent = !recipe.ingredients.isEmpty ||
+                                  !recipe.directions.isEmpty ||
+                                  !recipe.notes.isEmpty
+        
+        let hasTextContent = !ingredientsText.isEmpty ||
+                            !directionsText.isEmpty
+        
+        return hasBasicInfo || hasStructuredContent || hasTextContent
     }
     
     // MARK: - Initialization
@@ -61,6 +69,9 @@ class CreateRecipeFromWebViewModel {
     
     // MARK: - Recipe Management
     func saveRecipe() {
+        // Convert text to structured data before saving
+        convertTextToStructuredData()
+        
         recipe.lastModifiedDate = Date()
         
         do {
@@ -72,6 +83,18 @@ class CreateRecipeFromWebViewModel {
             logger.error("Error saving recipe: \(error)")
         }
     }
+    
+    private func convertTextToStructuredData() {
+        // Convert ingredients text to structured ingredients
+        if !ingredientsText.isEmpty {
+            recipe.ingredients = IngredientTextParser.parseIngredients(from: ingredientsText, preservingMainStatusFrom: recipe.ingredients)
+        }
+        
+        // Convert directions text to structured directions
+        if !directionsText.isEmpty {
+            recipe.directions = DirectionTextParser.parseDirections(from: directionsText)
+        }
+    }
 
     
     func resetRecipe() {
@@ -81,6 +104,8 @@ class CreateRecipeFromWebViewModel {
             createdDate: Date(),
             lastModifiedDate: Date()
         )
+        ingredientsText = ""
+        directionsText = ""
     }
     
     // MARK: - Text Extraction Methods
@@ -110,34 +135,45 @@ class CreateRecipeFromWebViewModel {
         case .introduction:
             recipe.introduction = cleanText
         case .ingredients:
-            appendToIngredients(cleanText)
+            appendToIngredientsText(cleanText)
         case .directions:
-            appendToDirections(cleanText)
+            appendToDirectionsText(cleanText)
         }
         
         logger.info("Successfully extracted text to \(field.rawValue): \(String(cleanText.prefix(100)))")
         
     }
     
-    private func appendToIngredients(_ text: String) {
-        // Use the simple parsing for web extraction (no heading detection)
-        let newIngredients = IngredientTextParser.parseIngredientsSimple(from: text)
-        recipe.ingredients.append(contentsOf: newIngredients)
+    private func appendToIngredientsText(_ text: String) {
+        if !ingredientsText.isEmpty {
+            ingredientsText += "\n"
+        }
+        ingredientsText += text
     }
     
-    private func appendToDirections(_ text: String) {
-        // Use the simple parsing for web extraction (no heading detection)
-        let newDirections = DirectionTextParser.parseDirectionsSimple(from: text)
-        recipe.directions.append(contentsOf: newDirections)
+    private func appendToDirectionsText(_ text: String) {
+        if !directionsText.isEmpty {
+            directionsText += "\n"
+        }
+        directionsText += text
     }
     
     // MARK: - URL Navigation
     func navigateToURL(_ url: String) {
-        var urlString = url
+        var urlString = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Don't navigate if URL is empty or the same as current
+        guard !urlString.isEmpty && urlString != currentURL else { return }
+        
+        // Add https:// if no protocol specified
         if !urlString.hasPrefix("http://") && !urlString.hasPrefix("https://") {
             urlString = "https://" + urlString
         }
-        currentURL = urlString
+        
+        // Only update if the normalized URL is different
+        if urlString != currentURL {
+            currentURL = urlString
+        }
     }
     
     func refreshCurrentPage() {

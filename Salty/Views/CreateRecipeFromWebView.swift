@@ -7,7 +7,6 @@
 
 #if os(macOS)
 import SwiftUI
-import WebViewKit
 
 struct CreateRecipeFromWebView: View {
     @Environment(\.dismiss) private var dismiss
@@ -25,7 +24,6 @@ struct CreateRecipeFromWebView: View {
                 RecipeWebImportEditView(viewModel: viewModel)
                     .frame(minWidth: 400, idealWidth: 500)
             }
-            .navigationTitle("Create Recipe from Web")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button("Cancel") {
@@ -179,7 +177,10 @@ struct RecipeWebBrowserView: View {
                 TextField("Enter URL", text: $urlText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
-                        viewModel.navigateToURL(urlText)
+                        // Only navigate if URL is different and not currently loading
+                        if urlText != viewModel.currentURL && !viewModel.isLoading {
+                            viewModel.navigateToURL(urlText)
+                        }
                     }
                     .onAppear {
                         urlText = viewModel.currentURL
@@ -269,20 +270,16 @@ struct RecipeWebImportEditView: View {
                             .font(.caption)
                     }
                     
-                    if viewModel.recipe.ingredients.isEmpty {
-                        Text("No ingredients added")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(viewModel.recipe.ingredients) { ingredient in
-                            Text("• \(ingredient.text)")
-                                .font(.body)
-                        }
-                    }
+                    TextEditor(text: $viewModel.ingredientsText)
+                        .frame(minHeight: 120)
+                        .border(Color.secondary.opacity(0.3))
+                        .font(.system(.body, design: .monospaced))
                     
-                    Button("Edit Ingredients") {
-                        viewModel.showingBulkEditIngredientsSheet = true
+                    Button("Clean Up Text") {
+                        viewModel.ingredientsText = IngredientTextParser.cleanUpText(viewModel.ingredientsText)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(viewModel.ingredientsText.isEmpty)
                 }
                 .padding(.bottom, 16)
                 
@@ -297,20 +294,16 @@ struct RecipeWebImportEditView: View {
                             .font(.caption)
                     }
                     
-                    if viewModel.recipe.directions.isEmpty {
-                        Text("No directions added")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
-                            Text("\(index + 1). \(direction.text)")
-                                .font(.body)
-                        }
-                    }
+                    TextEditor(text: $viewModel.directionsText)
+                        .frame(minHeight: 120)
+                        .border(Color.secondary.opacity(0.3))
+                        .font(.system(.body, design: .monospaced))
                     
-                    Button("Edit Directions") {
-                        viewModel.showingBulkEditDirectionsSheet = true
+                    Button("Clean Up Text") {
+                        viewModel.directionsText = DirectionTextParser.cleanUpText(viewModel.directionsText)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(viewModel.directionsText.isEmpty)
                 }
                 .padding(.bottom, 16)
                 
@@ -395,14 +388,8 @@ struct RecipeWebImportEditView: View {
         .sheet(isPresented: $viewModel.showingCategoriesSheet) {
             CategoryEditView(recipe: $viewModel.recipe)
         }
-        .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
+                .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
             PreparationTimesEditView(recipe: $viewModel.recipe)
-        }
-        .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
-            RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
-        }
-        .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
-            RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
         }
         .sheet(isPresented: $viewModel.showingNotesSheet) {
             NotesEditView(recipe: $viewModel.recipe)

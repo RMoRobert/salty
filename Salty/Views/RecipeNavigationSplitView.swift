@@ -11,6 +11,7 @@ struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
+    @Environment(\.openWindow) private var openWindow
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isEditMode = false
@@ -19,7 +20,6 @@ struct RecipeNavigationSplitView: View {
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
-    @State private var showingCreateFromWebSheet = false
     @State private var showingCreateFromImageSheet = false
     @State private var showingDeleteConfirmation = false
     
@@ -172,7 +172,7 @@ struct RecipeNavigationSplitView: View {
                     
                     Menu(content: {
                         Button("Create Recipe from Web…") {
-                            showingCreateFromWebSheet.toggle()
+                            openWindow(id: "create-recipe-from-web-window")
                         }
                         Button("Create Recipe from Image…") {
                             showingCreateFromImageSheet.toggle()
@@ -272,12 +272,6 @@ struct RecipeNavigationSplitView: View {
             .frame(minWidth: 400, minHeight: 500)
             #endif
         }
-        #if os(macOS)
-        .sheet(isPresented: $showingCreateFromWebSheet) {
-            CreateRecipeFromWebView()
-                .frame(minWidth: 800, minHeight: 700)
-        }
-        #endif
         .sheet(isPresented: $showingCreateFromImageSheet) {
             CreateRecipeFromImageView()
             #if os(macOS)
