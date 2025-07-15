@@ -133,20 +133,14 @@ struct RecipeDetailView: View {
                     .allowsHitTesting(recipe.isFavorite || recipe.wantToMake)
             }
                 
-                HOrVStack(alignFirstTextLeadingIfHStack: true) {
-                    VStack {
+                HOrVStack(alignFirstTextLeadingIfHStack: true, spacingifHStack: 60) {
+                    VStack(spacing: 10) {
                         Text("Rating:")
-                        if recipe.rating != .notSet {
-                            RatingView(recipe: recipe).padding()
-                        }
-                        else {
-                            Text("(not set)")
-                                .foregroundColor(.secondary)
-                        }
+                        RatingView(recipe: recipe, showLabel: true)
                     }
-                    VStack {
+                    VStack(spacing: 10) {
                         Text("Difficulty:")
-                        DifficultyView(recipe: recipe).padding()
+                        DifficultyView(recipe: recipe, showLabel: true)
                     }
                 }
                 .padding()
