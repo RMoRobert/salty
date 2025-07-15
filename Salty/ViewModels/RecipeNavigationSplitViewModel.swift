@@ -30,11 +30,14 @@ class RecipeNavigationSplitViewModel {
     var searchString = ""
     var selectedSidebarItemId: String?
     var selectedRecipeIDs = Set<String>()
+    var isFavoritesFilterActive = false
     var showingEditSheet = false
     var recipeToEditID: String?
     var shouldScrollToNewRecipe = false
     var draftRecipe: Recipe?
     
+    // TODO: Do more of this in database and not filtering afterwards
+    // Consider also using "@Select" instead of retrieving entire recipe data for preview only
     var filteredRecipes: [Recipe] {
         var recipesToFilter: [Recipe]
         
@@ -73,6 +76,10 @@ class RecipeNavigationSplitViewModel {
                 
                 return normalizedName.contains(normalizedSearch)
             }
+        }
+        
+        if isFavoritesFilterActive == true {
+            recipesToFilter = recipesToFilter.filter(\.self.isFavorite)
         }
         
         return recipesToFilter
