@@ -116,13 +116,13 @@ struct RecipeNavigationSplitView: View {
             .toolbar {
                 #if !os(macOS)
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    if isEditMode && !viewModel.selectedRecipeIDs.isEmpty {
-                        Button(role: .destructive, action: {
-                            showingDeleteConfirmation = true
-                        }) {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
+//                    if isEditMode && !viewModel.selectedRecipeIDs.isEmpty {
+//                        Button(role: .destructive, action: {
+//                            showingDeleteConfirmation = true
+//                        }) {
+//                            Label("Delete", systemImage: "trash")
+//                        }
+//                    }
                     
                     Button(action: {
                         viewModel.addNewRecipe()
@@ -132,15 +132,17 @@ struct RecipeNavigationSplitView: View {
                     .disabled(isEditMode)
                     
                     Menu(content: {
+                        Toggle(isOn: $viewModel.isFavoritesFilterActive) {
+                            Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease.circle")
+                        }
+                        Divider()
                         Button(action: {
                             isEditMode.toggle()
                         }) {
                             Label(isEditMode ? "Done" : "Edit", systemImage: "pencil")
                         }
                         
-                        if !isEditMode {
-                            Divider()
-                        }
+                        Divider()
                         
                         Button("Create Recipe from Image…") {
                             showingCreateFromImageSheet.toggle()
@@ -157,19 +159,22 @@ struct RecipeNavigationSplitView: View {
                 }
                 #else
                 ToolbarItemGroup(placement: .primaryAction) {
-//                    Button(role: .destructive, action: {
-//                        showingDeleteConfirmation = true
-//                    }) {
-//                        Label("Delete Recipe", systemImage: "trash")
-//                    }
-//                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    Button(role: .destructive, action: {
+                        showingDeleteConfirmation = true
+                    }) {
+                        Label("Delete Recipe", systemImage: "trash")
+                    }
+                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
                     
                     Button(action: {
                         viewModel.addNewRecipe()
                     }) {
                         Label("New Recipe", systemImage: "plus")
                     }
-                    
+                    Toggle(isOn: $viewModel.isFavoritesFilterActive) {
+                        Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                   // .buttonStyle(.button)
                     Menu(content: {
                         Button("Create Recipe from Web…") {
                             openWindow(id: "create-recipe-from-web-window")
@@ -180,6 +185,7 @@ struct RecipeNavigationSplitView: View {
                         Button("Import Recipes from File…") {
                             showingImportFromFileSheet.toggle()
                         }
+                        Divider()
                         Button("Open Database…") {
                             showingOpenDBSheet.toggle()
                         }
