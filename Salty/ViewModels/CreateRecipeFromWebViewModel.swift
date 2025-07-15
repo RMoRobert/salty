@@ -27,7 +27,7 @@ class CreateRecipeFromWebViewModel {
     var directionsText: String = ""
     
     // MARK: - Web Browser State
-    var currentURL: String = "about:blank "  // TODO: Change to sensible default
+    var currentURL: String = ""
     var canGoBack = false
     var canGoForward = false
     var isLoading = false

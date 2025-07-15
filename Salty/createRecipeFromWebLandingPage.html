@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Recipe From Web - Tips</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.4;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .container {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        
+        .keyboard-shortcut {
+            background: #ecf0f1;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        
+        .step {
+            background: #e8f4f8;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #3498db;
+            border-radius: 5px;
+        }
+        
+        .tip {
+            background: #fff3cd;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #ffc107;
+            border-radius: 5px;
+        }
+        
+        ul {
+            padding-left: 20px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        .highlight {
+            background: #ffffcc;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Suggested Websites</h1>
+        <p>The automatic import tool will fetch recipe data from a recipe page on many popular websites. Here are a few of our favorites to get you started:</p>
+        <ul>
+            <li><a href="https://allrecipes.com">AllRecipes.com</a></li>
+            <li><a href="https://cookieandkate.com/">Cookie and Kate</a></li>
+            <li><a href="https://www.epicurious.com/">Epicurious</a></li>
+            <li><a href="https://foodnetwork.com/">Food Network</a></li>
+            <li>Enter your favorite site (or search engine) above to discover more!</li>
+        </ul>
+        <p>Most websites that support the schema.org/Recipe standard in JSON-LD format should work with this tool, but compatibility with any individual site is subject to change at any time due to factors outside our control.</p>
+        
+        <h1>How to Use This Tool</h1>
+        <p>This tool helps you import recipes from websites into your Salty recipe library. You can extract text manually or use our automatic scanner (designed to work on most websites that use the JSON-LD Recipe schema.org format; select the  the <strong>More (⋯)</strong> button, then select <strong>"Scan Webpage for Recipe Data"</strong>).</p>
+
+        <h2>Manual Text Extraction</h2>
+        <p>For webpages that do not work with the scan tool, you can select text on the page and use these handy keyboard shortcuts to automatically copy them into the corresponding fields:</p>
+        
+        <ul>
+            <li><span class="keyboard-shortcut">⌘1</span> - Copy to <strong>Name</strong> field</li>
+            <li><span class="keyboard-shortcut">⌘2</span> - Copy to <strong>Source</strong> field</li>
+            <li><span class="keyboard-shortcut">⌘3</span> - Copy to <strong>Source Details</strong> field</li>
+            <li><span class="keyboard-shortcut">⌘4</span> - Copy to <strong>Servings</strong> field</li>
+            <li><span class="keyboard-shortcut">⌘5</span> - Copy to <strong>Ingredients</strong> text</li>
+            <li><span class="keyboard-shortcut">⌘6</span> - Copy to <strong>Directions</strong> text</li>
+            <li><span class="keyboard-shortcut">⌘7</span> - Copy to <strong>Yield</strong> field</li>
+            <li><span class="keyboard-shortcut">⌘8</span> - Copy to <strong>Introduction</strong> text</li>
+        </ul>
+        
+        <h2>Text Cleanup</h2>
+        <div class="tip">
+            <p><strong>Tip:</strong> After importing ingredients or directions, use the <strong>"Clean Up Text"</strong> buttons to automatically clean up the formatting if you want to remove bullet points, numers, and other characters that you do not want in the actual ingredient or direction step text.</p>
+        </div>
+    </div>
+</body>
+</html> 
+

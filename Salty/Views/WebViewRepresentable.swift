@@ -9,11 +9,33 @@
 import SwiftUI
 import WebKit
 
+enum WebViewContent {
+    case url(String)
+    case htmlResource(String) // filename in bundle
+    case htmlString(String)
+}
+
 struct WebViewRepresentable: NSViewRepresentable {
-    let url: String
+    let content: WebViewContent
     @Binding var coordinator: WebViewCoordinator?
     let onNavigationStateChange: (Bool, Bool, Bool) -> Void
     let onURLChange: (String) -> Void
+    
+    // Convenience initializer for URL (maintains backward compatibility)
+    init(url: String, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {
+        self.content = .url(url)
+        self._coordinator = coordinator
+        self.onNavigationStateChange = onNavigationStateChange
+        self.onURLChange = onURLChange
+    }
+    
+    // New initializer for content
+    init(content: WebViewContent, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {
+        self.content = content
+        self._coordinator = coordinator
+        self.onNavigationStateChange = onNavigationStateChange
+        self.onURLChange = onURLChange
+    }
     
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -36,13 +58,35 @@ struct WebViewRepresentable: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        let currentURL = nsView.url?.absoluteString ?? ""
-        let isLoading = nsView.isLoading
-        
-        // Only load if URL is different AND we're not currently loading
-        if currentURL != url && !isLoading {
-            if let newURL = URL(string: url) {
-                nsView.load(URLRequest(url: newURL))
+        switch content {
+        case .url(let urlString):
+            let currentURL = nsView.url?.absoluteString ?? ""
+            let isLoading = nsView.isLoading
+            
+            // Only load if URL is different AND we're not currently loading
+            if currentURL != urlString && !isLoading {
+                if let newURL = URL(string: urlString) {
+                    nsView.load(URLRequest(url: newURL))
+                }
+            }
+            
+        case .htmlResource(let filename):
+            // Load HTML from bundle resource
+            if let htmlPath = Bundle.main.path(forResource: filename, ofType: "html"),
+               let htmlContent = try? String(contentsOfFile: htmlPath) {
+                nsView.loadHTMLString(htmlContent, baseURL: Bundle.main.bundleURL)
+                // Force navigation state update for HTML content since delegate methods may not fire
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    self.onNavigationStateChange(nsView.canGoBack, nsView.canGoForward, nsView.isLoading)
+                }
+            }
+            
+        case .htmlString(let htmlContent):
+            // Load HTML from string
+            nsView.loadHTMLString(htmlContent, baseURL: nil)
+            // Force navigation state update for HTML content since delegate methods may not fire
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.onNavigationStateChange(nsView.canGoBack, nsView.canGoForward, nsView.isLoading)
             }
         }
     }
@@ -137,7 +181,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
         decisionHandler(.allow)
     }
     
-    private func updateNavigationState() {
+    func updateNavigationState() {
         onNavigationStateChange(webView.canGoBack, webView.canGoForward, webView.isLoading)
     }
 }

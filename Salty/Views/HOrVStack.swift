@@ -10,7 +10,8 @@ import SwiftUI
 /// Returns HStackLayout or VStackLayout, depending on UI size class and OS (assume macOS can always handle H)
 struct HOrVStack<Content: View>: View {
     @State var alignFirstTextLeadingIfHStack = false
-    var spacingifHStack: CGFloat? = nil
+    var spacingIfHStack: CGFloat? = nil
+    var spacingIfVStack: CGFloat? = nil
     
 #if !os(macOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -28,20 +29,25 @@ struct HOrVStack<Content: View>: View {
     var currentLayout: AnyLayout {
         if horizontalSizeClass == .regular {
             if alignFirstTextLeadingIfHStack {
-                if let spacing = spacingifHStack {
+                if let spacing = spacingIfHStack {
                     return AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: spacing))
                 } else {
                     return AnyLayout(HStackLayout(alignment: .firstTextBaseline))
                 }
             } else {
-                if let spacing = spacingifHStack {
+                if let spacing = spacingIfHStack {
                     return AnyLayout(HStackLayout(spacing: spacing))
                 } else {
                     return AnyLayout(HStackLayout())
                 }
             }
         } else {
-            return AnyLayout(VStackLayout())
+            if let spacing = spacingIfVStack {
+                return AnyLayout(VStackLayout(spacing: spacing))
+            }
+            else {
+                return AnyLayout(VStackLayout())
+            }
         }
     }
 

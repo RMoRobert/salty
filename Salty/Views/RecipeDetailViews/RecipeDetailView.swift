@@ -33,6 +33,7 @@ struct RecipeDetailView: View {
                             Text(recipe.name)
                                 .font(.title)
                                 .fontWeight(.bold)
+                                .multilineTextAlignment(.center)
                         }
                         if !recipe.source.isEmpty {
                             HStack {
@@ -133,7 +134,7 @@ struct RecipeDetailView: View {
                     .allowsHitTesting(recipe.isFavorite || recipe.wantToMake)
             }
                 
-                HOrVStack(alignFirstTextLeadingIfHStack: true, spacingifHStack: 60) {
+                HOrVStack(alignFirstTextLeadingIfHStack: true, spacingIfHStack: 60, spacingIfVStack: 30) {
                     VStack(spacing: 10) {
                         Text("Rating:")
                         RatingView(recipe: recipe, showLabel: true)
@@ -259,5 +260,5 @@ struct NoModifier: ViewModifier {
 
 
 #Preview {
-    RecipeDetailView(recipe: SampleData.sampleRecipes[0])
+    RecipeDetailView(recipe: SampleData.sampleRecipes[2])
 }

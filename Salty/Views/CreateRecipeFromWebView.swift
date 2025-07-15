@@ -160,35 +160,46 @@ struct RecipeWebBrowserView: View {
             // URL Bar and Navigation Controls
             HStack(spacing: 0) {
                 Button(action: { webView?.goBack() }) {
-                        Label("Sign In", systemImage: "chevron.left")
-                            .labelStyle(.iconOnly)
+                    Label("Back", systemImage: "chevron.left")
+                        .labelStyle(.iconOnly)
                 }
                 .disabled(!viewModel.canGoBack)
                 .padding([.leading], 4)
                 
                 Button(action: { webView?.goForward() }) {
-                    Label("Sign In", systemImage: "chevron.right")
+                    Label("Forward", systemImage: "chevron.right")
                         .labelStyle(.iconOnly)
                 }
                 .disabled(!viewModel.canGoForward)
+                .padding([.trailing], 4)
+                
+                
+                Button(action: {
+                    goHome()
+                }) {
+                    Label("Home", systemImage: "house")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .padding([.leading, .trailing], 4)
                 
                 Button(action: { webView?.reload() }) {
-                    Label("Sign In", systemImage: "arrow.clockwise")
+                    Label("Reload", systemImage: "arrow.clockwise")
                         .labelStyle(.iconOnly)
                 }
                 .disabled(viewModel.isLoading)
-                .padding([.leading, .trailing], 8)
+                .padding([.leading, .trailing], 4)
                 
-                TextField("Enter URL", text: $urlText)
+                TextField("Enter URL", text: $urlText, selection: $selectedURLBarText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         navigateToURL()
                     }
                     .onAppear {
-                        urlText = viewModel.currentURL
+                        urlText = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
                     }
                     .onChange(of: viewModel.currentURL) { _, newURL in
-                        urlText = newURL
+                        urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
                     }
                 
                 Button(action: { navigateToURL() }) {
@@ -196,31 +207,31 @@ struct RecipeWebBrowserView: View {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
-                .disabled(viewModel.isLoading || urlText == viewModel.currentURL)
+                .disabled(viewModel.isLoading || urlText == ((viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL))
                 .padding([.trailing], 8)
                 
-                Menu {
-                    Button("Scan Webpage for Recipe Data") {
-                        scanWebpageForRecipeData()
-                    }
-                    .disabled(viewModel.isLoading || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.isEmpty)
-                } label: {
-                    Label("More", systemImage: "ellipsis")
-                        .labelStyle(.iconOnly)
+                Button( action: {
+                    scanWebpageForRecipeData()
+                }) {
+                    Label("Auto Import", systemImage: "square.and.arrow.down")
                 }
-                .menuStyle(.borderlessButton)
-                .padding([.trailing], 4)
+                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                .padding([.trailing], 8)
                 
-                if viewModel.isLoading {
+                // Reserved space for progress spinner
+                HStack {
                     ProgressView()
                         .controlSize(.small)
+                        .opacity(viewModel.isLoading ? 1.0 : 0.0)
                 }
+                .frame(width: 20)
+                .padding([.trailing], 4)
             }
             .padding(4)
             
             // Web View
             WebViewRepresentable(
-                url: viewModel.currentURL,
+                content: viewModel.currentURL.isEmpty ? .htmlResource("createRecipeFromWebLandingPage") : .url(viewModel.currentURL),
                 coordinator: $webView,
                 onNavigationStateChange: { canGoBack, canGoForward, isLoading in
                     viewModel.updateNavigationState(
@@ -238,9 +249,25 @@ struct RecipeWebBrowserView: View {
     }
     
     private func navigateToURL() {
+        // Handle special "about:home" URL
+        if urlText == "about:home" {
+            goHome()
+            return
+        }
+        
         // Only navigate if URL is different and not currently loading
-        if urlText != viewModel.currentURL && !viewModel.isLoading {
+        let currentDisplayURL = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
+        if urlText != currentDisplayURL && !viewModel.isLoading {
             viewModel.navigateToURL(urlText)
+        }
+    }
+    
+    private func goHome() {
+        viewModel.currentURL = ""
+        urlText = "about:home"
+        // Reset loading state since HTML content loads immediately
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            viewModel.updateNavigationState(canGoBack: false, canGoForward: false, isLoading: false)
         }
     }
     
