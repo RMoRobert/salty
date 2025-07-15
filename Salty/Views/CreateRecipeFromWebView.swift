@@ -163,15 +163,17 @@ struct RecipeWebBrowserView: View {
                     Label("Back", systemImage: "chevron.left")
                         .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.plain)
                 .disabled(!viewModel.canGoBack)
-                .padding([.leading], 4)
+                .padding(4)
                 
                 Button(action: { webView?.goForward() }) {
                     Label("Forward", systemImage: "chevron.right")
                         .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.plain)
                 .disabled(!viewModel.canGoForward)
-                .padding([.trailing], 4)
+                .padding(4)
                 
                 
                 Button(action: {
@@ -180,17 +182,18 @@ struct RecipeWebBrowserView: View {
                     Label("Home", systemImage: "house")
                         .labelStyle(.iconOnly)
                 }
-                .buttonStyle(.bordered)
-                .padding([.leading, .trailing], 4)
+                .buttonStyle(.plain)
+                .padding(4)
                 
                 Button(action: { webView?.reload() }) {
                     Label("Reload", systemImage: "arrow.clockwise")
                         .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.plain)
                 .disabled(viewModel.isLoading)
-                .padding([.leading, .trailing], 4)
+                .padding(4)
                 
-                TextField("Enter URL", text: $urlText, selection: $selectedURLBarText)
+                TextField("Enter URL", text: $urlText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         navigateToURL()
@@ -206,9 +209,11 @@ struct RecipeWebBrowserView: View {
                     Label("Go", systemImage: "arrow.right")
                         .labelStyle(.iconOnly)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
                 .disabled(viewModel.isLoading || urlText == ((viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL))
-                .padding([.trailing], 8)
+                .padding(2)
+                
+                Spacer()
                 
                 Button( action: {
                     scanWebpageForRecipeData()
@@ -216,6 +221,7 @@ struct RecipeWebBrowserView: View {
                     Label("Auto Import", systemImage: "square.and.arrow.down")
                 }
                 .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                .buttonStyle(.bordered)
                 .padding([.trailing], 8)
                 
                 // Reserved space for progress spinner
