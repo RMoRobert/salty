@@ -46,7 +46,17 @@ struct SampleData {
             ],
             preparationTimes: [
                 PreparationTime(id: UUID().uuidString, type: "Preparation", timeString: "25 Minutes")
-            ]
+            ],
+            nutrition: NutritionInformation(
+                servingSize: "1 serving",
+                calories: 285,
+                protein: 12.5,
+                carbohydrates: 35.2,
+                fat: 8.1,
+                fiber: 2.8,
+                sugar: 4.2,
+                sodium: 420
+            )
         ),
         
         // Minimal sample recipe

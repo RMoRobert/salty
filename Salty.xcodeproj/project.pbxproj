@@ -10,6 +10,7 @@
 		D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78962DFF646A0067A88D /* SwiftHtml */; };
 		D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */ = {isa = PBXBuildFile; productRef = D45D789B2DFF7B8A0067A88D /* Flow */; };
 		D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78A02DFF7E950067A88D /* WebViewKit */; };
+		D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = D47AF4B62E25D3E30001E4D4 /* SwiftSoup */; };
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
 		D47F90112DF3600C00A64304 /* SharingGRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D47F90102DF3600C00A64304 /* SharingGRDB */; };
 		D47F90132DF3600C00A64304 /* SharingGRDBCore in Frameworks */ = {isa = PBXBuildFile; productRef = D47F90122DF3600C00A64304 /* SharingGRDBCore */; };
@@ -83,6 +84,7 @@
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
 				D47F90152DF3600C00A64304 /* StructuredQueriesGRDB in Frameworks */,
 				D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */,
+				D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */,
 				D47F90112DF3600C00A64304 /* SharingGRDB in Frameworks */,
 				D47F90132DF3600C00A64304 /* SharingGRDBCore in Frameworks */,
 			);
@@ -162,6 +164,7 @@
 				D45D78962DFF646A0067A88D /* SwiftHtml */,
 				D45D789B2DFF7B8A0067A88D /* Flow */,
 				D45D78A02DFF7E950067A88D /* WebViewKit */,
+				D47AF4B62E25D3E30001E4D4 /* SwiftSoup */,
 			);
 			productName = Salty;
 			productReference = D47F8FDF2DF35EB300A64304 /* Salty.app */;
@@ -250,6 +253,7 @@
 				D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */,
 				D45D789A2DFF7B8A0067A88D /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */,
 				D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */,
+				D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D47F8FE02DF35EB300A64304 /* Products */;
@@ -694,6 +698,14 @@
 				version = 1.0.0;
 			};
 		};
+		D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.5;
+			};
+		};
 		D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/sharing-grdb";
@@ -719,6 +731,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */;
 			productName = WebViewKit;
+		};
+		D47AF4B62E25D3E30001E4D4 /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
 		};
 		D47F90102DF3600C00A64304 /* SharingGRDB */ = {
 			isa = XCSwiftPackageProductDependency;

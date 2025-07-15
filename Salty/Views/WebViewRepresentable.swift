@@ -87,6 +87,21 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
         }
     }
     
+    func getPageHTML(completion: @escaping (String?) -> Void) {
+        webView.evaluateJavaScript("document.documentElement.outerHTML") { result, error in
+            if let error = error {
+                completion(nil)
+                return
+            }
+            
+            if let html = result as? String {
+                completion(html)
+            } else {
+                completion(nil)
+            }
+        }
+    }
+    
     // MARK: - WKNavigationDelegate
     
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {

@@ -27,7 +27,7 @@ class CreateRecipeFromWebViewModel {
     var directionsText: String = ""
     
     // MARK: - Web Browser State
-    var currentURL: String = "https://github.com/smeckledorfed/Recipes-Master-List?tab=readme-ov-file#community"  // TODO: Change to sensible default
+    var currentURL: String = "about:blank "  // TODO: Change to sensible default
     var canGoBack = false
     var canGoForward = false
     var isLoading = false
@@ -106,6 +106,36 @@ class CreateRecipeFromWebViewModel {
         )
         ingredientsText = ""
         directionsText = ""
+    }
+    
+    func populateFromScannedRecipe(_ scannedRecipe: Recipe) {
+        logger.info("Populating recipe from scanned data: \(scannedRecipe.name)")
+        
+        // Update basic recipe fields
+        recipe.name = scannedRecipe.name
+        recipe.source = scannedRecipe.source
+        recipe.sourceDetails = scannedRecipe.sourceDetails
+        recipe.introduction = scannedRecipe.introduction
+        recipe.yield = scannedRecipe.yield
+        recipe.servings = scannedRecipe.servings
+        recipe.rating = scannedRecipe.rating
+        recipe.difficulty = scannedRecipe.difficulty
+        recipe.preparationTimes = scannedRecipe.preparationTimes
+        recipe.notes = scannedRecipe.notes
+        recipe.nutrition = scannedRecipe.nutrition
+        recipe.lastModifiedDate = Date()
+        
+        // Convert structured ingredients to text
+        if !scannedRecipe.ingredients.isEmpty {
+            ingredientsText = scannedRecipe.ingredients.map { $0.text }.joined(separator: "\n")
+        }
+        
+        // Convert structured directions to text
+        if !scannedRecipe.directions.isEmpty {
+            directionsText = scannedRecipe.directions.map { $0.text }.joined(separator: "\n\n")
+        }
+        
+        logger.info("Successfully populated recipe with \(scannedRecipe.ingredients.count) ingredients and \(scannedRecipe.directions.count) directions")
     }
     
     // MARK: - Text Extraction Methods

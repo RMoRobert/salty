@@ -158,29 +158,31 @@ struct RecipeWebBrowserView: View {
     var body: some View {
         VStack(spacing: 0) {
             // URL Bar and Navigation Controls
-            HStack {
+            HStack(spacing: 0) {
                 Button(action: { webView?.goBack() }) {
-                    Image(systemName: "chevron.left")
+                        Label("Sign In", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
                 }
                 .disabled(!viewModel.canGoBack)
+                .padding([.leading], 4)
                 
                 Button(action: { webView?.goForward() }) {
-                    Image(systemName: "chevron.right")
+                    Label("Sign In", systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
                 }
                 .disabled(!viewModel.canGoForward)
                 
                 Button(action: { webView?.reload() }) {
-                    Image(systemName: "arrow.clockwise")
+                    Label("Sign In", systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
                 }
                 .disabled(viewModel.isLoading)
+                .padding([.leading, .trailing], 8)
                 
                 TextField("Enter URL", text: $urlText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
-                        // Only navigate if URL is different and not currently loading
-                        if urlText != viewModel.currentURL && !viewModel.isLoading {
-                            viewModel.navigateToURL(urlText)
-                        }
+                        navigateToURL()
                     }
                     .onAppear {
                         urlText = viewModel.currentURL
@@ -188,6 +190,26 @@ struct RecipeWebBrowserView: View {
                     .onChange(of: viewModel.currentURL) { _, newURL in
                         urlText = newURL
                     }
+                
+                Button(action: { navigateToURL() }) {
+                    Label("Go", systemImage: "arrow.right")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isLoading || urlText == viewModel.currentURL)
+                .padding([.trailing], 8)
+                
+                Menu {
+                    Button("Scan Webpage for Recipe Data") {
+                        scanWebpageForRecipeData()
+                    }
+                    .disabled(viewModel.isLoading || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.isEmpty)
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                }
+                .menuStyle(.borderlessButton)
+                .padding([.trailing], 4)
                 
                 if viewModel.isLoading {
                     ProgressView()
@@ -213,6 +235,31 @@ struct RecipeWebBrowserView: View {
             )
         }
         .background(Color(.windowBackgroundColor))
+    }
+    
+    private func navigateToURL() {
+        // Only navigate if URL is different and not currently loading
+        if urlText != viewModel.currentURL && !viewModel.isLoading {
+            viewModel.navigateToURL(urlText)
+        }
+    }
+    
+    private func scanWebpageForRecipeData() {
+        guard let webView = webView else { return }
+        
+        webView.getPageHTML { html in
+            guard let html = html else { return }
+            
+            DispatchQueue.main.async {
+                let importer = SchemaOrgRecipeJSONLDImporter()
+                let recipes = importer.parseRecipes(from: html)
+                
+                if let firstRecipe = recipes.first {
+                    // Populate the viewModel with the found recipe data
+                    self.viewModel.populateFromScannedRecipe(firstRecipe)
+                }
+            }
+        }
     }
 }
 
@@ -368,6 +415,57 @@ struct RecipeWebImportEditView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                .padding(.bottom, 16)
+                
+                // Nutrition Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Nutrition Information")
+                        .font(.headline)
+                    
+                    if let nutrition = viewModel.recipe.nutrition {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let servingSize = nutrition.servingSize {
+                                Text("Serving Size: \(servingSize)")
+                                    .font(.subheadline)
+                            }
+                            
+                            if let calories = nutrition.calories {
+                                Text("Calories: \(Int(calories))")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            // Macronutrients
+                            if nutrition.protein != nil || nutrition.carbohydrates != nil || nutrition.fat != nil {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    if let protein = nutrition.protein {
+                                        Text("Protein: \(formatNutritionValue(protein))g")
+                                    }
+                                    if let carbs = nutrition.carbohydrates {
+                                        Text("Carbohydrates: \(formatNutritionValue(carbs))g")
+                                    }
+                                    if let fat = nutrition.fat {
+                                        Text("Fat: \(formatNutritionValue(fat))g")
+                                    }
+                                    if let fiber = nutrition.fiber {
+                                        Text("Fiber: \(formatNutritionValue(fiber))g")
+                                    }
+                                    if let sugar = nutrition.sugar {
+                                        Text("Sugar: \(formatNutritionValue(sugar))g")
+                                    }
+                                    if let sodium = nutrition.sodium {
+                                        Text("Sodium: \(formatNutritionValue(sodium))mg")
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            }
+                        }
+                    } else {
+                        Text("No nutrition information available")
+                            .foregroundColor(.secondary)
+                    }
+                }
                 
                 
                 
@@ -393,6 +491,14 @@ struct RecipeWebImportEditView: View {
         }
         .sheet(isPresented: $viewModel.showingNotesSheet) {
             NotesEditView(recipe: $viewModel.recipe)
+        }
+    }
+    
+    private func formatNutritionValue(_ value: Double) -> String {
+        if value == floor(value) {
+            return String(Int(value))
+        } else {
+            return String(format: "%.1f", value)
         }
     }
 }

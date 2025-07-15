@@ -45,6 +45,8 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
     var notes: [Note] = []
     @Column(as: [PreparationTime].JSONRepresentation.self)
     var preparationTimes: [PreparationTime] = []
+    @Column(as: NutritionInformation?.JSONRepresentation.self)
+    var nutrition: NutritionInformation? = nil
     
     var summary: String {
         return (
@@ -81,6 +83,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
         static let ingredients = JSONColumn(CodingKeys.ingredients)
         static let notes  = JSONColumn(CodingKeys.notes)
         static let preparationTimes = JSONColumn(CodingKeys.preparationTimes)
+        static let nutrition = JSONColumn(CodingKeys.nutrition)
     }
     
     static var databaseSelection: [any SQLSelectable] {
@@ -90,7 +93,8 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
          Columns.imageThumbnailData, Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
          Columns.yield,
          Database.json(Columns.directions), Database.json(Columns.ingredients),
-         Database.json(Columns.notes), Database.json(Columns.preparationTimes)]
+         Database.json(Columns.notes), Database.json(Columns.preparationTimes),
+         Database.json(Columns.nutrition)]
     }
 }
 
@@ -194,6 +198,28 @@ struct PreparationTime: Codable, Hashable, Equatable, Identifiable  {
     var id: String
     var type: String
     var timeString: String
+}
+
+struct NutritionInformation: Codable, Hashable, Equatable, Identifiable {
+    var id: String = UUID().uuidString
+    var servingSize: String? = nil
+    var calories: Double? = nil
+    var protein: Double? = nil // grams
+    var carbohydrates: Double? = nil // grams
+    var fat: Double? = nil // grams
+    var saturatedFat: Double? = nil // grams
+    var transFat: Double? = nil // grams
+    var fiber: Double? = nil // grams
+    var sugar: Double? = nil // grams
+    var sodium: Double? = nil // milligrams
+    var cholesterol: Double? = nil // milligrams
+    var addedSugar: Double? = nil // grams
+    var vitaminD: Double? = nil // micrograms
+    var calcium: Double? = nil // milligrams
+    var iron: Double? = nil // milligrams
+    var potassium: Double? = nil // milligrams
+    var vitaminA: Double? = nil // micrograms
+    var vitaminC: Double? = nil // milligrams
 }
 
 @Table("category")
@@ -444,12 +470,11 @@ func appDatabase() throws -> any DatabaseWriter {
         }
     }
     
-    //Example of what can do:
-//    migrator.registerMigration("Add servings column to recipes table") { db in
-//        try db.alter(table: "recipe") { t in
-//            t.add(column: "servings", .integer)
-//        }
-//    }
+    migrator.registerMigration("Add nutrition column to recipes table") { db in
+        try db.alter(table: "recipe") { t in
+            t.add(column: "nutrition", .jsonText)
+        }
+    }
     
     try migrator.migrate(database)
     
