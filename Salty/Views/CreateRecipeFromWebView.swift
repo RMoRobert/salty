@@ -498,7 +498,13 @@ struct RecipeWebImportEditView: View {
                         Text("No nutrition information available")
                             .foregroundColor(.secondary)
                     }
+                    
+                    Button("Edit Nutrition") {
+                        viewModel.showingNutritionEditSheet = true
+                    }
+                    .buttonStyle(.bordered)
                 }
+                .padding(.bottom, 16)
                 
                 
                 
@@ -524,6 +530,9 @@ struct RecipeWebImportEditView: View {
         }
         .sheet(isPresented: $viewModel.showingNotesSheet) {
             NotesEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
+            NutritionEditView(recipe: $viewModel.recipe)
         }
     }
     

@@ -37,6 +37,7 @@ class CreateRecipeFromWebViewModel {
     var showingPreparationTimesSheet = false
     var showingImageEditSheet = false
     var showingNotesSheet = false
+    var showingNutritionEditSheet = false
     var showingSaveAlert = false
     var showingCancelAlert = false
     

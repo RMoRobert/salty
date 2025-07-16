@@ -300,7 +300,7 @@ struct RecipeDetailEditDesktopView: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.vertical, 8)
                         } else {
-                            Text(parts.joined(separator: ". "))
+                            Text(parts.joined(separator: ", "))
                                 .padding(.vertical, 8)
                         }
                     } else {

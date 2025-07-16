@@ -24,7 +24,10 @@ struct CategoryEditView: View {
     
     @State private var showingEditLibraryCategoriesSheet = false
     @State private var selectedCategoryIDs: Set<String> = []
-    
+    @State private var showingNewCategoryAlert = false
+    @State private var newCategoryName = ""
+    @State private var showingDuplicateNameAlert = false
+
     var body: some View {
         List {
             ForEach(categories) { category in
@@ -41,6 +44,14 @@ struct CategoryEditView: View {
                     }
                 ))
             }
+            
+            Button(action: {
+                newCategoryName = ""
+                showingNewCategoryAlert = true
+            }) {
+                Label("Create New Category", systemImage: "plus.circle")
+            }
+            .foregroundColor(.accentColor)
         }
         .frame(minWidth: 200, minHeight: 300)
         #if os(macOS)
@@ -58,6 +69,23 @@ struct CategoryEditView: View {
 //        .padding()
         .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
             LibraryCategoriesEditView()
+        }
+        .alert("New Category", isPresented: $showingNewCategoryAlert) {
+            TextField("Category Name", text: $newCategoryName)
+            Button("Cancel", role: .cancel) {
+                newCategoryName = ""
+            }
+            Button("Add") {
+                createNewCategory()
+            }
+            .disabled(newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("Enter a name for the new category")
+        }
+        .alert("Category Already Exists", isPresented: $showingDuplicateNameAlert) {
+            Button("OK") { }
+        } message: {
+            Text("A category with the name \"\(newCategoryName)\" already exists.")
         }
         .onChange(of: showingEditLibraryCategoriesSheet) { _, isPresented in
             if !isPresented {
@@ -96,6 +124,40 @@ struct CategoryEditView: View {
                 .deleteAll(db)
         }
         selectedCategoryIDs.remove(category.id)
+    }
+    
+    private func createNewCategory() {
+        let trimmedName = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        
+        do {
+            // Check if a category with this name already exists (case-insensitive)
+            let existingCategory = try database.read { db in
+                try Category
+                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .fetchOne(db)
+            }
+            
+            if existingCategory != nil {
+                // Show duplicate name error
+                showingDuplicateNameAlert = true
+                return
+            }
+            
+            // Create the new category
+            let newCategory = Category(id: UUID().uuidString, name: trimmedName)
+            try database.write { db in
+                try newCategory.insert(db)
+                // Automatically add the new category to the current recipe
+                let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: newCategory.id)
+                try recipeCategory.insert(db)
+            }
+            selectedCategoryIDs.insert(newCategory.id)
+            newCategoryName = ""
+        } catch {
+            // Handle error - could add error alert here if needed
+            print("Error creating category: \(error)")
+        }
     }
 }
 

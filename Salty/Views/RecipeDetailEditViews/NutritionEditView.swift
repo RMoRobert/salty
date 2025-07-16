@@ -22,16 +22,30 @@ struct ValidatedTextField: View {
     }
     
     var body: some View {
+        #if !os(macOS)
+        // iOS: Use LabeledContent for HIG-compliant label display
+        LabeledContent(placeholder) {
+            HStack {
+                TextField("No Information", text: $text)
+                    .textFieldStyle(.plain)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .onChange(of: text) { _, newValue in
+                        validateNumericField(newValue)
+                    }
+                
+                if !isValid {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+            }
+        }
+        #else
+        // macOS: Keep existing HStack layout
         HStack {
             TextField(placeholder, text: $text)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                // .overlay(
-                //     RoundedRectangle(cornerRadius: 8)
-                //         .stroke(isValid ? Color.clear : Color.red, lineWidth: 2)
-                // )
-                #if os(iOS)
-                .keyboardType(.decimalPad)
-                #endif
                 .onChange(of: text) { _, newValue in
                     validateNumericField(newValue)
                 }
@@ -42,6 +56,7 @@ struct ValidatedTextField: View {
                     .font(.caption)
             }
         }
+        #endif
     }
     
     private func validateNumericField(_ text: String) {
@@ -105,16 +120,33 @@ struct NutritionEditView: View {
         !isCalciumValid || !isIronValid || !isPotassiumValid || !isVitaminAValid || !isVitaminCValid
     }
 
+    private func addColonIfMacOS(_ originalString: String) -> String {
+        #if os(macOS)
+        return originalString + ":"
+        #else
+        return originalString
+        #endif
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("General:") {
+                Section(addColonIfMacOS("General")) {
+                    #if !os(macOS)
+                    LabeledContent("Serving Size") {
+                        TextField("e.g., 1 cup, 2 slices", text: $servingSizeText)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    #else
                     TextField("Serving Size (e.g., 1 cup, 2 slices)", text: $servingSizeText)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    #endif
                     
                     ValidatedTextField("Calories", text: $caloriesText, isValid: $isCaloriesValid)
                 }
                 
-                Section("Macronutrients:") {
+                Section(addColonIfMacOS("Macronutrients")) {
                     ValidatedTextField("Protein (g)", text: $proteinText, isValid: $isProteinValid)
                     ValidatedTextField("Carbohydrates (g)", text: $carbohydratesText, isValid: $isCarbohydratesValid)
                     ValidatedTextField("Total Fat (g)", text: $fatText, isValid: $isFatValid)
@@ -125,12 +157,12 @@ struct NutritionEditView: View {
                     ValidatedTextField("Added Sugar (g)", text: $addedSugarText, isValid: $isAddedSugarValid)
                 }
                 
-                Section("Other Nutrients:") {
+                Section(addColonIfMacOS("Other Nutrients")) {
                     ValidatedTextField("Sodium (mg)", text: $sodiumText, isValid: $isSodiumValid)
                     ValidatedTextField("Cholesterol (mg)", text: $cholesterolText, isValid: $isCholesterolValid)
                 }
                 
-                Section("Vitamins & Minerals:") {
+                Section(addColonIfMacOS("Vitamins and Minerals")) {
                     ValidatedTextField("Vitamin D (μg)", text: $vitaminDText, isValid: $isVitaminDValid)
                     ValidatedTextField("Calcium (mg)", text: $calciumText, isValid: $isCalciumValid)
                     ValidatedTextField("Iron (mg)", text: $ironText, isValid: $isIronValid)
@@ -139,7 +171,9 @@ struct NutritionEditView: View {
                     ValidatedTextField("Vitamin C (mg)", text: $vitaminCText, isValid: $isVitaminCValid)
                 }
             }
+            #if os(macOS)
             .padding()
+            #endif
             .navigationTitle("Edit Nutrition Information")
             //.navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -233,10 +267,35 @@ struct NutritionEditView: View {
                         !vitaminAText.isEmpty ||
                         !vitaminCText.isEmpty
         
-        recipe.nutrition = hasAnyData ? editingNutrition : nil
+        // Create a new instance to ensure SwiftUI detects the change
+        if hasAnyData {
+            let newNutrition = NutritionInformation(
+                servingSize: editingNutrition.servingSize,
+                calories: editingNutrition.calories,
+                protein: editingNutrition.protein,
+                carbohydrates: editingNutrition.carbohydrates,
+                fat: editingNutrition.fat,
+                saturatedFat: editingNutrition.saturatedFat,
+                transFat: editingNutrition.transFat,
+                fiber: editingNutrition.fiber,
+                sugar: editingNutrition.sugar,
+                sodium: editingNutrition.sodium,
+                cholesterol: editingNutrition.cholesterol,
+                addedSugar: editingNutrition.addedSugar,
+                vitaminD: editingNutrition.vitaminD,
+                calcium: editingNutrition.calcium,
+                iron: editingNutrition.iron,
+                potassium: editingNutrition.potassium,
+                vitaminA: editingNutrition.vitaminA,
+                vitaminC: editingNutrition.vitaminC
+            )
+            recipe.nutrition = newNutrition
+        } else {
+            recipe.nutrition = nil
+        }
     }
 }
 
-//#Preview {
-//    NutritionEditView(recipe: .constant(SampleData.sampleRecipes[0]))
-//}
+#Preview {
+    NutritionEditView(recipe: .constant(SampleData.sampleRecipes[0]))
+}

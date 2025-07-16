@@ -56,9 +56,6 @@ struct RecipeDetailEditMobileView: View {
                         viewModel.showingEditCategoriesSheet.toggle()
                     }
                 }
-                .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
-                    CategoryEditView(recipe: $viewModel.recipe)
-                }
                 
                 
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
@@ -90,7 +87,6 @@ struct RecipeDetailEditMobileView: View {
                         Label("Add Ingredient", systemImage: "plus.circle.fill")
                     }
                     .labelStyle(.titleAndIcon)
-                    //.buttonStyle(.bordered)
                     
                     Spacer()
                     Menu {
@@ -112,13 +108,9 @@ struct RecipeDetailEditMobileView: View {
                         }
                     } label: {
                         Label("More", systemImage: "ellipsis")
-                            .padding([.top, .bottom], 5)
+                            .modifier(EllipsisLabelPadding())
                     }
-                    .labelStyle(.iconOnly)
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                    .padding(.trailing, -6)
+                    .modifier(EllipsisButtonModifier())
                 }
             }
             
@@ -145,7 +137,6 @@ struct RecipeDetailEditMobileView: View {
                         Label("Add Step", systemImage: "plus.circle.fill")
                     }
                     .labelStyle(.titleAndIcon)
-                    .buttonStyle(.bordered)
                     
                     Spacer()
                     
@@ -166,11 +157,10 @@ struct RecipeDetailEditMobileView: View {
                             Label("Bulk Edit", systemImage: "text.alignleft")
                         }
                     } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis")
+                            .modifier(EllipsisLabelPadding())
                     }
-                    .labelStyle(.iconOnly)
-                    .foregroundColor(.accentColor)
-                    .buttonStyle(.plain)
+                    .modifier(EllipsisButtonModifier())
                 }
             }
             
@@ -202,23 +192,8 @@ struct RecipeDetailEditMobileView: View {
                         Label("Add Time", systemImage: "plus.circle.fill")
                     }
                     .labelStyle(.titleAndIcon)
-                    .buttonStyle(.bordered)
                     
                     Spacer()
-                    
-                    Menu {
-                        Button(action: {
-                            // TODO: Implement bulk edit
-                        }) {
-                            Label("Bulk Edit", systemImage: "text.alignleft")
-                        }
-                        .disabled(true)
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                    }
-                    .labelStyle(.iconOnly)
-                    .foregroundColor(.accentColor)
-                    .buttonStyle(.plain)
                 }
             }
             
@@ -251,25 +226,49 @@ struct RecipeDetailEditMobileView: View {
                         Label("Add Note", systemImage: "plus.circle.fill")
                     }
                     .labelStyle(.titleAndIcon)
-                    .buttonStyle(.bordered)
                     
                     Spacer()
-                    
-                    Menu {
-                        Button(action: {
-                            // TODO: Implement bulk edit
-                        }) {
-                            Label("Bulk Edit", systemImage: "text.alignleft")
-                        }
-                        .disabled(true)
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                    }
-                    .labelStyle(.iconOnly)
-                    .foregroundColor(.accentColor)
-                    .buttonStyle(.plain)
                 }
             }
+            
+            Section("Nutrition Information:") {
+                
+                if let nutrition = viewModel.recipe.nutrition {
+                    let parts = [
+                        nutrition.servingSize.map { "Serving Size: \($0)" },
+                        nutrition.calories.map { "Calories: \($0.formatted())" },
+                        nutrition.fat.map { "Total fat: \($0.formatted())g" },
+                        nutrition.saturatedFat.map { "Saturated Fat: \($0.formatted())g" },
+                        nutrition.transFat.map { "Trans Fat: \($0.formatted())g" },
+                        nutrition.cholesterol.map { "Cholesterol: \($0.formatted())mg" },
+                        nutrition.sodium.map { "Sodium: \($0.formatted())mg" },
+                        nutrition.carbohydrates.map { "Total Carbs: \($0.formatted())g" },
+                        nutrition.fiber.map { "Fiber: \($0.formatted())g" },
+                        nutrition.sugar.map { "Sugars: \($0.formatted())g" },
+                        nutrition.protein.map { "Protein: \($0.formatted())g" }
+                    ].compactMap { $0 }
+                    
+                    if parts.isEmpty {
+                        Button("Add Nutrition Info", systemImage: "plus.circle.fill") {
+                            viewModel.showingNutritionEditSheet.toggle()
+                        }
+                    }
+                    else {
+                        Text(parts.joined(separator: ", "))
+                            .padding(.vertical, 8)
+                            .font(.caption)
+                        Button("Edit Nutrition Info", systemImage: "pencil") {
+                            viewModel.showingNutritionEditSheet.toggle()
+                        }
+                    }
+                }
+                else {
+                    Button("Add Nutrition Info", systemImage: "plus.circle.fill") {
+                        viewModel.showingNutritionEditSheet.toggle()
+                    }
+                }
+            }
+            
             
             Section("Photo") {
                 RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
@@ -282,14 +281,13 @@ struct RecipeDetailEditMobileView: View {
         #endif
         .toolbar {
             ToolbarItemGroup {
-                Button("Cancel") {
+                Button("Cancel", role: .cancel) {
                     if viewModel.hasUnsavedChanges {
                         viewModel.showingCancelAlert = true
                     } else {
                         dismiss()
                     }
                 }
-                .buttonStyle(.bordered)
                 .foregroundColor(.secondary)
                 
                 Button("Save") {
@@ -316,6 +314,12 @@ struct RecipeDetailEditMobileView: View {
         .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
             RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
         }
+        .sheet(isPresented: $viewModel.showingEditCategoriesSheet) {
+            CategoryEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
+            NutritionEditView(recipe: $viewModel.recipe)
+        }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -324,6 +328,25 @@ struct RecipeDetailEditMobileView: View {
             }
             return .ignored
         }
+    }
+}
+
+
+struct EllipsisButtonModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .labelStyle(.iconOnly)
+            .controlSize(.small)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .padding(.trailing, -6)
+    }
+}
+
+struct EllipsisLabelPadding: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding([.top, .bottom], 5)
     }
 }
 
