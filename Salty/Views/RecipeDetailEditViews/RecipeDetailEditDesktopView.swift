@@ -10,7 +10,6 @@
 
 import SwiftUI
 
-// TODO: Make iOS-specific view based on Form instead, keep this tuned for Mac?
 struct RecipeDetailEditDesktopView: View {
     @Environment(\.dismiss) var dismiss
     @State private var viewModel: RecipeDetailEditViewModel
@@ -268,8 +267,54 @@ struct RecipeDetailEditDesktopView: View {
                     NotesEditView(recipe: $viewModel.recipe)
                 }
                 
-                // Photo
+    
+                // Nutrition Information Section
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("Nutrition Information:")
+                            .modifier(TitleStyle())
+                        Spacer()
+                        Button("Edit Nutrition Info") {
+                            viewModel.showingNutritionEditSheet.toggle()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    
+                    if let nutrition = viewModel.recipe.nutrition {
+                        let parts = [
+                            nutrition.servingSize.map { "Serving Size: \($0)" },
+                            nutrition.calories.map { "Calories: \($0.formatted())" },
+                            nutrition.fat.map { "Total fat: \($0.formatted())g" },
+                            nutrition.saturatedFat.map { "Saturated Fat: \($0.formatted())g" },
+                            nutrition.transFat.map { "Trans Fat: \($0.formatted())g" },
+                            nutrition.cholesterol.map { "Cholesterol: \($0.formatted())mg" },
+                            nutrition.sodium.map { "Sodium: \($0.formatted())mg" },
+                            nutrition.carbohydrates.map { "Total Carbs: \($0.formatted())g" },
+                            nutrition.fiber.map { "Fiber: \($0.formatted())g" },
+                            nutrition.sugar.map { "Sugars: \($0.formatted())g" },
+                            nutrition.protein.map { "Protein: \($0.formatted())g" }
+                        ].compactMap { $0 }
+                        
+                        if parts.isEmpty {
+                            Text("No nutrition values entered")
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 8)
+                        } else {
+                            Text(parts.joined(separator: ". "))
+                                .padding(.vertical, 8)
+                        }
+                    } else {
+                        Text("No nutrition information added")
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                    }
+                }
+                .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
+                    NutritionEditView(recipe: $viewModel.recipe)
+                }
                 
+                    
+                // Photo
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Photo:")
                         .modifier(TitleStyle())

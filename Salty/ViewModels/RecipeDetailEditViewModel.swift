@@ -34,6 +34,7 @@ class RecipeDetailEditViewModel {
     var showingBulkEditDirectionsSheet = false
     var showingEditPreparationTimes = false
     var showingEditNotesSheet = false
+    var showingNutritionEditSheet = false
     var showingCancelAlert = false
     
     // MARK: - Computed Properties
