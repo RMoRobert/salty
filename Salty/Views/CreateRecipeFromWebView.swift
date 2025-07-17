@@ -400,6 +400,18 @@ struct RecipeWebImportEditView: View {
                 }
                 .padding(.bottom, 16)
                 
+                // Courses Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Courses")
+                        .font(.headline)
+                    
+                    Button("Edit Courses") {
+                        viewModel.showingCoursesSheet = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.bottom, 16)
+                
                 // Preparation Times Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Preparation Times")
@@ -524,6 +536,9 @@ struct RecipeWebImportEditView: View {
         .background(Color(.controlBackgroundColor))
         .sheet(isPresented: $viewModel.showingCategoriesSheet) {
             CategoryEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingCoursesSheet) {
+            CourseEditView(recipe: $viewModel.recipe)
         }
                 .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
             PreparationTimesEditView(recipe: $viewModel.recipe)

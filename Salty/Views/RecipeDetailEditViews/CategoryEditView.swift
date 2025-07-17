@@ -19,43 +19,90 @@ import SharingGRDB
 struct CategoryEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
+    @Environment(\.dismiss) private var dismiss
     
     @FetchAll(Category.order(by: \.name)) private var categories
     
     @State private var showingEditLibraryCategoriesSheet = false
     @State private var selectedCategoryIDs: Set<String> = []
+    @State private var originalSelectedCategoryIDs: Set<String> = []
     @State private var showingNewCategoryAlert = false
     @State private var newCategoryName = ""
     @State private var showingDuplicateNameAlert = false
 
     var body: some View {
-        List {
-            ForEach(categories) { category in
-                Toggle(category.name, isOn: Binding<Bool> (
-                    get: {
-                        selectedCategoryIDs.contains(category.id)
-                    },
-                    set: { newVal in
-                        if newVal {
-                            addCategory(category)
-                        } else {
-                            removeCategory(category)
+        VStack {
+            List {
+                ForEach(categories) { category in
+                    Toggle(category.name, isOn: Binding<Bool> (
+                        get: {
+                            selectedCategoryIDs.contains(category.id)
+                        },
+                        set: { newVal in
+                            if newVal {
+                                selectedCategoryIDs.insert(category.id)
+                            } else {
+                                selectedCategoryIDs.remove(category.id)
+                            }
                         }
-                    }
-                ))
+                    ))
+                }
+                
+                Button(action: {
+                    newCategoryName = ""
+                    showingNewCategoryAlert = true
+                }) {
+                    Label("Create New Category", systemImage: "plus.circle")
+                }
+                .foregroundColor(.accentColor)
             }
+#if os(macOS)
+.frame(minWidth: 300, minHeight: 400)
+#else
+.frame(minWidth: 200, minHeight: 300)
+#endif
             
-            Button(action: {
-                newCategoryName = ""
-                showingNewCategoryAlert = true
-            }) {
-                Label("Create New Category", systemImage: "plus.circle")
+            #if os(macOS)
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+                
+                Spacer()
+                
+                Button("Save") {
+                    saveChanges()
+                    dismiss()
+                }
+                .keyboardShortcut(.return)
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
             }
-            .foregroundColor(.accentColor)
+            .padding(.top, 4).padding(.bottom, 12)
+            #endif
         }
-        .frame(minWidth: 200, minHeight: 300)
         #if os(macOS)
         .padding([.top, .leading, .trailing])
+        #endif
+        #if !os(macOS)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+            }
+            
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    saveChanges()
+                    dismiss()
+                }
+                .keyboardShortcut(.return)
+                .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
+            }
+        }
         #endif
         .onAppear {
             loadSelectedCategories()
@@ -63,10 +110,6 @@ struct CategoryEditView: View {
         .onChange(of: categories) { _, _ in
             loadSelectedCategories()
         }
-//        Button("Edit…") {
-//            showingEditLibraryCategoriesSheet.toggle()
-//        }
-//        .padding()
         .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
             LibraryCategoriesEditView()
         }
@@ -104,26 +147,34 @@ struct CategoryEditView: View {
                     .map { $0.categoryId }
             }
             selectedCategoryIDs = Set(selectedIDs)
+            originalSelectedCategoryIDs = Set(selectedIDs)
         } catch {
             selectedCategoryIDs = []
+            originalSelectedCategoryIDs = []
         }
     }
     
-    private func addCategory(_ category: Category) {
-        try? database.write { db in
-            let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: category.id)
-            try recipeCategory.insert(db)
+    private func saveChanges() {
+        do {
+            try database.write { db in
+                // Remove categories that are no longer selected
+                let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
+                for categoryId in categoriesToRemove {
+                    try RecipeCategory
+                        .filter(Column("recipeId") == recipe.id && Column("categoryId") == categoryId)
+                        .deleteAll(db)
+                }
+                
+                // Add newly selected categories
+                let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
+                for categoryId in categoriesToAdd {
+                    let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: categoryId)
+                    try recipeCategory.insert(db)
+                }
+            }
+        } catch {
+            print("Error saving category changes: \(error)")
         }
-        selectedCategoryIDs.insert(category.id)
-    }
-    
-    private func removeCategory(_ category: Category) {
-        let _ = try? database.write { db in
-            try RecipeCategory
-                .filter(Column("recipeId") == recipe.id && Column("categoryId") == category.id)
-                .deleteAll(db)
-        }
-        selectedCategoryIDs.remove(category.id)
     }
     
     private func createNewCategory() {
@@ -148,10 +199,9 @@ struct CategoryEditView: View {
             let newCategory = Category(id: UUID().uuidString, name: trimmedName)
             try database.write { db in
                 try newCategory.insert(db)
-                // Automatically add the new category to the current recipe
-                let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: newCategory.id)
-                try recipeCategory.insert(db)
             }
+            
+            // Add to selected categories (but don't save to database yet)
             selectedCategoryIDs.insert(newCategory.id)
             newCategoryName = ""
         } catch {

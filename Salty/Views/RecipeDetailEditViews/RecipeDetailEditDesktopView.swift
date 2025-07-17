@@ -42,6 +42,14 @@ struct RecipeDetailEditDesktopView: View {
                             Spacer()
                             Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                             Spacer()
+                            Button("Edit Course") {
+                                viewModel.showingEditCoursesSheet.toggle()
+                            }
+                            .popover(isPresented: $viewModel.showingEditCoursesSheet) {
+                                CourseEditView(recipe: $viewModel.recipe)
+                            }
+                            
+                            Spacer()
                             Button("Edit Categories") {
                                 viewModel.showingEditCategoriesSheet.toggle()
                             }

@@ -10,7 +10,6 @@ import SwiftUI
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
-    @AppStorage("mobileEditViews") private var useMobileEditViews = false
     @Environment(\.openWindow) private var openWindow
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -247,13 +246,8 @@ struct RecipeNavigationSplitView: View {
                 let isNewRecipe = viewModel.isDraftRecipe(viewModel.recipeToEditID)
                 NavigationStack {
                     #if os(macOS)
-                    if useMobileEditViews {
-                        RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
-                            .frame(minWidth: 600, minHeight: 500)
-                    } else {
-                        RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
-                            .frame(minWidth: 600, minHeight: 500)
-                    }
+                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
+                        .frame(minWidth: 600, minHeight: 500)
                     #else
                     RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
                     #endif

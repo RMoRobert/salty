@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D40919F62E2763A20009F83B /* TagKit in Frameworks */ = {isa = PBXBuildFile; productRef = D40919F52E2763A20009F83B /* TagKit */; };
 		D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78962DFF646A0067A88D /* SwiftHtml */; };
 		D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */ = {isa = PBXBuildFile; productRef = D45D789B2DFF7B8A0067A88D /* Flow */; };
 		D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78A02DFF7E950067A88D /* WebViewKit */; };
@@ -86,6 +87,7 @@
 				D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */,
 				D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */,
 				D47F90112DF3600C00A64304 /* SharingGRDB in Frameworks */,
+				D40919F62E2763A20009F83B /* TagKit in Frameworks */,
 				D47F90132DF3600C00A64304 /* SharingGRDBCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -165,6 +167,7 @@
 				D45D789B2DFF7B8A0067A88D /* Flow */,
 				D45D78A02DFF7E950067A88D /* WebViewKit */,
 				D47AF4B62E25D3E30001E4D4 /* SwiftSoup */,
+				D40919F52E2763A20009F83B /* TagKit */,
 			);
 			productName = Salty;
 			productReference = D47F8FDF2DF35EB300A64304 /* Salty.app */;
@@ -254,6 +257,7 @@
 				D45D789A2DFF7B8A0067A88D /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */,
 				D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */,
 				D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
+				D40919F42E2763A20009F83B /* XCRemoteSwiftPackageReference "TagKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D47F8FE02DF35EB300A64304 /* Products */;
@@ -674,6 +678,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D40919F42E2763A20009F83B /* XCRemoteSwiftPackageReference "TagKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/danielsaidi/TagKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.0;
+			};
+		};
 		D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/BinaryBirds/swift-html";
@@ -717,6 +729,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D40919F52E2763A20009F83B /* TagKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D40919F42E2763A20009F83B /* XCRemoteSwiftPackageReference "TagKit" */;
+			productName = TagKit;
+		};
 		D45D78962DFF646A0067A88D /* SwiftHtml */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */;

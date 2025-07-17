@@ -50,12 +50,21 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
+                    Text("Course")
+                    Spacer()
+                    Button("Select Courses") {
+                        viewModel.showingEditCoursesSheet.toggle()
+                    }
+                }
+                
+                HStack {
                     Text("Categories")
                     Spacer()
                     Button("Select Categories") {
                         viewModel.showingEditCategoriesSheet.toggle()
                     }
                 }
+                
                 
                 
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
@@ -274,7 +283,7 @@ struct RecipeDetailEditMobileView: View {
                 RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
             }
         }
-        #if !os(macOS)
+#if !os(macOS)
         .environment(\.editMode, .constant(.active))
         .navigationTitle("Edit Recipe")
         .navigationBarTitleDisplayMode(.inline)
@@ -315,7 +324,22 @@ struct RecipeDetailEditMobileView: View {
             RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
         }
         .sheet(isPresented: $viewModel.showingEditCategoriesSheet) {
-            CategoryEditView(recipe: $viewModel.recipe)
+            NavigationStack {
+                CategoryEditView(recipe: $viewModel.recipe)
+                    .navigationTitle("Select Categories")
+#if !os(macOS)
+                    .navigationBarTitleDisplayMode(.inline)
+#endif
+            }
+        }
+        .sheet(isPresented: $viewModel.showingEditCoursesSheet) {
+            NavigationStack {
+                CourseEditView(recipe: $viewModel.recipe)
+                    .navigationTitle("Select Courses")
+#if !os(macOS)
+                    .navigationBarTitleDisplayMode(.inline)
+#endif
+            }
         }
         .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
             NutritionEditView(recipe: $viewModel.recipe)

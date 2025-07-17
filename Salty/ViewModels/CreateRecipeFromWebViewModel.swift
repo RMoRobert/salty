@@ -34,6 +34,7 @@ class CreateRecipeFromWebViewModel {
     
     // MARK: - UI State
     var showingCategoriesSheet = false
+    var showingCoursesSheet = false
     var showingPreparationTimesSheet = false
     var showingImageEditSheet = false
     var showingNotesSheet = false

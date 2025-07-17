@@ -46,7 +46,8 @@ struct RecipeParser {
             if lowercased.contains("ingredients") || 
                lowercased.contains("directions") ||
                lowercased.contains("instructions") ||
-               lowercased.contains("prep time") ||
+                lowercased.contains("prep time") ||
+                lowercased.contains("preparation time") ||
                lowercased.contains("cook time") ||
                lowercased.contains("servings") ||
                lowercased.contains("yield") {

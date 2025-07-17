@@ -99,7 +99,7 @@ class SchemaOrgRecipeJSONLDImporter {
         
         logger.info("Parsing Recipe from JSON-LD")
         
-        var recipe = Recipe(
+        let recipe = Recipe(
             id: UUID().uuidString,
             name: extractString(from: dict, key: "name") ?? "",
             createdDate: Date(),

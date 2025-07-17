@@ -73,7 +73,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         case .htmlResource(let filename):
             // Load HTML from bundle resource
             if let htmlPath = Bundle.main.path(forResource: filename, ofType: "html"),
-               let htmlContent = try? String(contentsOfFile: htmlPath) {
+               let htmlContent = try? String(contentsOfFile: htmlPath, encoding: .utf8) {
                 nsView.loadHTMLString(htmlContent, baseURL: Bundle.main.bundleURL)
                 // Force navigation state update for HTML content since delegate methods may not fire
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -118,7 +118,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
     
     func getSelectedText(completion: @escaping (String?) -> Void) {
         webView.evaluateJavaScript("window.getSelection().toString()") { result, error in
-            if let error = error {
+            if error != nil {
                 completion(nil)
                 return
             }
@@ -133,7 +133,7 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
     
     func getPageHTML(completion: @escaping (String?) -> Void) {
         webView.evaluateJavaScript("document.documentElement.outerHTML") { result, error in
-            if let error = error {
+            if error != nil {
                 completion(nil)
                 return
             }

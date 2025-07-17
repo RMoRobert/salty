@@ -47,6 +47,8 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
     var preparationTimes: [PreparationTime] = []
     @Column(as: NutritionInformation?.JSONRepresentation.self)
     var nutrition: NutritionInformation? = nil
+    @Column(as: [String].JSONRepresentation.self)
+    var tags: [String] = []
     
     var summary: String {
         return (
@@ -84,6 +86,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
         static let notes  = JSONColumn(CodingKeys.notes)
         static let preparationTimes = JSONColumn(CodingKeys.preparationTimes)
         static let nutrition = JSONColumn(CodingKeys.nutrition)
+        static let tags = JSONColumn(CodingKeys.tags)
     }
     
     static var databaseSelection: [any SQLSelectable] {
@@ -94,7 +97,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
          Columns.yield,
          Database.json(Columns.directions), Database.json(Columns.ingredients),
          Database.json(Columns.notes), Database.json(Columns.preparationTimes),
-         Database.json(Columns.nutrition)]
+         Database.json(Columns.nutrition), Database.json(Columns.tags)]
     }
 }
 
@@ -241,25 +244,6 @@ extension Category: FetchableRecord, PersistableRecord  {
     }
 }
 
-@Table("tag")
-struct Tag: Hashable, Identifiable, Codable, Equatable  {
-    var id: String
-    var name: String
-}
-
-extension Tag: FetchableRecord, PersistableRecord {
-    enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.id, Columns.name]
-    }
-}
-
-
-
 
 enum Difficulty: Int, Codable, CaseIterable, QueryBindable {
     case notSet = 0,  easy, somewhatEasy, medium, slightlyDifficult, difficult
@@ -369,22 +353,6 @@ struct RecipeCategory:  Codable, Hashable, Equatable, PersistableRecord, Fetchab
     }
 }
 
-@Table("recipeTag")
-struct RecipeTag: Codable, Hashable, Equatable, PersistableRecord, FetchableRecord {
-    var recipeId: String
-    var tagId: String
-    
-    enum Columns {
-        static let recipeId = Column(CodingKeys.recipeId)
-        static let tagId = Column(CodingKeys.tagId)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.recipeId, Columns.tagId]
-    }
-}
-
-
 
 // DatabaseWriter code, migrations, etc:
 
@@ -449,10 +417,6 @@ func appDatabase() throws -> any DatabaseWriter {
             t.primaryKey("id", .text)
             t.column("name", .text)
         }
-        try db.create(table: "tag") { t in
-            t.primaryKey("id", .text)
-            t.column("name", .text)
-        }
         try db.create(table: "recipeCourse") { t in
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("courseId", .text).notNull().indexed().references("course", onDelete: .cascade)
@@ -463,16 +427,49 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
             t.primaryKey(["recipeId", "categoryId"])
         }
-        try db.create(table: "recipeTag") { t in
-            t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
-            t.column("tagId", .text).notNull().indexed().references("tag", onDelete: .cascade)
-            t.primaryKey(["recipeId", "tagId"])
-        }
     }
     
     migrator.registerMigration("Add nutrition column to recipes table") { db in
         try db.alter(table: "recipe") { t in
             t.add(column: "nutrition", .jsonText)
+        }
+    }
+    
+    migrator.registerMigration("Add tags column to recipes table") { db in
+        try db.alter(table: "recipe") { t in
+            t.add(column: "tags", .jsonText)
+        }
+        try db.drop(table: "tag")
+        try db.drop(table: "recipeTag")
+    }
+    
+    migrator.registerMigration("Populate default categories and courses") { db in
+        // Add default categories if they don't exist
+        let defaultCategories = [
+            "Breakfast", "Quick", "Vegetarian", "Vegan", "Beverage", "Burger", "Soup", "Pasta",
+            "Gluten-Free", "Holiday"
+        ]
+        
+        for categoryName in defaultCategories {
+            let existingCategory = try Category.filter(Column("name") == categoryName).fetchOne(db)
+            if existingCategory == nil {
+                let category = Category(id: UUID().uuidString, name: categoryName)
+                try category.insert(db)
+            }
+        }
+        
+        // Add default courses if they don't exist
+        let defaultCourses = [
+            "Appetizer", "Main", "Dessert", "Snack", "Salad", "Fruit", "Cheese", "Vegetable",
+            "Side Dish", "Bread", "Sauce", "Beverage"
+        ]
+        
+        for courseName in defaultCourses {
+            let existingCourse = try Course.filter(Column("name") == courseName).fetchOne(db)
+            if existingCourse == nil {
+                let course = Course(id: UUID().uuidString, name: courseName)
+                try course.insert(db)
+            }
         }
     }
     
@@ -499,9 +496,6 @@ extension Database {
             }
             for course in SampleData.sampleCourses {
                 course
-            }
-            for tag in SampleData.sampleTags {
-                tag
             }
 
             for recipe in SampleData.sampleRecipes {

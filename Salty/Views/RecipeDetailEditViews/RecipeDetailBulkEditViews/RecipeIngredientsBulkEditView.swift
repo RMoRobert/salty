@@ -13,6 +13,7 @@ struct RecipeIngredientsBulkEditView: View {
     @State private var showingHelp = false
     @State private var textContent: String = ""
     @State private var hasChanges: Bool = false
+    @AppStorage("monospacedBulkEditFont") private var monospacedBulkEditFont = false
     
     var body: some View {
         NavigationStack {
@@ -23,7 +24,7 @@ struct RecipeIngredientsBulkEditView: View {
                 
                 TextEditor(text: $textContent)
                     .border(Color.secondary.opacity(0.50))
-                    .font(.system(.body, design: .monospaced))
+                    .font(monospacedBulkEditFont ? .system(.body, design: .monospaced) : .body)
                     .onChange(of: textContent) { _, _ in
                         hasChanges = true
                     }
@@ -32,17 +33,19 @@ struct RecipeIngredientsBulkEditView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .buttonStyle(.bordered)
+                    .padding([.trailing])
                     
                     Button("Clean Up") {
                         cleanUpText()
                     }
-                    .buttonStyle(.bordered)
                     .disabled(textContent.isEmpty)
+                    .padding([.leading, .trailing])
                     
                     Button("Help", systemImage: "questionmark.circle") {
                         showingHelp = true
                     }
+                    .padding([.trailing])
+                    .controlSize(.small)
                     .labelStyle(.iconOnly)
                     .alert("How to Use Editor", isPresented: $showingHelp) {
                         Button("OK", role: .cancel) {}
@@ -57,6 +60,7 @@ struct RecipeIngredientsBulkEditView: View {
                         saveIngredients()
                         dismiss()
                     }
+                    .padding([.leading])
                     .buttonStyle(.borderedProminent)
                     .disabled(!hasChanges)
                 }

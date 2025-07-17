@@ -1,5 +1,5 @@
 {
-  "originHash" : "78f022f4f60e9adec274b79101a74e7f5c453c4ab20a34e6b77c3bf441445e73",
+  "originHash" : "0ad60b798aa4c9c1b6b663957a88c0946ae06059292f61b88d15e2bdcf9b32f8",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -161,6 +161,15 @@
       "state" : {
         "revision" : "6dc1e0b452432976c27221d28de136fbb6cee56a",
         "version" : "3.1.0"
+      }
+    },
+    {
+      "identity" : "tagkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/danielsaidi/TagKit.git",
+      "state" : {
+        "revision" : "b559c4af835cb3a74a154fec104c417f57066a9e",
+        "version" : "0.5.0"
       }
     },
     {

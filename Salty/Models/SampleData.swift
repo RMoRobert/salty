@@ -118,22 +118,38 @@ struct SampleData {
     
     static let sampleCategories = [
         Category(id: UUID().uuidString, name: "Breakfast"),
-        Category(id: UUID().uuidString, name: "Lunch"),
-        Category(id: UUID().uuidString, name: "Dinner"),
-        Category(id: UUID().uuidString, name: "Dessert")
+        Category(id: UUID().uuidString, name: "Quick"),
+        Category(id: UUID().uuidString, name: "Vegetarian"),
+        Category(id: UUID().uuidString, name: "Vegan"),
+        Category(id: UUID().uuidString, name: "Beverage"),
+        Category(id: UUID().uuidString, name: "Burger"),
+        Category(id: UUID().uuidString, name: "Soup"),
+        Category(id: UUID().uuidString, name: "Pasta"),
+        Category(id: UUID().uuidString, name: "Gluten-Free"),
+        Category(id: UUID().uuidString, name: "Dairy-Free"),
+        Category(id: UUID().uuidString, name: "Low-Carb"),
+        Category(id: UUID().uuidString, name: "Slow Cooker"),
+        Category(id: UUID().uuidString, name: "Instant Pot"),
+        Category(id: UUID().uuidString, name: "No-Cook"),
+        Category(id: UUID().uuidString, name: "Kid-Friendly"),
+        Category(id: UUID().uuidString, name: "Holiday"),
+        Category(id: UUID().uuidString, name: "Comfort Food")
     ]
     
     // MARK: - Sample Courses
     
     static let sampleCourses = [
+        Course(id: UUID().uuidString, name: "Appetizer"),
         Course(id: UUID().uuidString, name: "Main"),
-        Course(id: UUID().uuidString, name: "Dessert")
-    ]
-    
-    // MARK: - Sample Tags
-    
-    static let sampleTags = [
-        Tag(id: UUID().uuidString, name: "easy"),
-        Tag(id: UUID().uuidString, name: "vegan")
+        Course(id: UUID().uuidString, name: "Dessert"),
+        Course(id: UUID().uuidString, name: "Snack"),
+        Course(id: UUID().uuidString, name: "Salad"),
+        Course(id: UUID().uuidString, name: "Fruit"),
+        Course(id: UUID().uuidString, name: "Cheese"),
+        Course(id: UUID().uuidString, name: "Vegetable"),
+        Course(id: UUID().uuidString, name: "Side Dish"),
+        Course(id: UUID().uuidString, name: "Bread/Starch"),
+        Course(id: UUID().uuidString, name: "Sauce/Condiment"),
+        Course(id: UUID().uuidString, name: "Beverage")
     ]
 } 

@@ -173,9 +173,10 @@ struct NutritionEditView: View {
             }
             #if os(macOS)
             .padding()
+            #else
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .navigationTitle("Edit Nutrition Information")
-            //.navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
