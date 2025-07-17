@@ -28,7 +28,7 @@ class RecipeDetailEditViewModel {
     // MARK: - Sheet States
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
     var showingEditCategoriesSheet = false
-    var showingEditCoursesSheet = false
+    var showingEditCourseSheet = false
     var showingEditIngredientsSheet = false
     var showingBulkEditIngredientsSheet = false
     var showingEditDirectionsSheet = false

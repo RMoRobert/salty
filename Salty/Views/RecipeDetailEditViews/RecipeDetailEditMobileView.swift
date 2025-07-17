@@ -52,8 +52,8 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Text("Course")
                     Spacer()
-                    Button("Select Courses") {
-                        viewModel.showingEditCoursesSheet.toggle()
+                    Button("Select Course") {
+                        viewModel.showingEditCourseSheet.toggle()
                     }
                 }
                 
@@ -332,10 +332,10 @@ struct RecipeDetailEditMobileView: View {
 #endif
             }
         }
-        .sheet(isPresented: $viewModel.showingEditCoursesSheet) {
+        .sheet(isPresented: $viewModel.showingEditCourseSheet) {
             NavigationStack {
                 CourseEditView(recipe: $viewModel.recipe)
-                    .navigationTitle("Select Courses")
+                    .navigationTitle("Select Course")
 #if !os(macOS)
                     .navigationBarTitleDisplayMode(.inline)
 #endif

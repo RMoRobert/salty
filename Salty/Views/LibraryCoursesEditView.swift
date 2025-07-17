@@ -138,32 +138,41 @@ struct LibraryCourseEditView: View {
     }
     
     var body: some View {
-        Form {
-            Section("Course Details") {
-                TextField("Course Name", text: $courseName)
+        VStack(spacing: 20) {
+            Text(isNewCourse ? "New Course" : "Edit Course")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Name")
+                    .font(.headline)
+                
+                TextField("Course name", text: $courseName)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
                     .onSubmit {
                         saveCourse()
                     }
             }
-        }
-        .navigationTitle(isNewCourse ? "New Course" : "Edit Course")
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    onSave() // Navigate back without saving
-                }
-            }
             
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
+            Spacer()
+            
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    onSave() // This will navigate back
+                }
+                .keyboardShortcut(.escape)
+                
+                Button(isNewCourse ? "Create" : "Save") {
                     saveCourse()
                 }
+                .keyboardShortcut(.return)
                 .disabled(courseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.borderedProminent)
             }
         }
         .padding()
         .frame(minWidth: 300, minHeight: 200)
+        .navigationTitle(isNewCourse ? "New Course" : "Edit Course")
     }
     
     private func saveCourse() {

@@ -37,6 +37,7 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
     var wantToMake: Bool = false
     var yield: String = ""
     var servings: Int?
+    var courseId: String?
     @Column(as: [Direction].JSONRepresentation.self)
     var directions: [Direction] = []
     @Column(as: [Ingredient].JSONRepresentation.self)
@@ -81,6 +82,8 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
         static let isFavorite = Column(CodingKeys.isFavorite)
         static let wantToMake = Column(CodingKeys.wantToMake)
         static let yield = Column(CodingKeys.yield)
+        static let servings = Column(CodingKeys.servings)
+        static let courseId = Column(CodingKeys.courseId)
         static let directions = JSONColumn(CodingKeys.directions)
         static let ingredients = JSONColumn(CodingKeys.ingredients)
         static let notes  = JSONColumn(CodingKeys.notes)
@@ -94,7 +97,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
          Columns.source, Columns.sourceDetails, Columns.introduction,
          Columns.difficulty, Columns.rating, Columns.imageFilename,
          Columns.imageThumbnailData, Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
-         Columns.yield,
+         Columns.yield, Columns.servings, Columns.courseId,
          Database.json(Columns.directions), Database.json(Columns.ingredients),
          Database.json(Columns.notes), Database.json(Columns.preparationTimes),
          Database.json(Columns.nutrition), Database.json(Columns.tags)]
@@ -323,21 +326,6 @@ enum Rating: Int, CaseIterable, Identifiable, Codable, QueryBindable {
 
 // Junction tables
 
-@Table("recipeCourse")
-struct RecipeCourse:  Codable, Hashable, Equatable, PersistableRecord, FetchableRecord {
-    var recipeId: String
-    var courseId: String
-    
-    enum Columns {
-        static let recipeId = Column(CodingKeys.recipeId)
-        static let courseId = Column(CodingKeys.courseId)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.recipeId, Columns.courseId]
-    }
-}
-
 @Table("recipeCategory")
 struct RecipeCategory:  Codable, Hashable, Equatable, PersistableRecord, FetchableRecord {
     var recipeId: String
@@ -404,10 +392,13 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("wantToMake", .boolean)
             t.column("yield", .text)
             t.column("servings", .integer)
+            t.column("courseId", .text).references("course", onDelete: .setNull)
             t.column("directions", .jsonText)
             t.column("ingredients", .jsonText)
             t.column("notes", .jsonText)
             t.column("preparationTimes", .jsonText)
+            t.column("tags", .jsonText)
+            t.column("nutrition", .jsonText)
         }
         try db.create(table: "course") { t in
             t.primaryKey("id", .text)
@@ -417,11 +408,6 @@ func appDatabase() throws -> any DatabaseWriter {
             t.primaryKey("id", .text)
             t.column("name", .text)
         }
-        try db.create(table: "recipeCourse") { t in
-            t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
-            t.column("courseId", .text).notNull().indexed().references("course", onDelete: .cascade)
-            t.primaryKey(["recipeId", "courseId"])
-        }
         try db.create(table: "recipeCategory") { t in
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
@@ -429,25 +415,10 @@ func appDatabase() throws -> any DatabaseWriter {
         }
     }
     
-    migrator.registerMigration("Add nutrition column to recipes table") { db in
-        try db.alter(table: "recipe") { t in
-            t.add(column: "nutrition", .jsonText)
-        }
-    }
-    
-    migrator.registerMigration("Add tags column to recipes table") { db in
-        try db.alter(table: "recipe") { t in
-            t.add(column: "tags", .jsonText)
-        }
-        try db.drop(table: "tag")
-        try db.drop(table: "recipeTag")
-    }
-    
     migrator.registerMigration("Populate default categories and courses") { db in
         // Add default categories if they don't exist
         let defaultCategories = [
-            "Breakfast", "Quick", "Vegetarian", "Vegan", "Beverage", "Burger", "Soup", "Pasta",
-            "Gluten-Free", "Holiday"
+            "Breakfast", "Quick", "Vegetarian", "Vegan", "Beverage", "Burger", "Soup", "Pasta", "Holiday"
         ]
         
         for categoryName in defaultCategories {
@@ -471,6 +442,16 @@ func appDatabase() throws -> any DatabaseWriter {
                 try course.insert(db)
             }
         }
+    }
+    // TODO: Merge all these changes into initial migration before 1.0 release?
+    migrator.registerMigration("Convert to single course per recipe") { db in
+        // Add courseId column to recipe table
+        try db.alter(table: "recipe") { t in
+            t.add(column: "courseId", .text).references("course", onDelete: .setNull)
+        }
+          
+        // Drop the recipeCourse junction table
+        try db.drop(table: "recipeCourse")
     }
     
     try migrator.migrate(database)

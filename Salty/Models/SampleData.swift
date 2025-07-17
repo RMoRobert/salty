@@ -12,6 +12,23 @@ import Foundation
 /// Sample data that can be used for both database seeding and previews
 struct SampleData {
     
+    // MARK: - Sample Courses
+    
+    static let sampleCourses = [
+        Course(id: "appetizer-id", name: "Appetizer"),
+        Course(id: "main-id", name: "Main"),
+        Course(id: "dessert-id", name: "Dessert"),
+        Course(id: "snack-id", name: "Snack"),
+        Course(id: "salad-id", name: "Salad"),
+        Course(id: "fruit-id", name: "Fruit"),
+        Course(id: "cheese-id", name: "Cheese"),
+        Course(id: "vegetable-id", name: "Vegetable"),
+        Course(id: "side-dish-id", name: "Side Dish"),
+        Course(id: "bread-id", name: "Bread"),
+        Course(id: "sauce-id", name: "Sauce"),
+        Course(id: "beverage-id", name: "Beverage")
+    ]
+    
     // MARK: - Sample Recipes
     
     static let sampleRecipes = [
@@ -23,6 +40,7 @@ struct SampleData {
             lastModifiedDate: Date(),
             lastPrepared: Date(timeIntervalSinceNow: -60*24*45),
             source: "Some Book",
+            sourceDetails: "https://www.epicurious.com/recipes/food/views/ba-syn-crispy-rice-salad-spicy-tahini-dressing",
             introduction: "This is an introduction for my recipe. Some introductions are long, so let's make this one long, too. Here is some more text. Is it long enough yet? Let's write more just in case. Yay, recipes!",
             difficulty: .somewhatEasy,
             rating: .four,
@@ -32,6 +50,7 @@ struct SampleData {
             wantToMake: false,
             yield: "2 dozen",
             servings: 36,
+            courseId: "main-id",
             directions: [
                 Direction(id: UUID().uuidString, text: "Do the first step. We'll make this text a bit longer so there is a chance that it will need to wrap or show other text rendering nuances. Lorem ipsum dolor sit amet consectetur adipisicing elit. Quo, molestias! Quasi, voluptatem. Now, let's move on to the next step -- but not before adding a bit more here just in case. Wow, what a long step!"),
                 Direction(id: UUID().uuidString, text: "Now, do the second step."),
@@ -64,7 +83,8 @@ struct SampleData {
             id: UUID().uuidString,
             name: "Simple Recipe",
             source: "Preview Kitchen",
-            introduction: "A simple recipe for preview purposes"
+            introduction: "A simple recipe for preview purposes",
+            courseId: "snack-id"
         ),
         
         // Complex sample recipe
@@ -74,8 +94,8 @@ struct SampleData {
             createdDate: Date(),
             lastModifiedDate: Date(),
             lastPrepared: Date(timeIntervalSinceNow: -60*24*30),
-            source: "Very Long Source Name That Might Also Wrap to Multiple Lines",
-            sourceDetails: "Additional source details that provide more context about where this recipe came from",
+            source: "Very Long Source Name That Might Also Wrap to Multiple Lines -- But Here is More Text Just in Case it Doesn't, And Maybe a Bit More Just to Make Sure in Case We Are Not There Yet",
+            sourceDetails: "Additional source details that provide more context about where this recipe came from, plus more  source details that provide more context about where this recipe came from in case this wasn't long enough before",
             introduction: "This is a very long introduction that tests how the UI handles text wrapping and overflow. It contains multiple sentences and should demonstrate how the layout adapts to different content lengths. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
             difficulty: .difficult,
             rating: .five,
@@ -84,6 +104,7 @@ struct SampleData {
             isFavorite: true,
             wantToMake: true,
             yield: "8-10 servings",
+            courseId: "dessert-id",
             directions: [
                 Direction(id: UUID().uuidString, text: "First, prepare all your ingredients. This step is crucial for success."),
                 Direction(id: UUID().uuidString, text: "Next, combine the dry ingredients in a large bowl."),
@@ -134,22 +155,5 @@ struct SampleData {
         Category(id: UUID().uuidString, name: "Kid-Friendly"),
         Category(id: UUID().uuidString, name: "Holiday"),
         Category(id: UUID().uuidString, name: "Comfort Food")
-    ]
-    
-    // MARK: - Sample Courses
-    
-    static let sampleCourses = [
-        Course(id: UUID().uuidString, name: "Appetizer"),
-        Course(id: UUID().uuidString, name: "Main"),
-        Course(id: UUID().uuidString, name: "Dessert"),
-        Course(id: UUID().uuidString, name: "Snack"),
-        Course(id: UUID().uuidString, name: "Salad"),
-        Course(id: UUID().uuidString, name: "Fruit"),
-        Course(id: UUID().uuidString, name: "Cheese"),
-        Course(id: UUID().uuidString, name: "Vegetable"),
-        Course(id: UUID().uuidString, name: "Side Dish"),
-        Course(id: UUID().uuidString, name: "Bread/Starch"),
-        Course(id: UUID().uuidString, name: "Sauce/Condiment"),
-        Course(id: UUID().uuidString, name: "Beverage")
     ]
 } 

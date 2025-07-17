@@ -34,6 +34,12 @@ struct SaltyApp: App {
                 .frame(idealWidth: 300)
                 .navigationTitle("Category Editor")
         }
+        // "Edit Courses" window
+        WindowGroup(id: "edit-courses-window") {
+            LibraryCoursesEditView()
+                .frame(idealWidth: 300)
+                .navigationTitle("Courses Editor")
+        }
         // "Open Database" window
         WindowGroup(id: "open-database-window") {
             OpenDBView()

@@ -14,6 +14,10 @@ struct RecipeDetailView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var showingFullImage = false
     @State private var showingEditSheet = false
+    @State private var courseName: String?
+    
+    @Dependency(\.defaultDatabase) private var database
+    
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     #else
@@ -34,6 +38,7 @@ struct RecipeDetailView: View {
                                 .font(.title)
                                 .fontWeight(.bold)
                                 .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         if !recipe.source.isEmpty {
                             HStack {
@@ -47,12 +52,25 @@ struct RecipeDetailView: View {
                         if !recipe.sourceDetails.isEmpty {
                             if let url = URL(string: recipe.sourceDetails) {
                                 Link(recipe.sourceDetails, destination: url)
+                                    // TODO: Trying to figure out how to truncate this, though normally won't be a problem...
+                                    .fixedSize(horizontal: false, vertical: false)
+                                    .lineLimit(1)
+                                
                             }
                             else {
                                 Text(recipe.sourceDetails)
                             }
                         }
                         HStack(spacing: 15) {
+                            if let courseName = courseName {
+                                HStack {
+                                    Image(systemName: "fork.knife.circle")
+                                        //.modifier(IconShadowModifier())
+                                    Text(courseName)
+                                }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("Course: \(courseName)")
+                            }
                             if !recipe.yield.isEmpty {
                                 HStack {
                                     Image(systemName: "circle.grid.2x2")
@@ -240,6 +258,29 @@ struct RecipeDetailView: View {
                 }
                 .keyboardShortcut("e", modifiers: .command)
             }
+        }
+        .onAppear {
+            loadCourseName()
+        }
+        .onChange(of: recipe.courseId) { _, _ in
+            // I feel like there is a better way to do this, but this works for now...
+            loadCourseName()
+        }
+    }
+    
+    private func loadCourseName() {
+        guard let courseId = recipe.courseId else {
+            courseName = nil
+            return
+        }
+        
+        do {
+            let course = try database.read { db in
+                try Course.fetchOne(db, id: courseId)
+            }
+            courseName = course?.name
+        } catch {
+            courseName = nil
         }
     }
 }

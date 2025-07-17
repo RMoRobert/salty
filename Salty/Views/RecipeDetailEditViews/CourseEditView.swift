@@ -16,43 +16,44 @@ struct CourseEditView: View {
     @FetchAll(Course.order(by: \.name)) private var courses
     
     @State private var showingEditLibraryCoursesSheet = false
-    @State private var selectedCourseIDs: Set<String> = []
-    @State private var originalSelectedCourseIDs: Set<String> = []
+    @State private var selectedCourseID: String?
+    @State private var originalSelectedCourseID: String?
     @State private var showingNewCourseAlert = false
     @State private var newCourseName = ""
     @State private var showingDuplicateNameAlert = false
 
     var body: some View {
-        VStack {
-            List {
-                ForEach(courses) { course in
-                    Toggle(course.name, isOn: Binding<Bool> (
-                        get: {
-                            selectedCourseIDs.contains(course.id)
-                        },
-                        set: { newVal in
-                            if newVal {
-                                selectedCourseIDs.insert(course.id)
-                            } else {
-                                selectedCourseIDs.remove(course.id)
-                            }
-                        }
-                    ))
-                }
+        VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Course")
+                    .font(.headline)
                 
-                Button(action: {
-                    newCourseName = ""
-                    showingNewCourseAlert = true
-                }) {
-                    Label("Create New Course", systemImage: "plus.circle")
+                Picker("Course", selection: $selectedCourseID) {
+                    Text("(No Course)")
+                        .tag(nil as String?)
+                    
+                    ForEach(courses) { course in
+                        Text(course.name)
+                            .tag(course.id as String?)
+                    }
                 }
-                .foregroundColor(.accentColor)
+                #if os(macOS)
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                #else
+                .pickerStyle(.wheel)
+                #endif
             }
-            #if os(macOS)
-            .frame(minWidth: 300, minHeight: 400)
-            #else
-            .frame(minWidth: 200, minHeight: 300)
-            #endif
+            
+            Button(action: {
+                newCourseName = ""
+                showingNewCourseAlert = true
+            }) {
+                Label("Create New Course", systemImage: "plus.circle")
+            }
+            .foregroundColor(.accentColor)
+            
+            Spacer()
             
             #if os(macOS)
             HStack {
@@ -69,15 +70,17 @@ struct CourseEditView: View {
                 }
                 .keyboardShortcut(.return)
                 .buttonStyle(.borderedProminent)
-                .disabled(selectedCourseIDs == originalSelectedCourseIDs)
+                .disabled(selectedCourseID == originalSelectedCourseID)
             }
-            .padding(.top, 4).padding(.bottom, 12)
             #endif
         }
+        .padding()
         #if os(macOS)
-        .padding([.top, .leading, .trailing])
+        .frame(minWidth: 300, minHeight: 200)
         #endif
         #if !os(macOS)
+        .navigationTitle("Course")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") {
@@ -92,15 +95,15 @@ struct CourseEditView: View {
                     dismiss()
                 }
                 .keyboardShortcut(.return)
-                .disabled(selectedCourseIDs == originalSelectedCourseIDs)
+                .disabled(selectedCourseID == originalSelectedCourseID)
             }
         }
         #endif
         .onAppear {
-            loadSelectedCourses()
+            loadSelectedCourse()
         }
         .onChange(of: courses) { _, _ in
-            loadSelectedCourses()
+            loadSelectedCourse()
         }
         .sheet(isPresented: $showingEditLibraryCoursesSheet) {
             LibraryCoursesEditView()
@@ -124,46 +127,29 @@ struct CourseEditView: View {
         }
         .onChange(of: showingEditLibraryCoursesSheet) { _, isPresented in
             if !isPresented {
-                // Refresh selected courses when the sheet is dismissed
-                loadSelectedCourses()
+                // Refresh selected course when the sheet is dismissed
+                loadSelectedCourse()
             }
         }
     }
     
     
-    private func loadSelectedCourses() {
-        do {
-            let selectedIDs = try database.read { db in
-                try RecipeCourse
-                    .filter(Column("recipeId") == recipe.id)
-                    .fetchAll(db)
-                    .map { $0.courseId }
-            }
-            selectedCourseIDs = Set(selectedIDs)
-            originalSelectedCourseIDs = Set(selectedIDs)
-        } catch {
-            selectedCourseIDs = []
-            originalSelectedCourseIDs = []
-        }
+    private func loadSelectedCourse() {
+        selectedCourseID = recipe.courseId
+        originalSelectedCourseID = recipe.courseId
     }
     
     private func saveChanges() {
         do {
             try database.write { db in
-                // Remove courses that are no longer selected
-                let coursesToRemove = originalSelectedCourseIDs.subtracting(selectedCourseIDs)
-                for courseId in coursesToRemove {
-                    try RecipeCourse
-                        .filter(Column("recipeId") == recipe.id && Column("courseId") == courseId)
-                        .deleteAll(db)
-                }
+                // Update the recipe's courseId directly
+                var updatedRecipe = recipe
+                updatedRecipe.courseId = selectedCourseID
+                updatedRecipe.lastModifiedDate = Date()
+                try updatedRecipe.update(db)
                 
-                // Add newly selected courses
-                let coursesToAdd = selectedCourseIDs.subtracting(originalSelectedCourseIDs)
-                for courseId in coursesToAdd {
-                    let recipeCourse = RecipeCourse(recipeId: recipe.id, courseId: courseId)
-                    try recipeCourse.insert(db)
-                }
+                // Update the binding
+                recipe = updatedRecipe
             }
         } catch {
             print("Error saving course changes: \(error)")
@@ -194,8 +180,8 @@ struct CourseEditView: View {
                 try newCourse.insert(db)
             }
             
-            // Add to selected courses (but don't save to database yet)
-            selectedCourseIDs.insert(newCourse.id)
+            // Select the new course (but don't save to database yet)
+            selectedCourseID = newCourse.id
             newCourseName = ""
         } catch {
             // Handle error - could add error alert here if needed

@@ -34,6 +34,9 @@ struct Menus: Commands {
            Button("Edit Categories") {
                openWindow(id: "edit-categories-window")
            }
+           Button("Edit Courses") {
+               openWindow(id: "edit-courses-window")
+           }
        }
        #endif
   }
