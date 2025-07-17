@@ -38,7 +38,7 @@ struct RecipeDetailView: View {
                         if !recipe.source.isEmpty {
                             HStack {
                                 Image(systemName: "text.book.closed")
-                                    .modifier(IconShadowModifier())
+                                    //.modifier(IconShadowModifier())
                                 Text(recipe.source)
                             }
                             .accessibilityElement(children: .combine)
@@ -56,7 +56,7 @@ struct RecipeDetailView: View {
                             if !recipe.yield.isEmpty {
                                 HStack {
                                     Image(systemName: "circle.grid.2x2")
-                                        .modifier(IconShadowModifier())
+                                        //.modifier(IconShadowModifier())
                                     Text(recipe.yield)
                                 }
                                 .accessibilityElement(children: .combine)
@@ -65,7 +65,7 @@ struct RecipeDetailView: View {
                             if let servings = recipe.servings, servings > 0 {
                                 HStack {
                                     Image(systemName: "person.2")
-                                        .modifier(IconShadowModifier())
+                                        //.modifier(IconShadowModifier())
                                     Text(servings.description)
                                 }
                                 .accessibilityElement(children: .combine)
@@ -87,16 +87,16 @@ struct RecipeDetailView: View {
                         ForEach(recipe.preparationTimes) { prepTime in
                             HStack {
                                 Image(systemName: "clock")
-                                    .modifier(IconShadowModifier())
+                                    //.modifier(IconShadowModifier())
                                 VStack {
                                     Text("\(prepTime.type)")
-                                        .font(.callout)
+                                        .font(.caption)
                                     Text("\(prepTime.timeString)")
                                 }
                                 .accessibilityHidden(true)
                             }
                             .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
-                            .background(Color.secondary.opacity(0.1))
+                            .background(.ultraThinMaterial)
                             .clipShape(Capsule())
                             .padding(EdgeInsets(top: 1, leading: 4, bottom: 10, trailing: 6))
                             .accessibilityElement(children: .combine)
