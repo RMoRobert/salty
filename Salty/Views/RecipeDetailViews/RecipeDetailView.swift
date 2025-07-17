@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import SharingGRDB
+import Flow
 
 struct RecipeDetailView: View {
     let recipe: Recipe
@@ -61,7 +62,7 @@ struct RecipeDetailView: View {
                                 Text(recipe.sourceDetails)
                             }
                         }
-                        HStack(spacing: 15) {
+                        HFlow(itemSpacing: 15) {
                             if let courseName = courseName {
                                 HStack {
                                     Image(systemName: "fork.knife.circle")
@@ -101,7 +102,7 @@ struct RecipeDetailView: View {
                     }
                 }
                 if recipe.preparationTimes.count > 0 {
-                    HOrVStack {
+                    HFlow(itemSpacing: 12, rowSpacing: 8) {
                         ForEach(recipe.preparationTimes) { prepTime in
                             HStack {
                                 Image(systemName: "clock")
@@ -125,7 +126,7 @@ struct RecipeDetailView: View {
                 }
                 
                 if (recipe.isFavorite || recipe.wantToMake) {
-                    HOrVStack {
+                    HFlow(itemSpacing: 24, rowSpacing: 12) {
                     if (recipe.isFavorite) {
                         HStack {
                             Image(systemName: "heart.fill")
@@ -152,7 +153,7 @@ struct RecipeDetailView: View {
                     .allowsHitTesting(recipe.isFavorite || recipe.wantToMake)
             }
                 
-                HOrVStack(alignFirstTextLeadingIfHStack: true, spacingIfHStack: 60, spacingIfVStack: 30) {
+                HFlow(alignment: .top, itemSpacing: 60, rowSpacing: 30) {
                     VStack(spacing: 10) {
                         Text("Rating:")
                         RatingView(recipe: recipe, showLabel: true)
@@ -170,6 +171,7 @@ struct RecipeDetailView: View {
                     }
                     .padding([.leading, .trailing])
                 }
+                
                 HOrVStack(alignFirstTextLeadingIfHStack: true) {
                     VStack(alignment: .leading) {
                         Text("Ingredients")
@@ -215,23 +217,43 @@ struct RecipeDetailView: View {
                     .padding()
                     .frame(minWidth: 100, maxWidth: .infinity)
                 }
+                
                 if (recipe.notes.count > 0) {
-                VStack(alignment: .leading) {
-                    Text("Notes")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .padding(.bottom)
-                    ForEach(recipe.notes.indices, id: \.self) { index in
-                        Text(recipe.notes[index].title)
-                            .font(.callout)
+                    VStack(alignment: .leading) {
+                        Text("Notes")
+                            .font(.title2)
                             .fontWeight(.bold)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(recipe.notes[index].content)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.bottom)
+                        ForEach(recipe.notes.indices, id: \.self) { index in
+                            Text(recipe.notes[index].title)
+                                .font(.callout)
+                                .fontWeight(.bold)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(recipe.notes[index].content)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    .padding()
+                    .frame(minWidth: 100, maxWidth: .infinity)
                 }
-                .padding()
-                .frame(minWidth: 100, maxWidth: .infinity)
+                
+                if (recipe.tags.count > 0) {
+                    VStack(alignment: .leading) {
+                        Text("Tags")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .padding(.bottom)
+                        HFlow(itemSpacing: 8, rowSpacing: 16) {
+                            ForEach(recipe.tags, id: \.self) { tag in
+                                Label(tag, systemImage: "tag")
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 6)
+                                    .background(.thinMaterial, in: Capsule())
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(minWidth: 100, maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -301,5 +323,5 @@ struct NoModifier: ViewModifier {
 
 
 #Preview {
-    RecipeDetailView(recipe: SampleData.sampleRecipes[2])
+    RecipeDetailView(recipe: SampleData.sampleRecipes[1])
 }

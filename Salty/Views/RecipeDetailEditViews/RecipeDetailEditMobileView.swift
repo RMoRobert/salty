@@ -8,10 +8,14 @@
 //
 
 import SwiftUI
+import Flow
 
 struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss
     @State private var viewModel: RecipeDetailEditViewModel
+    
+    @State private var showingAddTagAlert = false
+    @State private var newTagName = ""
     
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
         self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
@@ -25,14 +29,14 @@ struct RecipeDetailEditMobileView: View {
                 TextField("Source Details", text: $viewModel.recipe.sourceDetails)
                 Stepper(viewModel.recipe.servings != nil ?
                         (viewModel.recipe.servings! > 1 ? "\(viewModel.recipe.servings!.description) servings"
-                        : "\(viewModel.recipe.servings!.description) serving")
+                         : "\(viewModel.recipe.servings!.description) serving")
                         : "Servings",
-                       value: Binding(
-                           get: { viewModel.recipe.servings ?? 0 },
-                           set: { viewModel.recipe.servings = $0 == 0 ? nil : $0 }
-                       ),
-                       in: 0...2000)
-                    .foregroundColor(viewModel.recipe.servings != nil ? .primary : .secondary)
+                        value: Binding(
+                            get: { viewModel.recipe.servings ?? 0 },
+                            set: { viewModel.recipe.servings = $0 == 0 ? nil : $0 }
+                        ),
+                        in: 0...2000)
+                .foregroundColor(viewModel.recipe.servings != nil ? .primary : .secondary)
                 TextField("Yield", text: $viewModel.recipe.yield)
                 Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
@@ -240,6 +244,34 @@ struct RecipeDetailEditMobileView: View {
                 }
             }
             
+            
+            // Tags
+            Section("Tags") {
+                HFlow(itemSpacing: 8, rowSpacing: 4) {
+                    ForEach(viewModel.recipe.tags, id: \.self) { tag in
+                        Button(action: {
+                            viewModel.removeTag(tag)
+                        }) {
+                            Label(tag, systemImage: "minus.circle")
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.quaternary, in: Capsule())
+                                .foregroundColor(.primary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Remove tag \(tag)")
+                    }
+                    
+                }                
+                Button(action: {
+                    newTagName = ""
+                    showingAddTagAlert = true
+                }) {
+                    Label("Add Tag", systemImage: "plus.circle.fill")
+                }
+                .labelStyle(.titleAndIcon)
+        }
+            
             Section("Nutrition Information:") {
                 
                 if let nutrition = viewModel.recipe.nutrition {
@@ -315,6 +347,20 @@ struct RecipeDetailEditMobileView: View {
             }
         } message: {
             Text("You have unsaved changes. Are you sure you want to discard them?")
+        }
+        .alert("Add Tag", isPresented: $showingAddTagAlert) {
+            TextField("Tag name", text: $newTagName)
+            Button("Cancel", role: .cancel) {
+                newTagName = ""
+            }
+            Button("Add") {
+                if !newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    viewModel.addTag(newTagName.trimmingCharacters(in: .whitespacesAndNewlines))
+                    newTagName = ""
+                }
+            }
+        } message: {
+            Text("Enter a name for the new tag")
         }
 
         .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {

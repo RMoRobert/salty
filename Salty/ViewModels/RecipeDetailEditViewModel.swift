@@ -24,7 +24,7 @@ class RecipeDetailEditViewModel {
     var originalRecipe: Recipe
     var isNewRecipe: Bool
     var onNewRecipeSaved: ((String) -> Void)?
-    
+   
     // MARK: - Sheet States
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
     var showingEditCategoriesSheet = false
@@ -86,6 +86,16 @@ class RecipeDetailEditViewModel {
         } catch {
             logger.error("Error saving recipe: \(error)")
         }
+    }
+    
+    func addTag(_ tagName: String) {
+        let trimmedTag = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTag.isEmpty && !recipe.tags.contains(trimmedTag) else { return }
+        recipe.tags.append(trimmedTag)
+    }
+    
+    func removeTag(_ tagName: String) {
+        recipe.tags.removeAll(where: {$0 == tagName} )
     }
     
     func discardChanges() {

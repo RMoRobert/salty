@@ -9,10 +9,13 @@
 //
 
 import SwiftUI
+import Flow
 
 struct RecipeDetailEditDesktopView: View {
     @Environment(\.dismiss) var dismiss
     @State private var viewModel: RecipeDetailEditViewModel
+    @State private var showingAddTagAlert = false
+    @State private var newTagName = ""
     
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
         self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
@@ -275,6 +278,36 @@ struct RecipeDetailEditDesktopView: View {
                     NotesEditView(recipe: $viewModel.recipe)
                 }
                 
+                // Tags
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Tags:")
+                            .modifier(TitleStyle())
+                        Spacer()
+                        Button("Add Tag") {
+                            newTagName = ""
+                            showingAddTagAlert = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    
+                    HFlow(itemSpacing: 8, rowSpacing: 4) {
+                        ForEach(viewModel.recipe.tags, id: \.self) { tag in
+                            Button(action: {
+                                viewModel.removeTag(tag)
+                            }) {
+                                Label(tag, systemImage: "minus.circle")
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.quaternary, in: Capsule())
+                                    .foregroundColor(.primary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Remove tag \(tag)")
+                        }
+                    }
+                }
+                
     
                 // Nutrition Information Section
                 VStack(alignment: .leading, spacing: 16) {
@@ -361,6 +394,18 @@ struct RecipeDetailEditDesktopView: View {
         } message: {
             Text("You have unsaved changes. Are you sure you want to discard them?")
         }
+        .alert("Add Tag", isPresented: $showingAddTagAlert) {
+            TextField("Tag name", text: $newTagName)
+            Button("Cancel", role: .cancel) {
+                newTagName = ""
+            }
+            Button("Add") {
+                addNewTag()
+            }
+            .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("Enter a name for the new tag")
+        }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -369,6 +414,17 @@ struct RecipeDetailEditDesktopView: View {
             }
             return .ignored
         }
+    }
+    
+    // MARK: - Helper Methods
+    private func addNewTag() {
+        let trimmedTag = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTag.isEmpty && !viewModel.recipe.tags.contains(trimmedTag) else { 
+            newTagName = ""
+            return 
+        }
+        viewModel.addTag(trimmedTag)
+        newTagName = ""
     }
 }
 
