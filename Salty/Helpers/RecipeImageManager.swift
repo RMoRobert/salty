@@ -26,13 +26,21 @@ class RecipeImageManager {
     private init() {
         self.imagesDirectory = FileManager.saltyImageFolderUrl
         // Create images directory if it doesn't exist
-        try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true, attributes: nil)
+            logger.info("Images directory initialized at: \(self.imagesDirectory.path)")
+        } catch {
+            logger.error("Failed to create images directory during initialization: \(error)")
+        }
     }
     
     /// Compares image files in the images directory with database references and deletes orphaned files
     /// This function should be called periodically to clean up unused image files
     func cleanupOrphanedImages() /*async*/ {
         do {
+            // Ensure the images directory exists before attempting cleanup
+            try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true, attributes: nil)
+            
             // Get all image filenames from the database
             let referencedFilenames =
                 Recipe.select {
@@ -79,6 +87,14 @@ class RecipeImageManager {
     }
     
     func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
+        // Ensure the images directory exists before saving
+        do {
+            try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            logger.error("Failed to create images directory: \(error)")
+            return nil
+        }
+        
         // Determine file extension from image data
         let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
         let filename = "\(recipeId).\(fileExtension)"
@@ -104,12 +120,22 @@ class RecipeImageManager {
     
     func loadImage(filename: String) -> Data? {
         let fileURL = imagesDirectory.appending(component: filename)
-        return try? Data(contentsOf: fileURL)
+        do {
+            return try Data(contentsOf: fileURL)
+        } catch {
+            logger.debug("Could not load image \(filename): \(error)")
+            return nil
+        }
     }
     
     func deleteImage(filename: String) {
         let fileURL = imagesDirectory.appending(component: filename)
-        try? FileManager.default.removeItem(at: fileURL)
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            logger.debug("Deleted image file: \(filename)")
+        } catch {
+            logger.debug("Could not delete image \(filename): \(error)")
+        }
     }
     
     func generateThumbnail(from imageData: Data, size: CGSize) -> Data? {
