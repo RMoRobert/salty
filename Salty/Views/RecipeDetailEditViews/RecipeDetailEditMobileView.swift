@@ -258,7 +258,7 @@ struct RecipeDetailEditMobileView: View {
             // Tags
             Section("Tags") {
                 HFlow(itemSpacing: 8, rowSpacing: 4) {
-                    ForEach(viewModel.recipe.tags, id: \.self) { tag in
+                    ForEach(viewModel.sortedTags, id: \.self) { tag in
                         Button(action: {
                             viewModel.removeTag(tag)
                         }) {

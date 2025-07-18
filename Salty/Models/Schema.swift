@@ -61,6 +61,10 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
         )
     }
     
+    var sortedTags: [String] {
+        tags.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+    
     //    var categories: [Category]?
     //    var tags: [Tag]?
 }

@@ -175,9 +175,7 @@ struct RecipeDetailView: View {
                 HOrVStack(alignFirstTextLeadingIfHStack: true) {
                     VStack(alignment: .leading) {
                         Text("Ingredients")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.bottom)
+                            .modifier(TitleStyle())
                         ForEach(recipe.ingredients.indices, id: \.self) { index in
                             Text(recipe.ingredients[index].text)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -190,9 +188,7 @@ struct RecipeDetailView: View {
                     .frame(minWidth: 100, maxWidth: .infinity)
                     VStack(alignment: .leading) {
                         Text("Directions")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.bottom)
+                            .modifier(TitleStyle())
                         ForEach(recipe.directions.indices, id: \.self) { index in
                             HStack(alignment: .top) {
                                 if recipe.directions[index].isHeading != true {
@@ -221,9 +217,7 @@ struct RecipeDetailView: View {
                 if (recipe.notes.count > 0) {
                     VStack(alignment: .leading) {
                         Text("Notes")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.bottom)
+                            .modifier(TitleStyle())
                         ForEach(recipe.notes.indices, id: \.self) { index in
                             Text(recipe.notes[index].title)
                                 .font(.callout)
@@ -240,11 +234,9 @@ struct RecipeDetailView: View {
                 if (recipe.tags.count > 0) {
                     VStack(alignment: .leading) {
                         Text("Tags")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.bottom)
+                            .modifier(TitleStyle())
                         HFlow(itemSpacing: 8, rowSpacing: 16) {
-                            ForEach(recipe.tags, id: \.self) { tag in
+                            ForEach(recipe.sortedTags, id: \.self) { tag in
                                 Label(tag, systemImage: "tag")
                                     .padding(.vertical, 4)
                                     .padding(.horizontal, 6)
@@ -305,7 +297,18 @@ struct RecipeDetailView: View {
             courseName = nil
         }
     }
+    
+    struct TitleStyle: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .font(.title2)
+                .fontWeight(.bold)
+                .padding(.bottom)
+        }
+    }    
 }
+
+
 
 struct IconShadowModifier: ViewModifier {
     func body(content: Content) -> some View {

@@ -299,7 +299,7 @@ struct RecipeDetailEditDesktopView: View {
                     }
                     
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
-                        ForEach(viewModel.recipe.tags, id: \.self) { tag in
+                        ForEach(viewModel.sortedTags, id: \.self) { tag in
                             Button(action: {
                                 viewModel.removeTag(tag)
                             }) {
@@ -434,17 +434,19 @@ struct RecipeDetailEditDesktopView: View {
         viewModel.addTag(trimmedTag)
         newTagName = ""
     }
-}
-
-struct TitleStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            //.font(.title3)
-            .font(.title2)
-            .fontWeight(.semibold)
-            //.foregroundColor(.secondary)
+    
+    struct TitleStyle: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                //.font(.title3)
+                .font(.title2)
+                .fontWeight(.semibold)
+                //.foregroundColor(.secondary)
+        }
     }
 }
+
+
 
 
 #Preview {

@@ -18,7 +18,8 @@ class RecipeDetailEditViewModel {
     @Dependency(\.defaultDatabase) private var database
     
     @ObservationIgnored
-    @FetchAll(Course.order(by: \.name)) var courses: [Course]
+    @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
+    var courses: [Course]
     
     // MARK: - State
     var recipe: Recipe
@@ -48,6 +49,10 @@ class RecipeDetailEditViewModel {
             // Existing recipes have unsaved changes if they differ from the original
             return recipe != originalRecipe
         }
+    }
+    
+    var sortedTags: [String] {
+        recipe.tags.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
     
     // MARK: - Initialization
