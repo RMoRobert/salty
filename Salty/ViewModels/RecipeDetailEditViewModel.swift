@@ -12,12 +12,13 @@ import SharingGRDB
 @Observable
 @MainActor
 class RecipeDetailEditViewModel {
-    // MARK: - Constants
     private let logger = Logger(subsystem: "Salty", category: "Database")
     
-    // MARK: - Dependencies
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
+    
+    @ObservationIgnored
+    @FetchAll(Course.order(by: \.name)) var courses: [Course]
     
     // MARK: - State
     var recipe: Recipe
@@ -28,7 +29,6 @@ class RecipeDetailEditViewModel {
     // MARK: - Sheet States
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
     var showingEditCategoriesSheet = false
-    var showingEditCourseSheet = false
     var showingEditIngredientsSheet = false
     var showingBulkEditIngredientsSheet = false
     var showingEditDirectionsSheet = false
@@ -101,13 +101,5 @@ class RecipeDetailEditViewModel {
     func discardChanges() {
         recipe = originalRecipe
     }
-    
-//    func resetToOriginal() {
-//        recipe = originalRecipe
-//    }
-//    
-//    func updateRecipe(_ updatedRecipe: Recipe) {
-//        recipe = updatedRecipe
-//    }
 }
 

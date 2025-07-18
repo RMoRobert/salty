@@ -371,10 +371,21 @@ func appDatabase() throws -> any DatabaseWriter {
         database = try DatabasePool(path: path, configuration: configuration)
     }
     var migrator = DatabaseMigrator()
-//#if DEBUG
-//    migrator.eraseDatabaseOnSchemaChange = false
-//#endif
+#if DEBUG
+    migrator.eraseDatabaseOnSchemaChange = false
+#endif
     migrator.registerMigration("Create initial tables") { db in
+        logger.info("Running 'Create initial tables' migration")
+
+        try db.create(table: "course") { t in
+            t.primaryKey("id", .text)
+            t.column("name", .text)
+        }
+        try db.create(table: "category") { t in
+            t.primaryKey("id", .text)
+            t.column("name", .text)
+        }
+        
         try db.create(table: "recipe") { t in
             t.primaryKey("id", .text)
             t.column("name", .text).notNull()
@@ -400,14 +411,7 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("tags", .jsonText)
             t.column("nutrition", .jsonText)
         }
-        try db.create(table: "course") { t in
-            t.primaryKey("id", .text)
-            t.column("name", .text)
-        }
-        try db.create(table: "category") { t in
-            t.primaryKey("id", .text)
-            t.column("name", .text)
-        }
+        
         try db.create(table: "recipeCategory") { t in
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
@@ -416,11 +420,12 @@ func appDatabase() throws -> any DatabaseWriter {
     }
     
     migrator.registerMigration("Populate default categories and courses") { db in
+        logger.info("Running 'Populate default categories and courses' migration")
+        
         // Add default categories if they don't exist
         let defaultCategories = [
-            "Breakfast", "Quick", "Vegetarian", "Vegan", "Beverage", "Burger", "Soup", "Pasta", "Holiday"
+            "Breakfast", "Quick", "Vegetarian", "Soup", "Pasta", "Holiday", "Beverage"
         ]
-        
         for categoryName in defaultCategories {
             let existingCategory = try Category.filter(Column("name") == categoryName).fetchOne(db)
             if existingCategory == nil {
@@ -432,9 +437,8 @@ func appDatabase() throws -> any DatabaseWriter {
         // Add default courses if they don't exist
         let defaultCourses = [
             "Appetizer", "Main", "Dessert", "Snack", "Salad", "Fruit", "Cheese", "Vegetable",
-            "Side Dish", "Bread", "Sauce", "Beverage"
+            "Side Dish", "Bread", "Sauce"
         ]
-        
         for courseName in defaultCourses {
             let existingCourse = try Course.filter(Column("name") == courseName).fetchOne(db)
             if existingCourse == nil {
@@ -443,18 +447,20 @@ func appDatabase() throws -> any DatabaseWriter {
             }
         }
     }
-    // TODO: Merge all these changes into initial migration before 1.0 release?
-    migrator.registerMigration("Convert to single course per recipe") { db in
-        // Add courseId column to recipe table
-        try db.alter(table: "recipe") { t in
-            t.add(column: "courseId", .text).references("course", onDelete: .setNull)
-        }
-          
-        // Drop the recipeCourse junction table
-        try db.drop(table: "recipeCourse")
-    }
     
+    // Example of what additional future migrations could look like in future (these are all done in initital migration/setup now):
+//    migrator.registerMigration("Convert to single course per recipe") { db in
+//        // Add column
+//        try db.alter(table: "recipe") { t in
+//            t.add(column: "courseId", .text).references("course", onDelete: .setNull)
+//        }
+//        // Drop table
+//        try db.drop(table: "recipeCourse")
+//    }
+
+    logger.info("Starting database migration...")
     try migrator.migrate(database)
+    logger.info("Database migration completed successfully")
     
 #if DEBUG
     if context == .preview {

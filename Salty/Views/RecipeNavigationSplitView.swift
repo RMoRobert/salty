@@ -17,6 +17,7 @@ struct RecipeNavigationSplitView: View {
     
     //@State private var showEditRecipeView = false
     @State private var showingEditLibCategoriesSheet = false
+    @State private var showingEditLibCoursesSheet = false
     @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
     @State private var showingCreateFromImageSheet = false
@@ -140,9 +141,14 @@ struct RecipeNavigationSplitView: View {
                         }) {
                             Label(isEditMode ? "Done" : "Edit", systemImage: "pencil")
                         }
-                        
                         Divider()
-                        
+                        Button("Category Editor") {
+                            showingEditLibCategoriesSheet = true
+                        }
+                        Button("Course Editor") {
+                            showingEditLibCoursesSheet = true
+                        }
+                        Divider()
                         Button("Create Recipe from Image…") {
                             showingCreateFromImageSheet.toggle()
                         }
@@ -246,8 +252,8 @@ struct RecipeNavigationSplitView: View {
                 let isNewRecipe = viewModel.isDraftRecipe(viewModel.recipeToEditID)
                 NavigationStack {
                     #if os(macOS)
-                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
-                        .frame(minWidth: 600, minHeight: 500)
+                    RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
+                        .frame(minWidth: 625, minHeight: 650)
                     #else
                     RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: viewModel.handleNewRecipeSaved)
                     #endif
@@ -276,6 +282,26 @@ struct RecipeNavigationSplitView: View {
             CreateRecipeFromImageView()
             #if os(macOS)
                 .frame(minWidth: 800, minHeight: 700)
+            #endif
+        }
+        .sheet(isPresented: $showingEditLibCategoriesSheet) {
+            #if os(iOS)
+            NavigationStack {
+                LibraryCategoriesEditView()
+            }
+            #else
+            LibraryCategoriesEditView()
+                .frame(minWidth: 500, minHeight: 400)
+            #endif
+        }
+        .sheet(isPresented: $showingEditLibCoursesSheet) {
+            #if os(iOS)
+            NavigationStack {
+                LibraryCoursesEditView()
+            }
+            #else
+            LibraryCoursesEditView()
+                .frame(minWidth: 500, minHeight: 400)
             #endif
         }
 

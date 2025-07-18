@@ -21,7 +21,8 @@ struct CategoryEditView: View {
     @Binding var recipe: Recipe
     @Environment(\.dismiss) private var dismiss
     
-    @FetchAll(Category.order(by: \.name)) private var categories
+    //@FetchAll(Category.order(by: \.name)) private var categories
+    @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE")) var categories: [Category]
     
     @State private var showingEditLibraryCategoriesSheet = false
     @State private var selectedCategoryIDs: Set<String> = []
@@ -32,110 +33,81 @@ struct CategoryEditView: View {
 
     var body: some View {
         VStack {
-            List {
-                ForEach(categories) { category in
-                    Toggle(category.name, isOn: Binding<Bool> (
-                        get: {
-                            selectedCategoryIDs.contains(category.id)
-                        },
-                        set: { newVal in
-                            if newVal {
-                                selectedCategoryIDs.insert(category.id)
-                            } else {
-                                selectedCategoryIDs.remove(category.id)
-                            }
-                        }
-                    ))
-                }
-                
-                Button(action: {
-                    newCategoryName = ""
-                    showingNewCategoryAlert = true
-                }) {
-                    Label("Create New Category", systemImage: "plus.circle")
-                }
-                .foregroundColor(.accentColor)
-            }
-#if os(macOS)
-.frame(minWidth: 300, minHeight: 400)
-#else
-.frame(minWidth: 200, minHeight: 300)
-#endif
+            categoryList
             
             #if os(macOS)
-            HStack {
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.escape)
-                
-                Spacer()
-                
-                Button("Save") {
-                    saveChanges()
-                    dismiss()
-                }
-                .keyboardShortcut(.return)
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
-            }
-            .padding(.top, 4).padding(.bottom, 12)
+            macOSButtons
             #endif
         }
         #if os(macOS)
         .padding([.top, .leading, .trailing])
         #endif
-        #if !os(macOS)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
+            #if !os(macOS)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.escape)
                 }
-                .keyboardShortcut(.escape)
-            }
-            
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    saveChanges()
-                    dismiss()
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveChanges()
+                        dismiss()
+                    }
+                    .keyboardShortcut(.return)
+                    .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
                 }
-                .keyboardShortcut(.return)
-                .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
             }
-        }
-        #endif
-        .onAppear {
-            loadSelectedCategories()
-        }
-        .onChange(of: categories) { _, _ in
-            loadSelectedCategories()
-        }
-        .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
-            LibraryCategoriesEditView()
-        }
-        .alert("New Category", isPresented: $showingNewCategoryAlert) {
-            TextField("Category Name", text: $newCategoryName)
-            Button("Cancel", role: .cancel) {
-                newCategoryName = ""
+            #endif
+            .onAppear {
+                loadSelectedCategories()
             }
-            Button("Add") {
-                createNewCategory()
+            .onChange(of: categories) { _, _ in
+                loadSelectedCategories()
             }
-            .disabled(newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        } message: {
-            Text("Enter a name for the new category")
-        }
-        .alert("Category Already Exists", isPresented: $showingDuplicateNameAlert) {
-            Button("OK") { }
-        } message: {
-            Text("A category with the name \"\(newCategoryName)\" already exists.")
-        }
-        .onChange(of: showingEditLibraryCategoriesSheet) { _, isPresented in
+            .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
+                LibraryCategoriesEditView()
+            }
+            .alert("New Category", isPresented: $showingNewCategoryAlert) {
+                TextField("Category Name", text: $newCategoryName)
+                Button("Cancel", role: .cancel) {
+                    newCategoryName = ""
+                }
+                Button("Add") {
+                    createNewCategory()
+                }
+                .disabled(newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } message: {
+                Text("Enter a name for the new category")
+            }
+            .alert("Category Already Exists", isPresented: $showingDuplicateNameAlert) {
+                Button("OK") { }
+            } message: {
+                Text("A category with the name \"\(newCategoryName)\" already exists.")
+            }
+                    .onChange(of: showingEditLibraryCategoriesSheet) { _, isPresented in
             if !isPresented {
                 // Refresh selected categories when the sheet is dismissed
                 loadSelectedCategories()
             }
         }
+    }
+    
+    private func categoryBinding(for categoryID: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: {
+                selectedCategoryIDs.contains(categoryID)
+            },
+            set: { newVal in
+                if newVal {
+                    selectedCategoryIDs.insert(categoryID)
+                } else {
+                    selectedCategoryIDs.remove(categoryID)
+                }
+            }
+        )
     }
     
     private func loadSelectedCategories() {
@@ -209,6 +181,49 @@ struct CategoryEditView: View {
             print("Error creating category: \(error)")
         }
     }
+    
+    private var categoryList: some View {
+        List {
+            ForEach(categories) { category in
+                Toggle(category.name, isOn: categoryBinding(for: category.id))
+            }
+            
+            Button(action: {
+                newCategoryName = ""
+                showingNewCategoryAlert = true
+            }) {
+                Label("Create New Category", systemImage: "plus.circle")
+            }
+            .foregroundColor(.accentColor)
+        }
+        #if os(macOS)
+        .frame(minWidth: 300, minHeight: 400)
+        #else
+        .frame(minWidth: 200, minHeight: 300)
+        #endif
+    }
+    
+    #if os(macOS)
+    private var macOSButtons: some View {
+        HStack {
+            Button("Cancel") {
+                dismiss()
+            }
+            .keyboardShortcut(.escape)
+            
+            Spacer()
+            
+            Button("Save") {
+                saveChanges()
+                dismiss()
+            }
+            .keyboardShortcut(.return)
+            .buttonStyle(.borderedProminent)
+            .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
+        }
+        .padding(.top, 4).padding(.bottom, 12)
+    }
+    #endif
 }
 
 

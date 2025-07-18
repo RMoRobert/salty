@@ -8,6 +8,8 @@
 //  This view is geard towards macOS; see iOS view for mobile-friendly
 //
 
+#if os(macOS)
+
 import SwiftUI
 import Flow
 
@@ -40,18 +42,23 @@ struct RecipeDetailEditDesktopView: View {
                             }
                         ))
                         TextField("Yield:", text: $viewModel.recipe.yield)
+                        Picker("Course:", selection: Binding(
+                            get: { viewModel.recipe.courseId },
+                            set: { viewModel.recipe.courseId = $0 }
+                        )) {
+                            Text("(No Course)")
+                                .tag(nil as String?)
+                            
+                            ForEach(viewModel.courses) { course in
+                                Text(course.name)
+                                    .tag(course.id as String?)
+                            }
+                        }
+                        .pickerStyle(.menu)
                         HStack {
                             Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                             Spacer()
                             Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
-                            Spacer()
-                            Button("Edit Course") {
-                                viewModel.showingEditCourseSheet.toggle()
-                            }
-                            .popover(isPresented: $viewModel.showingEditCourseSheet) {
-                                CourseEditView(recipe: $viewModel.recipe)
-                            }
-                            
                             Spacer()
                             Button("Edit Categories") {
                                 viewModel.showingEditCategoriesSheet.toggle()
@@ -137,7 +144,7 @@ struct RecipeDetailEditDesktopView: View {
                         }
                     }
                 }
-                .popover(isPresented: $viewModel.showingEditIngredientsSheet) {
+                .sheet(isPresented: $viewModel.showingEditIngredientsSheet) {
                     IngredientsEditView(recipe: $viewModel.recipe)
                 }
                 .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
@@ -202,7 +209,7 @@ struct RecipeDetailEditDesktopView: View {
                         }
                     }
                 }
-                .popover(isPresented: $viewModel.showingEditDirectionsSheet) {
+                .sheet(isPresented: $viewModel.showingEditDirectionsSheet) {
                     DirectionsEditView(recipe: $viewModel.recipe)
                 }
                 .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
@@ -236,7 +243,7 @@ struct RecipeDetailEditDesktopView: View {
                         }
                     }
                 }
-                .popover(isPresented: $viewModel.showingEditPreparationTimes) {
+                .sheet(isPresented: $viewModel.showingEditPreparationTimes) {
                     PreparationTimesEditView(recipe: $viewModel.recipe)
                 }
                 .padding(.bottom, 8)
@@ -274,7 +281,7 @@ struct RecipeDetailEditDesktopView: View {
                         }
                     }
                 }
-                .popover(isPresented: $viewModel.showingEditNotesSheet) {
+                .sheet(isPresented: $viewModel.showingEditNotesSheet) {
                     NotesEditView(recipe: $viewModel.recipe)
                 }
                 
@@ -414,6 +421,7 @@ struct RecipeDetailEditDesktopView: View {
             }
             return .ignored
         }
+        .frame(minWidth: 600, minHeight: 500)
     }
     
     // MARK: - Helper Methods
@@ -442,3 +450,5 @@ struct TitleStyle: ViewModifier {
 #Preview {
     RecipeDetailEditDesktopView(recipe: SampleData.sampleRecipes[0], isNewRecipe: false, onNewRecipeSaved: nil)
 }
+
+#endif

@@ -196,7 +196,7 @@ struct NutritionEditView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 400, minHeight: 500)
+        .frame(minWidth: 500, minHeight: 700)
         #endif
     }
     

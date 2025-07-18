@@ -18,13 +18,17 @@ class RecipeNavigationSplitViewModel {
     
     // MARK: - Dependencies
     @ObservationIgnored
-    @Dependency(\.defaultDatabase) private var database
+    @Dependency(\.defaultDatabase)
+    private var database
     
     // MARK: - Data (using SharingGRDB property wrappers)
     @ObservationIgnored
-    @FetchAll(Recipe.order(by: \.name)) var recipes: [Recipe]
+    @FetchAll(Recipe.order(by: \.name))
+    var recipes: [Recipe]
+    
     @ObservationIgnored
-    @FetchAll(Category.order(by: \.name)) var categories: [Category]
+    @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
+    var categories: [Category]
             
     // MARK: - State
     var searchString = ""

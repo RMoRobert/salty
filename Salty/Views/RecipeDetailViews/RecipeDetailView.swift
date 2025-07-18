@@ -234,7 +234,7 @@ struct RecipeDetailView: View {
                         }
                     }
                     .padding()
-                    .frame(minWidth: 100, maxWidth: .infinity)
+                    .frame(minWidth: 100, maxWidth: .infinity, alignment: .leading)
                 }
                 
                 if (recipe.tags.count > 0) {

@@ -54,11 +54,21 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-                    Text("Course")
-                    Spacer()
-                    Button("Select Course") {
-                        viewModel.showingEditCourseSheet.toggle()
+//                    Text("Course")
+//                    Spacer()
+                    Picker("Course", selection: Binding(
+                        get: { viewModel.recipe.courseId },
+                        set: { viewModel.recipe.courseId = $0 }
+                    )) {
+                        Text("(none)")
+                            .tag(nil as String?)
+                            .foregroundStyle(.secondary)
+                        ForEach(viewModel.courses) { course in
+                            Text(course.name)
+                                .tag(course.id as String?)
+                        }
                     }
+                    .pickerStyle(.menu)
                 }
                 
                 HStack {
@@ -378,15 +388,7 @@ struct RecipeDetailEditMobileView: View {
 #endif
             }
         }
-        .sheet(isPresented: $viewModel.showingEditCourseSheet) {
-            NavigationStack {
-                CourseEditView(recipe: $viewModel.recipe)
-                    .navigationTitle("Select Course")
-#if !os(macOS)
-                    .navigationBarTitleDisplayMode(.inline)
-#endif
-            }
-        }
+
         .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
             NutritionEditView(recipe: $viewModel.recipe)
         }

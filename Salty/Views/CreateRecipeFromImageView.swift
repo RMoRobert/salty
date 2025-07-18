@@ -54,18 +54,15 @@ struct CreateRecipeFromImageView: View {
                             )
                         #endif
                     } else {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.secondary.opacity(0.1))
-                            .frame(height: 200)
-                            .overlay(
-                                VStack {
-                                    Image(systemName: "photo")
-                                        .font(.largeTitle)
-                                        .foregroundColor(.secondary)
-                                    Text("Select an image to extract recipe")
-                                        .foregroundColor(.secondary)
-                                }
-                            )
+                        ContentUnavailableView {
+                            Label("No Image", systemImage: "photo")
+                        } description: {
+                            #if os(macOS)
+                            Text("Choose an image to scan for recipe data.")
+                            #else
+                            Text("Use the options below to select or create an image to scan for recipe data.")
+                            #endif
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -175,7 +172,7 @@ struct CreateRecipeFromImageView: View {
                 }
             }
         }
-        #if os(iOS)
+        #if !os(macOS)
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(selectedImage: $selectedImage)
         }
@@ -185,7 +182,18 @@ struct CreateRecipeFromImageView: View {
         .sheet(isPresented: $showingCamera) {
             CameraView(selectedImage: $selectedImage)
         }
-        #elseif os(macOS)
+        .sheet(isPresented: $showingRecipeEditor) {
+            if let recipe = parsedRecipe {
+                NavigationStack {
+                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
+                        // Close the sheet after saving
+                        showingRecipeEditor = false
+                    })
+                        .frame(minWidth: 600, minHeight: 500)
+                }
+            }
+        }
+        #else
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.image],
@@ -200,7 +208,6 @@ struct CreateRecipeFromImageView: View {
                 print("File picker error: \(error)")
             }
         }
-        #endif
         .sheet(isPresented: $showingRecipeEditor) {
             if let recipe = parsedRecipe {
                 NavigationStack {
@@ -212,6 +219,7 @@ struct CreateRecipeFromImageView: View {
                 }
             }
         }
+        #endif
     }
     
     private func createRecipeFromExtractedText() {

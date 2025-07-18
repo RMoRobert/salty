@@ -5,18 +5,41 @@
 //  Created by Robert on 7/4/23.
 //
 
+#if os(macOS)
+
 import SwiftUI
 
 struct IngredientsEditView: View {
     @Binding var recipe: Recipe
-    @State private var selectedIndex: Int? = nil
+    @State private var selectedIndices: Set<Int> = []
     @State private var editingIngredients: [Ingredient] = []
     @State private var hasChanges: Bool = false
+    @State private var scrollToNewItem: Bool = false
     @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
-        VStack {
-            List(selection: $selectedIndex) {
+    private func deleteIngredient(at index: Int) {
+        guard index < editingIngredients.count else { return }
+        editingIngredients.remove(at: index)
+        hasChanges = true
+        
+        // Update selection indices after deletion
+        var newSelection: Set<Int> = []
+        for selectedIndex in selectedIndices {
+            if selectedIndex < index {
+                // Keep indices before the deleted item unchanged
+                newSelection.insert(selectedIndex)
+            } else if selectedIndex > index {
+                // Decrement indices after the deleted item
+                newSelection.insert(selectedIndex - 1)
+            }
+            // Don't add the deleted index
+        }
+        selectedIndices = newSelection
+    }
+    
+    private var ingredientsList: some View {
+        ScrollViewReader { proxy in
+            List(selection: $selectedIndices) {
                 ForEach(Array(editingIngredients.enumerated()), id: \.element.id) { index, ingredient in
                     HStack {
                         if ingredient.isHeading {
@@ -29,15 +52,11 @@ struct IngredientsEditView: View {
                         Spacer()
                     }
                     .tag(index)
+                    .id(index)
                 }
                 .onDelete { indexSet in
                     for index in indexSet.sorted(by: >) {
-                        editingIngredients.remove(at: index)
-                    }
-                    hasChanges = true
-                    // Clear selection if deleted item was selected
-                    if let selectedIndex = selectedIndex, indexSet.contains(selectedIndex) {
-                        self.selectedIndex = nil
+                        deleteIngredient(at: index)
                     }
                 }
                 .onMove { from, to in
@@ -45,57 +64,110 @@ struct IngredientsEditView: View {
                     hasChanges = true
                 }
             }
-            #if os(macOS)
-            .listStyle(.inset(alternatesRowBackgrounds: true))
-            #endif
-            
-            // Detail editor
-            VStack {
-                if let selectedIndex = selectedIndex, selectedIndex < editingIngredients.count {
-                    IngredientDetailEditView(
-                        ingredient: Binding(
-                            get: { editingIngredients[selectedIndex] },
-                            set: { newValue in
-                                editingIngredients[selectedIndex] = newValue
-                                hasChanges = true
-                            }
-                        )
-                    )
-                } else {
-                    Text("Select an ingredient to edit")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .listStyle(.bordered)
+            .alternatingRowBackgrounds()
+            .onChange(of: scrollToNewItem) { _, shouldScroll in
+                if shouldScroll, let lastIndex = editingIngredients.indices.last {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(lastIndex, anchor: .bottom)
+                    }
+                    scrollToNewItem = false
                 }
             }
-            .frame(minHeight: 100, idealHeight: 120)
-            .padding()
-            
-            // Add button
-            Button {
-                editingIngredients.append(Ingredient(
-                    id: UUID().uuidString,
-                    isHeading: false,
-                    text: "New ingredient"
-                ))
-                hasChanges = true
-                // Select the newly added item
-                selectedIndex = editingIngredients.count - 1
-            } label: {
-                Label("Add Ingredient", systemImage: "plus")
-                    .buttonStyle(.bordered)
-            }
-            .buttonStyle(.bordered)
-            .padding()
         }
+    }
+    
+    var body: some View {
+        VSplitView {
+                // Top section: List of ingredients
+                VStack {
+                    ingredientsList
+                    
+                    // Add and Delete buttons
+                    HStack {
+                        Button {
+                            editingIngredients.append(Ingredient(
+                                id: UUID().uuidString,
+                                isHeading: false,
+                                text: "New ingredient"
+                            ))
+                            hasChanges = true
+                            selectedIndices = [editingIngredients.count - 1]
+                            scrollToNewItem = true
+                        } label: {
+                            Label("Add Ingredient", systemImage: "plus")
+                        }
+                        .padding(.trailing)
+                        
+                        Button {
+                            editingIngredients.append(Ingredient(
+                                id: UUID().uuidString,
+                                isHeading: true,
+                                text: "New heading"
+                            ))
+                            hasChanges = true
+                            selectedIndices = [editingIngredients.count - 1]
+                            scrollToNewItem = true
+                        } label: {
+                            Label("Add Heading", systemImage: "folder.badge.plus")
+                        }
+                        .padding(.trailing)
+                        
+                        Button(role: .destructive) {
+                            for index in selectedIndices.sorted(by: >) {
+                                deleteIngredient(at: index)
+                            }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(selectedIndices.isEmpty)
+                        
+                        Spacer()
+                    }
+                }
+                .padding()
+                .frame(minHeight: 250, idealHeight: 350)
+                
+                // Bottom section: Detail editor
+                VStack {
+                    if selectedIndices.count == 1, let firstSelectedIndex = selectedIndices.min(), firstSelectedIndex < editingIngredients.count {
+                        IngredientDetailEditView(
+                            ingredient: Binding(
+                                get: { editingIngredients[firstSelectedIndex] },
+                                set: { newValue in
+                                    editingIngredients[firstSelectedIndex] = newValue
+                                    hasChanges = true
+                                }
+                            )
+                        )
+                    } else {
+                        ContentUnavailableView {
+                            Text(selectedIndices.count > 1 ?
+                                 "Select a single item to edit" : "Select an ingredient to edit"
+                            )
+                                .font(.body)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(minHeight: 75, idealHeight: 90, maxHeight: 400)
+                .padding()
+            }
+            .navigationTitle("Edit Ingredients")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
         .onAppear {
             editingIngredients = recipe.ingredients
         }
         .onChange(of: editingIngredients) { _, _ in
             recipe.ingredients = editingIngredients
         }
-        #if os(macOS)
-        .frame(minWidth: 400, minHeight: 400)
-        #endif
+        .frame(minWidth: 500, minHeight: 500)
     }
 }
 
@@ -106,25 +178,15 @@ struct IngredientDetailEditView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Edit Ingredient")
                 .font(.headline)
-            
-            if (!ingredient.isMain) {
-                Toggle("Is heading", isOn: $ingredient.isHeading)
-            }
-            
+           
             VStack(alignment: .leading, spacing: 8) {
-            #if os(iOS)
-                TextField("Ingredient:", text: $ingredient.text)
-                    .textFieldStyle(.roundedBorder)
-                if (!ingredient.isHeading) {                    Toggle("Is main", isOn: $ingredient.isMain)
-                }
-            #else
                 Text(ingredient.isHeading ? "Heading Text:" : "Ingredient:")
                 HStack {
                     TextField("Ingredient:", text: $ingredient.text)
-                    if (!ingredient.isHeading) {                    Toggle("Is Main", isOn: $ingredient.isMain)
+                    if (!ingredient.isHeading) {
+                        Toggle("Is Main", isOn: $ingredient.isMain)
                     }
                 }
-            #endif
             }
         }
         .padding()
@@ -134,3 +196,5 @@ struct IngredientDetailEditView: View {
 #Preview {
     IngredientsEditView(recipe: .constant(SampleData.sampleRecipes[0]))
 }
+
+#endif

@@ -5,80 +5,103 @@
 //  Created by Robert on 5/29/23.
 //
 
+#if os(macOS)
 import SwiftUI
 
 struct PreparationTimesEditView: View {
     //@Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
-    @State private var selectedIndex: Int? = nil
+    @State private var selectedIndices: Set<Int> = []
     @State private var editingPreparationTimes: [PreparationTime] = []
     @State private var hasChanges: Bool = false
+    @State private var topSectionHeight: CGFloat = 300
     @Environment(\.dismiss) private var dismiss
     
+    private func deletePreparationTime(at index: Int) {
+        guard index < editingPreparationTimes.count else { return }
+        editingPreparationTimes.remove(at: index)
+        hasChanges = true
+        
+        // Update selection indices after deletion
+        var newSelection: Set<Int> = []
+        for selectedIndex in selectedIndices {
+            if selectedIndex < index {
+                // Keep indices before the deleted item unchanged
+                newSelection.insert(selectedIndex)
+            } else if selectedIndex > index {
+                // Decrement indices after the deleted item
+                newSelection.insert(selectedIndex - 1)
+            }
+            // Don't add the deleted index
+        }
+        selectedIndices = newSelection
+    }
+    
     var body: some View {
-        VStack {
-            List(selection: $selectedIndex) {
-                ForEach(Array(editingPreparationTimes.enumerated()), id: \.element.id) { index, preparationTime in
+            VSplitView {
+                // Top Section
+                VStack {
+                    preparationTimesList
+                    
+                    //Add Button
                     HStack {
-                        Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
-                        Spacer()
+                        Button {
+                            editingPreparationTimes.append(PreparationTime(
+                                id: UUID().uuidString,
+                                type: "New time",
+                                timeString: "0 minutes"
+                            ))
+                            hasChanges = true
+                            selectedIndices = [editingPreparationTimes.count - 1]
+                        } label: {
+                            Label("Add Preparation Time", systemImage: "plus")
+                        }
+                        .padding(.trailing)
+                        Button(role: .destructive) {
+                        for index in selectedIndices.sorted(by: >) {
+                            deletePreparationTime(at: index)
+                        }
                     }
-                    .tag(index)
-                }
-                .onDelete { indexSet in
-                    for index in indexSet.sorted(by: >) {
-                        editingPreparationTimes.remove(at: index)
+                    label: {
+                        Label("Delete", systemImage: "trash")
                     }
-                    hasChanges = true
-                    // Clear selection if deleted item was selected
-                    if let selectedIndex = selectedIndex, indexSet.contains(selectedIndex) {
-                        self.selectedIndex = nil
+                    .disabled(selectedIndices.isEmpty)
+                        
                     }
-                }
-                .onMove { from, to in
-                    editingPreparationTimes.move(fromOffsets: from, toOffset: to)
-                    hasChanges = true
-                }
-            }
-            #if os(macOS)
-            .listStyle(.inset(alternatesRowBackgrounds: true))
-            #endif
-            
-            // Detail editor
-            VStack {
-                if let selectedIndex = selectedIndex, selectedIndex < editingPreparationTimes.count {
-                    PreparationTimeDetailEditView(
-                        preparationTime: Binding(
-                            get: { editingPreparationTimes[selectedIndex] },
-                            set: { newValue in
-                                editingPreparationTimes[selectedIndex] = newValue
-                                hasChanges = true
                             }
+            .padding()
+            .frame(minHeight: 250, idealHeight: 350)
+            
+            // Bottom Section
+                VStack {
+                    if selectedIndices.count == 1, let firstSelectedIndex = selectedIndices.min(), firstSelectedIndex < editingPreparationTimes.count {
+                        PreparationTimeDetailEditView(
+                            preparationTime: selectedPreparationTimeBinding
                         )
-                    )
-                } else {
-                    Text("Select a preparation time to edit")
-                        .foregroundStyle(.secondary)
+                    } else {
+                        ContentUnavailableView {
+                            Text(selectedIndices.count > 1 ?
+                                 "Select a single item to edit" : "Select a time to edit"
+                            )
+                                .font(.body)
+                        }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(minHeight: 75, idealHeight: 90, maxHeight: 400)
+                .padding()
+            }
+        
+        .navigationTitle("Edit Preparation Times")
+        .onAppear {
+            editingPreparationTimes = recipe.preparationTimes
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") {
+                    dismiss()
                 }
             }
-            .frame(minHeight: 100, idealHeight: 120)
-            .padding()
-            
-            // Add button
-            Button {
-                editingPreparationTimes.append(PreparationTime(
-                    id: UUID().uuidString,
-                    type: "New Time",
-                    timeString: "0 minutes"
-                ))
-                hasChanges = true
-                // Select the newly added item
-                selectedIndex = editingPreparationTimes.count - 1
-            } label: {
-                Label("Add Preparation Time", systemImage: "plus")
-            }
-            .padding()
         }
         .onAppear {
             editingPreparationTimes = recipe.preparationTimes
@@ -86,9 +109,53 @@ struct PreparationTimesEditView: View {
         .onChange(of: editingPreparationTimes) { _, _ in
             recipe.preparationTimes = editingPreparationTimes
         }
-        #if os(macOS)
-        .frame(minWidth: 400, minHeight: 400)
-        #endif
+        .frame(minWidth: 400, maxWidth: .infinity, 
+               minHeight: 400, maxHeight: .infinity)
+//        #if os(macOS)
+//        .presentationSizing(.fitted)
+//        #endif
+    }
+
+    
+    private var preparationTimesList: some View {
+        List(selection: $selectedIndices) {
+            ForEach(Array(editingPreparationTimes.enumerated()), id: \.element.id) { index, preparationTime in
+                HStack {
+                    Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
+                    Spacer()
+                }
+                .tag(index)
+            }
+            .onDelete { indexSet in
+                for index in indexSet.sorted(by: >) {
+                    deletePreparationTime(at: index)
+                }
+            }
+            .onMove { from, to in
+                editingPreparationTimes.move(fromOffsets: from, toOffset: to)
+                hasChanges = true
+            }
+        }
+        .listStyle(.bordered)
+        .alternatingRowBackgrounds()
+    }
+    
+    
+    private var selectedPreparationTimeBinding: Binding<PreparationTime> {
+        Binding(
+            get: { 
+                if let index = selectedIndices.min(), index < editingPreparationTimes.count {
+                    return editingPreparationTimes[index]
+                }
+                return PreparationTime(id: "", type: "", timeString: "")
+            },
+            set: { newValue in
+                if let index = selectedIndices.min(), index < editingPreparationTimes.count {
+                    editingPreparationTimes[index] = newValue
+                    hasChanges = true
+                }
+            }
+        )
     }
 }
 
@@ -104,20 +171,19 @@ struct PreparationTimeDetailEditView: View {
                 Text("Type:")
                     .frame(width: 60, alignment: .leading)
                 TextField("Type", text: $preparationTime.type)
-                    .textFieldStyle(.roundedBorder)
             }
             
             HStack {
                 Text("Time:")
                     .frame(width: 60, alignment: .leading)
                 TextField("Time", text: $preparationTime.timeString)
-                    .textFieldStyle(.roundedBorder)
             }
         }
-        .padding()
     }
 }
 
-//#Preview {
-//    PreparationTimesEditView(recipe: .constant(SampleData.sampleRecipes[0]))
-//}
+#Preview {
+    PreparationTimesEditView(recipe: .constant(SampleData.sampleRecipes[0]))
+}
+
+#endif
