@@ -11,7 +11,7 @@ import SwiftUI
 @main
 struct SaltyApp: App {
     @Dependency(\.context) var context
-    //let persistenceController = PersistenceController.shared
+    
     init() {
         if context == .live {
             try! prepareDependencies {
@@ -19,10 +19,10 @@ struct SaltyApp: App {
             }
         }
     }
+    
     var body: some Scene {
         WindowGroup {
             MainView()
-
         }
         .commands {
             Menus()
@@ -31,13 +31,13 @@ struct SaltyApp: App {
         // "Edit Categories" window
         WindowGroup(id: "edit-categories-window") {
             LibraryCategoriesEditView()
-                .frame(idealWidth: 300)
+                .frame(idealWidth: 250)
                 .navigationTitle("Category Editor")
         }
         // "Edit Courses" window
         WindowGroup(id: "edit-courses-window") {
             LibraryCoursesEditView()
-                .frame(idealWidth: 300)
+                .frame(idealWidth: 250)
                 .navigationTitle("Courses Editor")
         }
         // "Open Database" window
