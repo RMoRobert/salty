@@ -151,29 +151,42 @@ class SchemaOrgRecipeJSONLDImporter {
     
     private func extractString(from dict: [String: Any], key: String) -> String? {
         if let value = dict[key] as? String {
-            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return decodeHTMLEntities(value.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return nil
+    }
+    
+    /// Decodes common HTML entities that might appear in JSON-LD data
+    private func decodeHTMLEntities(_ text: String) -> String {
+        return text
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&#x27;", with: "'")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#34;", with: "\"")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
     
     private func extractAuthor(from dict: [String: Any]) -> String {
         if let author = dict["author"] {
             // Handle string author
             if let authorString = author as? String {
-                return authorString
+                return decodeHTMLEntities(authorString)
             }
             
             // Handle object author
             if let authorDict = author as? [String: Any] {
                 if let name = authorDict["name"] as? String {
-                    return name
+                    return decodeHTMLEntities(name)
                 }
             }
             
             // Handle array of authors
             if let authorArray = author as? [[String: Any]] {
                 let names = authorArray.compactMap { $0["name"] as? String }
-                return names.joined(separator: ", ")
+                return names.map { decodeHTMLEntities($0) }.joined(separator: ", ")
             }
         }
         
@@ -230,7 +243,7 @@ class SchemaOrgRecipeJSONLDImporter {
                         directions.append(Direction(
                             id: UUID().uuidString,
                             isHeading: false,
-                            text: text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            text: decodeHTMLEntities(text.trimmingCharacters(in: .whitespacesAndNewlines))
                         ))
                     }
                 }
@@ -239,7 +252,7 @@ class SchemaOrgRecipeJSONLDImporter {
                     directions.append(Direction(
                         id: UUID().uuidString,
                         isHeading: false,
-                        text: instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+                        text: decodeHTMLEntities(instruction.trimmingCharacters(in: .whitespacesAndNewlines))
                     ))
                 }
             } else if let instructionString = recipeInstructions as? String {
@@ -247,7 +260,7 @@ class SchemaOrgRecipeJSONLDImporter {
                 directions.append(Direction(
                     id: UUID().uuidString,
                     isHeading: false,
-                    text: instructionString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    text: decodeHTMLEntities(instructionString.trimmingCharacters(in: .whitespacesAndNewlines))
                 ))
             }
         }
@@ -264,7 +277,7 @@ class SchemaOrgRecipeJSONLDImporter {
                     id: UUID().uuidString,
                     isHeading: false,
                     isMain: false,
-                    text: ingredient.trimmingCharacters(in: .whitespacesAndNewlines)
+                    text: decodeHTMLEntities(ingredient.trimmingCharacters(in: .whitespacesAndNewlines))
                 ))
             }
         }

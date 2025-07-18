@@ -19,6 +19,11 @@ class CreateRecipeFromWebViewModel {
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
+    // MARK: - Data
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
+    var courses: [Course]
+    
     // MARK: - Recipe State
     var recipe: Recipe
     
@@ -34,7 +39,6 @@ class CreateRecipeFromWebViewModel {
     
     // MARK: - UI State
     var showingCategoriesSheet = false
-    var showingCoursesSheet = false
     var showingPreparationTimesSheet = false
     var showingImageEditSheet = false
     var showingNotesSheet = false
@@ -142,7 +146,7 @@ class CreateRecipeFromWebViewModel {
     
     // MARK: - Text Extraction Methods
     func extractTextToField(_ text: String, field: RecipeField) {
-        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanText = decodeHTMLEntities(text.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !cleanText.isEmpty else { 
             logger.warning("Empty text provided for \(field.rawValue)")
             return 
@@ -217,6 +221,19 @@ class CreateRecipeFromWebViewModel {
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
         self.isLoading = isLoading
+    }
+    
+    /// Decodes common HTML entities that might appear in scraped content
+    private func decodeHTMLEntities(_ text: String) -> String {
+        return text
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&#x27;", with: "'")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#34;", with: "\"")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
 }
 

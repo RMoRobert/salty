@@ -402,13 +402,20 @@ struct RecipeWebImportEditView: View {
                 
                 // Courses Section
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Courses")
+                    Text("Course")
                         .font(.headline)
                     
-                    Button("Edit Courses") {
-                        viewModel.showingCoursesSheet = true
+                    Picker("Course", selection: $viewModel.recipe.courseId) {
+                        Text("(No Course)")
+                            .tag(nil as String?)
+                        
+                        ForEach(viewModel.courses) { course in
+                            Text(course.name)
+                                .tag(course.id as String?)
+                        }
                     }
-                    .buttonStyle(.bordered)
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 300, alignment: .leading)
                 }
                 .padding(.bottom, 16)
                 
@@ -537,10 +544,7 @@ struct RecipeWebImportEditView: View {
         .sheet(isPresented: $viewModel.showingCategoriesSheet) {
             CategoryEditView(recipe: $viewModel.recipe)
         }
-        .sheet(isPresented: $viewModel.showingCoursesSheet) {
-            CourseEditView(recipe: $viewModel.recipe)
-        }
-                .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
+        .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
             PreparationTimesEditView(recipe: $viewModel.recipe)
         }
         .sheet(isPresented: $viewModel.showingNotesSheet) {
