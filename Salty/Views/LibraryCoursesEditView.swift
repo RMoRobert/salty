@@ -11,99 +11,242 @@ import SharingGRDB
 
 struct LibraryCoursesEditView: View {
     @Dependency(\.defaultDatabase) private var database
-    @FetchAll(Course.order(by: \.name)) private var courses
-    @State private var selectedCourseIDs: Set<String> = []
-    @State private var navigationPath = NavigationPath()
+    
+    @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
+    var courses: [Course]
+    
+    @State private var selectedIndices: Set<Int> = []
+    @State private var showingNewCourseAlert = false
+    @State private var newCourseName = ""
+    @State private var showingDuplicateNameAlert = false
+    @State private var showingEditCourseAlert = false
+    @State private var editingCourseName = ""
+    @State private var editingCourseIndex: Int? = nil
+    @State private var scrollToNewItem: Bool = false
     
     @Environment(\.dismiss) var dismiss
     
+    private func deleteCourse(at index: Int) {
+        guard index < courses.count else { return }
+        let courseToDelete = courses[index]
+        
+        do {
+            try database.write { db in
+                // Update recipes that reference this course to have no course
+                try Recipe
+                    .filter(Column("courseId") == courseToDelete.id)
+                    .updateAll(db, Column("courseId").set(to: nil))
+                
+                // Then delete the course itself
+                try courseToDelete.delete(db)
+            }
+            
+            // Update selection indices after deletion
+            var newSelection: Set<Int> = []
+            for selectedIndex in selectedIndices {
+                if selectedIndex < index {
+                    // Keep indices before the deleted item unchanged
+                    newSelection.insert(selectedIndex)
+                } else if selectedIndex > index {
+                    // Decrement indices after the deleted item
+                    newSelection.insert(selectedIndex - 1)
+                }
+                // Don't add the deleted index
+            }
+            selectedIndices = newSelection
+        } catch {
+            print("Error deleting course: \(error)")
+        }
+    }
+    
     var body: some View {
-        NavigationStack(path: $navigationPath) {
-            List(selection: $selectedCourseIDs) {
-                ForEach(courses, id: \.id) { course in
-                    NavigationLink(value: course) {
-                        HStack {
-                            Text(course.name)
-                        }
+        VStack {
+            coursesList
+            
+            // Add, Edit, and Delete buttons
+            HStack {
+                Button {
+                    newCourseName = ""
+                    showingNewCourseAlert = true
+                } label: {
+                    #if !os(macOS)
+                    Label("Add", systemImage: "plus").padding()
+                    #else
+                    Label("Add Course", systemImage: "plus")
+                    #endif
+                }
+                .padding(.trailing)
+                
+                Button {
+                    if let firstSelectedIndex = selectedIndices.min(), firstSelectedIndex < courses.count {
+                        editingCourseName = courses[firstSelectedIndex].name
+                        editingCourseIndex = firstSelectedIndex
+                        showingEditCourseAlert = true
                     }
+                } label: {
+                    #if !os(macOS)
+                    Label("Edit", systemImage: "pencil").padding()
+                    #else
+                    Label("Edit Name", systemImage: "pencil")
+                    #endif
+                }
+                .disabled(selectedIndices.count != 1)
+                
+                Button(role: .destructive) {
+                    for index in selectedIndices.sorted(by: >) {
+                        deleteCourse(at: index)
+                    }
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                    #if !os(macOS)
+                        .padding()
+                    #endif
+                }
+                .disabled(selectedIndices.isEmpty)
+                
+                Spacer()
+            }
+        }
+        .navigationTitle("Edit Courses")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") {
+                    dismiss()
                 }
             }
-            .navigationTitle("Courses")
-            .navigationDestination(for: Course.self) { course in
-                LibraryCourseEditView(course: course) {
-                    // Navigate back after saving
-                    navigationPath.removeLast()
+        }
+        .padding()
+        .alert("New Course", isPresented: $showingNewCourseAlert) {
+            TextField("Course Name", text: $newCourseName)
+            Button("Cancel", role: .cancel) {
+                newCourseName = ""
+            }
+            Button("Add") {
+                createNewCourse()
+            }
+            .disabled(newCourseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("Enter a name for the new course")
+        }
+        .alert("Course Already Exists", isPresented: $showingDuplicateNameAlert) {
+            Button("OK") { }
+        } message: {
+            Text("A course with the name \"\(newCourseName)\" already exists.")
+        }
+        .alert("Rename Course", isPresented: $showingEditCourseAlert) {
+            TextField("Course name", text: $editingCourseName)
+            Button("Cancel", role: .cancel) {
+                editingCourseName = ""
+                editingCourseIndex = nil
+            }
+            Button("Save") {
+                if let index = editingCourseIndex {
+                    updateCourseName(at: index, to: editingCourseName)
                 }
             }
-            .navigationDestination(for: CourseEditMode.self) { mode in
-                LibraryCourseEditView(mode: mode) {
-                    // Navigate back after creating
-                    navigationPath.removeLast()
+            .disabled(editingCourseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("Enter the new name for the course")
+        }
+    }
+    
+    private func createNewCourse() {
+        let trimmedName = newCourseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        
+        do {
+            // Check if a course with this name already exists (case-insensitive)
+            let existingCourse = try database.read { db in
+                try Course
+                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .fetchOne(db)
+            }
+            
+            if existingCourse != nil {
+                // Show duplicate name error
+                showingDuplicateNameAlert = true
+                return
+            }
+            
+            // Create the new course
+            let newCourse = Course(id: UUID().uuidString, name: trimmedName)
+            try database.write { db in
+                try newCourse.insert(db)
+            }
+            
+            // Select the new course and scroll to it
+            selectedIndices = [courses.count - 1]
+            scrollToNewItem = true
+            newCourseName = ""
+        } catch {
+            print("Error creating course: \(error)")
+        }
+    }
+    
+    private func updateCourseName(at index: Int, to newName: String) {
+        guard index < courses.count else { return }
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        
+        do {
+            // Check if a course with this name already exists (case-insensitive)
+            let existingCourse = try database.read { db in
+                try Course
+                    .filter(sql: "LOWER(name) = LOWER(?) AND id != ?", arguments: [trimmedName, courses[index].id])
+                    .fetchOne(db)
+            }
+            
+            if existingCourse != nil {
+                // Show duplicate name error
+                showingDuplicateNameAlert = true
+                return
+            }
+            
+            // Update the course name
+            var updatedCourse = courses[index]
+            updatedCourse.name = trimmedName
+            try database.write { db in
+                try updatedCourse.update(db)
+            }
+            
+            editingCourseIndex = nil
+            editingCourseName = ""
+        } catch {
+            print("Error updating course: \(error)")
+        }
+    }
+    private var coursesList: some View {
+        ScrollViewReader { proxy in
+            List(selection: $selectedIndices) {
+                ForEach(Array(courses.enumerated()), id: \.element.id) { index, course in
+                    HStack {
+                        Text(course.name)
+                        Spacer()
+                    }
+                    .tag(index)
+                    .id(index)
+                }
+                .onDelete { indexSet in
+                    for index in indexSet.sorted(by: >) {
+                        deleteCourse(at: index)
+                    }
                 }
             }
             #if os(macOS)
-            .onDeleteCommand {
-                deleteSelectedCourses()
-            }
+            .listStyle(.bordered)
+            .alternatingRowBackgrounds()
+            #else
+            .listStyle(.plain)
             #endif
-            .padding()
-            .frame(minWidth: 300, minHeight: 400)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: {
-                        createNewCourse()
-                    }) {
-                        Image(systemName: "plus")
+            .onChange(of: scrollToNewItem) { _, shouldScroll in
+                if shouldScroll, let lastIndex = courses.indices.last {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(lastIndex, anchor: .bottom)
                     }
-                }
-                
-                ToolbarItem {
-                    Button(role: .destructive, action: {
-                        deleteSelectedCourses()
-                    }) {
-                        Image(systemName: "minus")
-                    }
-                    .disabled(selectedCourseIDs.isEmpty)
-                }
-                
-                ToolbarItem {
-                    Button(action: {
-                        editSelectedCourse()
-                    }) {
-                        Image(systemName: "pencil")
-                    }
-                    .disabled(selectedCourseIDs.count != 1)
-                }
-                
-                ToolbarItem {
-                    Button("Done") {
-                        dismiss()
-                    }
+                    scrollToNewItem = false
                 }
             }
         }
-    }
-    
-    func deleteSelectedCourses() {
-        try? database.write { db in
-            for id in selectedCourseIDs {
-                try Course.deleteOne(db, key: id)
-            }
-        }
-        selectedCourseIDs.removeAll()
-    }
-    
-    func createNewCourse() {
-        navigationPath.append(CourseEditMode.new)
-    }
-    
-    func editSelectedCourse() {
-        guard selectedCourseIDs.count == 1,
-              let selectedID = selectedCourseIDs.first,
-              let course = courses.first(where: { $0.id == selectedID }) else {
-            return
-        }
-        navigationPath.append(course)
     }
 }
 
@@ -113,88 +256,7 @@ enum CourseEditMode: Hashable {
 }
 
 // MARK: - LibraryCourseEditView
-struct LibraryCourseEditView: View {
-    @Dependency(\.defaultDatabase) private var database
-    @State private var courseName: String
-    @State private var isNewCourse: Bool
-    @State private var originalCourse: Course?
-    
-    let onSave: () -> Void
-    
-    // For editing existing course
-    init(course: Course, onSave: @escaping () -> Void) {
-        self._courseName = State(initialValue: course.name)
-        self._isNewCourse = State(initialValue: false)
-        self._originalCourse = State(initialValue: course)
-        self.onSave = onSave
-    }
-    
-    // For creating new course
-    init(mode: CourseEditMode, onSave: @escaping () -> Void) {
-        self._courseName = State(initialValue: "New Course")
-        self._isNewCourse = State(initialValue: true)
-        self._originalCourse = State(initialValue: nil)
-        self.onSave = onSave
-    }
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Text(isNewCourse ? "New Course" : "Edit Course")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Name")
-                    .font(.headline)
-                
-                TextField("Course name", text: $courseName)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .onSubmit {
-                        saveCourse()
-                    }
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 12) {
-                Button("Cancel") {
-                    onSave() // This will navigate back
-                }
-                .keyboardShortcut(.escape)
-                
-                Button(isNewCourse ? "Create" : "Save") {
-                    saveCourse()
-                }
-                .keyboardShortcut(.return)
-                .disabled(courseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding()
-        .frame(minWidth: 300, minHeight: 200)
-        .navigationTitle(isNewCourse ? "New Course" : "Edit Course")
-    }
-    
-    private func saveCourse() {
-        let trimmedName = courseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-        
-        try? database.write { db in
-            if isNewCourse {
-                // Create new course
-                try Course.upsert(Course.Draft(id: UUID().uuidString, name: trimmedName))
-                    .execute(db)
-            } else if let course = originalCourse {
-                // Update existing course
-                var updatedCourse = course
-                updatedCourse.name = trimmedName
-                try updatedCourse.update(db)
-            }
-        }
-        
-        onSave()
-    }
-}
+
 
 struct LibraryCoursesEditView_Previews: PreviewProvider {
     static var previews: some View {
