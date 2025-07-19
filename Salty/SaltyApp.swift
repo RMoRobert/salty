@@ -14,8 +14,17 @@ struct SaltyApp: App {
     
     init() {
         if context == .live {
-            try! prepareDependencies {
-                $0.defaultDatabase = try Salty.appDatabase()
+            do {
+                try prepareDependencies {
+                    $0.defaultDatabase = try Salty.appDatabase()
+                }
+                
+                // Create backup after successful database initialization
+                let backupManager = DatabaseBackupManager()
+                backupManager.createBackupIfNeeded()
+            } catch {
+                // Log the error but don't crash the app
+                print("Failed to initialize database: \(error)")
             }
         }
     }
@@ -48,6 +57,7 @@ struct SaltyApp: App {
                 #endif
                 .navigationTitle("Open Database")
         }
+
         // "Import from File" window
         WindowGroup(id: "import-from-file-window") {
             ImportRecipesFromFileView()
