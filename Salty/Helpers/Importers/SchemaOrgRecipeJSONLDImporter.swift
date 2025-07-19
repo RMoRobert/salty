@@ -356,35 +356,38 @@ class SchemaOrgRecipeJSONLDImporter {
     private func extractNotes(from dict: [String: Any]) -> [Note] {
         var notes: [Note] = []
         
-        // Extract keywords as a note
-        if let keywords = dict["keywords"] as? String, !keywords.isEmpty {
-            notes.append(Note(
-                id: UUID().uuidString,
-                title: "Keywords",
-                content: keywords
-            ))
-        }
+        // Extract keywords as a note:
+//        if let keywords = dict["keywords"] as? String, !keywords.isEmpty {
+//            notes.append(Note(
+//                id: UUID().uuidString,
+//                title: "Keywords",
+//                content: keywords
+//            ))
+//        }
+        // TODO: Consider option offering import above as Tags instead?
         
         // Extract recipe category as a note
         if let category = dict["recipeCategory"] as? String, !category.isEmpty {
-            notes.append(Note(
-                id: UUID().uuidString,
-                title: "Category",
-                content: category
-            ))
+//            notes.append(Note(
+//                id: UUID().uuidString,
+//                title: "Category",
+//                content: category
+//            ))
+            
+            // TODO: Check if category with same name already exists and add if so? Maybe offer import option to do or not.
+            // Do not add to notes
         }
         
         // Extract cuisine as a note
-        if let cuisine = dict["recipeCuisine"] as? String, !cuisine.isEmpty {
-            notes.append(Note(
-                id: UUID().uuidString,
-                title: "Cuisine",
-                content: cuisine
-            ))
-        }
-        
-        // Note: Nutrition information is now extracted separately as structured data
-        
+//        if let cuisine = dict["recipeCuisine"] as? String, !cuisine.isEmpty {
+//            notes.append(Note(
+//                id: UUID().uuidString,
+//                title: "Cuisine",
+//                content: cuisine
+//            ))
+        // ^ intentionally not doing now but could
+ //       }
+       
         return notes
     }
     
