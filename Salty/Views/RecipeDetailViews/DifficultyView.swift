@@ -81,7 +81,7 @@ struct DifficultyView: View {
                     .opacity(recipe.difficulty == .notSet ? 0.50 : 1)
                 
                 // Difficulty marker (triangle or question mark)
-                let markerSize = barHeight * 1.5
+                let markerSize = barHeight * 1.33
                 if recipe.difficulty == .notSet {
                     // Question mark for not set
                     Text("?")

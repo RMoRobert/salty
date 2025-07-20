@@ -64,7 +64,8 @@ struct SampleData {
                 Note(id: UUID().uuidString, title: "Note 1", content: "This is the text of the note")
             ],
             preparationTimes: [
-                PreparationTime(id: UUID().uuidString, type: "Preparation", timeString: "25 Minutes")
+                PreparationTime(id: UUID().uuidString, type: "Preparation", timeString: "25 Minutes"),
+                PreparationTime(id: UUID().uuidString, type: "Total Time", timeString: "1 Hour, 30 Minutes")
             ],
             nutrition: NutritionInformation(
                 servingSize: "1 serving",

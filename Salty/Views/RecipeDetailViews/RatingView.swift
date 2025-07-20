@@ -37,10 +37,10 @@ struct RatingView: View {
                         .symbolRenderingMode(isStarInRange ? .hierarchical : nil)
                         .foregroundColor(isStarInRange ? .yellow : .gray)
                         .shadow(radius: isStarInRange ? 0.5 : 0, x: isStarInRange ? 0.5 : 0, y: isStarInRange ? 1 : 0)
-                        .opacity(recipe.rating.rawValue > 0 ? 1 : 0.5)
+                        .opacity(recipe.rating.rawValue > 0 ? 1 : 0.33)
                 }
             }
-            .accessibilityLabel("Rating: \(recipe.rating.rawValue) star(s)")
+            .accessibilityLabel("Rating: \(recipe.rating == .notSet) ? 4 : \"not set\" : \"(recipe.rating.rawValue) star(s)\"")
         }
     }
 }

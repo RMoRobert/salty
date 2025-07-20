@@ -74,6 +74,7 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Text("Categories")
                     Spacer()
+                    //Text($viewModel.recipe.)
                     Button("Select Categories") {
                         viewModel.showingEditCategoriesSheet.toggle()
                     }
@@ -177,7 +178,7 @@ struct RecipeDetailEditMobileView: View {
                         Button(action: {
                             viewModel.showingBulkEditDirectionsSheet.toggle()
                         }) {
-                            Label("Bulk Edit", systemImage: "text.alignleft")
+                            Label("Edit as Text (Bulk Edit)", systemImage: "text.alignleft")
                         }
                     } label: {
                         Label("More", systemImage: "ellipsis")
@@ -257,26 +258,27 @@ struct RecipeDetailEditMobileView: View {
             
             // Tags
             Section("Tags") {
-                HFlow(itemSpacing: 8, rowSpacing: 4) {
-                    ForEach(viewModel.sortedTags, id: \.self) { tag in
-                        Button(action: {
-                            viewModel.removeTag(tag)
-                        }) {
-                            Label(tag, systemImage: "minus.circle")
-//                                .padding(.horizontal, 8)
-//                                .padding(.vertical, 4)
-//                                .background(.quaternary, in: Capsule())
-//                                .foregroundColor(.primary)
+                if !viewModel.recipe.tags.isEmpty {
+                    HFlow(itemSpacing: 8, rowSpacing: 4) {
+                        ForEach(viewModel.sortedTags, id: \.self) { tag in
+                            Button(action: {
+                                viewModel.removeTag(tag)
+                            }) {
+                                Label(tag, systemImage: "minus.circle")
+                                //                                .padding(.horizontal, 8)
+                                //                                .padding(.vertical, 4)
+                                //                                .background(.quaternary, in: Capsule())
+                                //                                .foregroundColor(.primary)
+                            }
+                            .buttonStyle(.bordered)
+                            .foregroundStyle(.primary)
+                            .backgroundStyle(.secondary)
+                            .controlSize(.mini)
+                            
+                            .accessibilityHint("Remove tag \(tag)")
                         }
-                        .buttonStyle(.bordered)
-                        .foregroundStyle(.primary)
-                        .backgroundStyle(.secondary)
-                        .controlSize(.mini)
-                        
-                        .accessibilityHint("Remove tag \(tag)")
                     }
-                    
-                }                
+                }
                 Button(action: {
                     newTagName = ""
                     showingAddTagAlert = true

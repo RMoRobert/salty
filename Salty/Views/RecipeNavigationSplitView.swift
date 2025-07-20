@@ -12,8 +12,10 @@ struct RecipeNavigationSplitView: View {
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @Environment(\.openWindow) private var openWindow
 
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var isEditMode = false
+    
+
     
     //@State private var showEditRecipeView = false
     @State private var showingEditLibCategoriesSheet = false
@@ -51,9 +53,15 @@ struct RecipeNavigationSplitView: View {
 //                }
             }
             .listStyle(.sidebar)
+            #if os(macOS)
             .onAppear() {
-                viewModel.selectedSidebarItemId = viewModel.allRecipesID
+                // On macOS, set default selection to "All Recipes" if no selection exists
+                if viewModel.selectedSidebarItemId == nil {
+                    viewModel.selectedSidebarItemId = viewModel.allRecipesID
+                }
             }
+            #endif
+
         } content: {
             ScrollViewReader { proxy in
                 List(selection: $viewModel.selectedRecipeIDs) {
@@ -223,6 +231,7 @@ struct RecipeNavigationSplitView: View {
                 }
             }
             #endif
+            .searchable(text: $viewModel.searchString)
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
@@ -245,7 +254,6 @@ struct RecipeNavigationSplitView: View {
                     .font(.title)
             }
         }
-        .searchable(text: $viewModel.searchString)
         .navigationTitle("Recipes")
         .sheet(isPresented: $viewModel.showingEditSheet) {
             if let recipe = viewModel.recipeToEdit(recipeId: viewModel.recipeToEditID) {
