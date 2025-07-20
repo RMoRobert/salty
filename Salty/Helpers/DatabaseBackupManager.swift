@@ -145,7 +145,7 @@ public final class DatabaseBackupManager {
         logger.debug("Copied entire Salty library directory: \(libraryName)")
         
         // Create the ZIP file
-        try zipService.createZip(zipFinalURL: backupURL, fromDirectory: tempBackupDirectory)
+        let _ = try zipService.createZip(zipFinalURL: backupURL, fromDirectory: tempBackupDirectory)
     }
     
     private func cleanupOldBackups() async {
