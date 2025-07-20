@@ -263,12 +263,16 @@ struct RecipeDetailEditMobileView: View {
                             viewModel.removeTag(tag)
                         }) {
                             Label(tag, systemImage: "minus.circle")
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.quaternary, in: Capsule())
-                                .foregroundColor(.primary)
+//                                .padding(.horizontal, 8)
+//                                .padding(.vertical, 4)
+//                                .background(.quaternary, in: Capsule())
+//                                .foregroundColor(.primary)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.bordered)
+                        .foregroundStyle(.primary)
+                        .backgroundStyle(.secondary)
+                        .controlSize(.mini)
+                        
                         .accessibilityHint("Remove tag \(tag)")
                     }
                     
@@ -331,7 +335,7 @@ struct RecipeDetailEditMobileView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItemGroup {
+            ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", role: .cancel) {
                     if viewModel.hasUnsavedChanges {
                         viewModel.showingCancelAlert = true
@@ -339,14 +343,13 @@ struct RecipeDetailEditMobileView: View {
                         dismiss()
                     }
                 }
-                .foregroundColor(.secondary)
-                
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button("Save") {
                     viewModel.saveRecipe()
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
             }
         }
         .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
