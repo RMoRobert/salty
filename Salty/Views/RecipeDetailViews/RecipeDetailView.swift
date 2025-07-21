@@ -14,7 +14,7 @@ struct RecipeDetailView: View {
     let recipe: Recipe
     @Environment(\.openWindow) private var openWindow
     @State private var showingFullImage = false
-    @State private var showingEditSheet = false
+
     @State private var courseName: String?
     #if !os(macOS)
     @State private var isTitleVisible: Bool = true
@@ -286,26 +286,8 @@ struct RecipeDetailView: View {
             RecipeFullImageView(recipe: recipe)
                 .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
         }
-        .sheet(isPresented: $showingEditSheet) {
-#if os(macOS)
-            RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: false)
-                .frame(minWidth: 600, minHeight: 500)
-#else
-            NavigationStack {
-                RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: false)
-            }
-#endif
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: {
-                    showingEditSheet = true
-                }) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .keyboardShortcut("e", modifiers: .command)
-            }
-        }
+
+
         .onAppear {
             loadCourseName()
         }

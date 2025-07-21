@@ -24,6 +24,7 @@ struct RecipeNavigationSplitView: View {
     @State private var showingImportFromFileSheet = false
     @State private var showingCreateFromImageSheet = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingSettingsSheet = false
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -166,6 +167,12 @@ struct RecipeNavigationSplitView: View {
                         Button("Open Database…") {
                             showingOpenDBSheet.toggle()
                         }
+                        #if !os(macOS)
+                        Divider()
+                        Button("Settings…") {
+                            showingSettingsSheet = true
+                        }
+                        #endif
                     }, label: {
                         Label("More", systemImage: "ellipsis.circle")
                     })
@@ -235,19 +242,36 @@ struct RecipeNavigationSplitView: View {
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
-                #if os(macOS)
                 if useWebRecipeDetailView == true {
                     RecipeDetailWebView(recipe: recipe)
                         .id(recipeId) // seems to be needed to force full reload when recipe changes?
+                        .toolbar {
+                            ToolbarItem(placement: .primaryAction) {
+                                Button(action: {
+                                    viewModel.recipeToEditID = recipeId
+                                    viewModel.showingEditSheet = true
+                                }) {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .keyboardShortcut("e", modifiers: .command)
+                            }
+                        }
                 }
                 else {
                     RecipeDetailView(recipe: recipe)
                         .id(recipeId) // seems to be needed to force full reload when recipe changes?
+                        .toolbar {
+                            ToolbarItem(placement: .primaryAction) {
+                                Button(action: {
+                                    viewModel.recipeToEditID = recipeId
+                                    viewModel.showingEditSheet = true
+                                }) {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .keyboardShortcut("e", modifiers: .command)
+                            }
+                        }
                 }
-                #else
-                    RecipeDetailView(recipe: recipe)
-                        .id(recipeId) // seems to be needed to force full reload when recipe changes?
-                #endif
             } else {
                 Text("No recipe selected")
                     .foregroundStyle(.tertiary)
@@ -311,6 +335,11 @@ struct RecipeNavigationSplitView: View {
             LibraryCoursesEditView()
                 .frame(minWidth: 500, minHeight: 400)
             #endif
+        }
+        .sheet(isPresented: $showingSettingsSheet) {
+            NavigationStack {
+                SettingsView()
+            }
         }
 
     }
