@@ -44,10 +44,10 @@ struct SampleData {
             introduction: "This is an introduction for my recipe. Some introductions are long, so let's make this one long, too. Here is some more text. Is it long enough yet? Let's write more just in case. Yay, recipes!",
             difficulty: .somewhatEasy,
             rating: .four,
-            imageFilename: nil,
+            imageFilename: "1A2C3B22-DEEC-4EB2-9BFB-19055D3CB8E1.jpg",
             imageThumbnailData: nil,
             isFavorite: true,
-            wantToMake: false,
+            wantToMake: true,
             yield: "2 dozen",
             servings: 36,
             courseId: "main-id",
@@ -76,7 +76,8 @@ struct SampleData {
                 fiber: 2.8,
                 sugar: 4.2,
                 sodium: 420
-            )
+            ),
+            tags: ["tag1", "another-tag"]
         ),
         
         // Minimal sample recipe

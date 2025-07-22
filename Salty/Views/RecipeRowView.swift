@@ -94,6 +94,14 @@ struct RecipeRowView: View {
             }
         }
     }
+    
+    struct IconShadowModifier: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .shadow(radius: 0.5, x:0.5, y:1)
+        }
+    }
+    
 }
 
 

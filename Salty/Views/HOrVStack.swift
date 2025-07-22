@@ -1,88 +1,34 @@
 //
-//  HOrVStack.swift
+//  AdaptiveStack.swift
 //  Salty
 //
-//  Created by Robert on 7/28/23.
+//  Created by Robert on 7/21/25, replacing HOrVStack from 7/28/23.
 //
 
 import SwiftUI
 
-/// Returns HStackLayout or VStackLayout, depending on UI size class and OS (assume macOS can always handle H)
-struct HOrVStack<Content: View>: View {
-    @State var alignFirstTextLeadingIfHStack = false
-    var spacingIfHStack: CGFloat? = nil
-    var spacingIfVStack: CGFloat? = nil
+struct AdaptiveStack<Content: View>: View {
+    @Environment(\.horizontalSizeClass) var sizeClass
+    let horizontalAlignment: HorizontalAlignment
+    let verticalAlignment: VerticalAlignment
+    let spacing: CGFloat?
+    let content: () -> Content
     
-#if !os(macOS)
-    @Environment(\.horizontalSizeClass) var horizontalSizeClass
-#else
-    enum UserInterfaceSizeClass {
-        case compact
-        case regular
-        case none
+    init(horizontalAlignment: HorizontalAlignment = .center, verticalAlignment: VerticalAlignment = .center, spacing: CGFloat? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.horizontalAlignment = horizontalAlignment
+        self.verticalAlignment = verticalAlignment
+        self.spacing = spacing
+        self.content = content
     }
-    let horizontalSizeClass = UserInterfaceSizeClass.regular
-#endif
     
-    @ViewBuilder var content: () -> Content
-    
-    var currentLayout: AnyLayout {
-        if horizontalSizeClass == .regular {
-            if alignFirstTextLeadingIfHStack {
-                if let spacing = spacingIfHStack {
-                    return AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: spacing))
-                } else {
-                    return AnyLayout(HStackLayout(alignment: .firstTextBaseline))
-                }
+    var body: some View {
+        Group {
+            if sizeClass == .compact {
+                VStack(alignment: horizontalAlignment, spacing: spacing, content: content)
             } else {
-                if let spacing = spacingIfHStack {
-                    return AnyLayout(HStackLayout(spacing: spacing))
-                } else {
-                    return AnyLayout(HStackLayout())
-                }
-            }
-        } else {
-            if let spacing = spacingIfVStack {
-                return AnyLayout(VStackLayout(spacing: spacing))
-            }
-            else {
-                return AnyLayout(VStackLayout())
+                HStack(alignment: verticalAlignment, spacing: spacing, content: content)
             }
         }
     }
-
-    var body: some View {
-        currentLayout(content)
-    }
 }
-
-///// Returns HStackLayout if macOS, else  VStackLayout (regardless of UI size class)
-//struct HOrVStackHM<Content: View> View {
-//    @State var alignFirstTextLeadingIfHStack = false
-//    enum UserInterfaceSizeClass {
-//        case compact
-//        case regular
-//        case none
-//    }
-//    #if !os(macOS)
-//    let horizontalSizeClass = UserInterfaceSizeClass.regular
-//    #else
-//    let horizontalSizeClass = UserInterfaceSizeClass.compact
-//    #endif
-//
-//    @ViewBuilder var content: () -> Content
-//
-//    var currentLayout: AnyLayout {
-//        if alignFirstTextLeadingIfHStack {
-//            return horizontalSizeClass == .regular ? AnyLayout(HStackLayout(alignment: .firstTextBaseline)) : AnyLayout(VStackLayout())
-//        }
-//        else {
-//            return horizontalSizeClass == .regular ? AnyLayout(HStackLayout()) : AnyLayout(VStackLayout())
-//        }
-//    }
-//
-//    var body: some View {
-//        currentLayout(content)
-//    }
-//}
 

@@ -10,7 +10,7 @@ import SwiftUI
 import SharingGRDB
 import Flow
 
-struct RecipeDetailView: View {
+struct RecipeDetailViewOLD: View {
     let recipe: Recipe
     @Environment(\.openWindow) private var openWindow
     @State private var showingFullImage = false
@@ -43,7 +43,7 @@ struct RecipeDetailView: View {
     var body: some View {
         ScrollView {
             Section {
-                HOrVStack {
+                AdaptiveStack {
                     VStack(spacing: 4) {
                         HStack {
                             Text(recipe.name)
@@ -205,7 +205,7 @@ struct RecipeDetailView: View {
                     .padding([.leading, .trailing])
                 }
                 
-                HOrVStack(alignFirstTextLeadingIfHStack: true) {
+                AdaptiveStack {
                     VStack(alignment: .leading) {
                         Text("Ingredients")
                             .modifier(TitleStyle())
@@ -217,8 +217,9 @@ struct RecipeDetailView: View {
                                 .padding(.bottom, 1)
                         }
                     }
+                    .frame(minWidth: 100, maxWidth: 400)
                     .padding()
-                    .frame(minWidth: 100, maxWidth: .infinity)
+                    
                     VStack(alignment: .leading) {
                         Text("Directions")
                             .modifier(TitleStyle())
@@ -243,8 +244,8 @@ struct RecipeDetailView: View {
                             }
                         }
                     }
+                    .frame(minWidth: 100, maxWidth: 400)
                     .padding()
-                    .frame(minWidth: 100, maxWidth: .infinity)
                 }
                 
                 if (recipe.notes.count > 0) {
@@ -328,30 +329,29 @@ struct RecipeDetailView: View {
                 .padding(.bottom)
         }
     }
-}
-
-
-
-struct IconShadowModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .shadow(radius: 0.5, x:0.5, y:1)
+    
+    struct IconShadowModifier: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .shadow(radius: 0.5, x:0.5, y:1)
+        }
     }
-}
-
-struct CapsuleBackgroundModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .padding(EdgeInsets(top: 1, leading: 4, bottom: 10, trailing: 6))
+    
+    struct CapsuleBackgroundModifier: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .padding(EdgeInsets(top: 1, leading: 4, bottom: 10, trailing: 6))
+        }
     }
+    
 }
 
 
 #Preview {
-    RecipeDetailView(recipe: SampleData.sampleRecipes[0])
+    RecipeDetailViewOLD(recipe: SampleData.sampleRecipes[0])
 }
 
 
