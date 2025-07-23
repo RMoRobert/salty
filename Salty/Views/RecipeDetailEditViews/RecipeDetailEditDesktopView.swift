@@ -51,7 +51,7 @@ struct RecipeDetailEditDesktopView: View {
                             
                             ForEach(viewModel.courses) { course in
                                 Text(course.name)
-                                    .tag(course.id as String?)
+                                    .tag(course.id as String?)        
                             }
                         }
                         .pickerStyle(.menu)

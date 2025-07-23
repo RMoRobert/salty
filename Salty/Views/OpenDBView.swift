@@ -1,4 +1,4 @@
-//
+ //
 //  ImportView.swift
 //  Salty
 //
@@ -66,12 +66,20 @@ struct OpenDBView: View {
                             print("Unable to save bookmark for database path.")
                         }
                         #else
-                        if let urlBookmarkData = try?
-                            folder.bookmarkData(options: [.minimalBookmark]) {
-                            UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
-                        }
-                        else {
-                            print("Unable to save bookmark for database path.")
+                        do {
+                            guard folder.startAccessingSecurityScopedResource() else {
+                                print("Unable to startAccessingSecurityScopedResource for \(folder)")
+                                return
+                            }
+                                let urlBookmarkData = try
+                                
+                            folder.bookmarkData(options: [])
+                                UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
+                                print("Saved bookmark for database path: \(urlBookmarkData)")
+                                folder.stopAccessingSecurityScopedResource()
+                            }
+                        catch {
+                            print("Unable to save bookmark for database path: \(error.localizedDescription)")
                         }
                         #endif
                         isOpening = false

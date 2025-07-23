@@ -67,14 +67,22 @@ extension FileManager {
 
     static var customSaltyLibraryFullPath: URL? {
         let databaseLocation = saltyLibraryDirectory
-        #if os(macOS)
-        let _ = databaseLocation.startAccessingSecurityScopedResource()
-        #endif
-        // defer { baseURL!.stopAccessingSecurityScopedResource() }
+        // #if os(macOS)
+        // let didStart = databaseLocation.startAccessingSecurityScopedResource()
+        // defer { if didStart { databaseLocation.stopAccessingSecurityScopedResource() } }
+        // #else
+        let didStart = databaseLocation.startAccessingSecurityScopedResource()
+        defer { if didStart { databaseLocation.stopAccessingSecurityScopedResource() } }
+        // #endif
         print("databaseLocation = \(databaseLocation.absoluteString)")
+        
+        // Look for the database file inside the SaltyRecipeLibrary.saltyRecipeLibrary bundle
         var fullLocation = databaseLocation
-                .appendingPathComponent(dbFileName)
+                .appendingPathComponent(folderName, isDirectory: true)
+                .appendingPathExtension(folderBundleExt)
+                .appendingPathComponent(dbFileName, isDirectory: false)
                 .appendingPathExtension(dbFileExt)
+        
         if !FileManager.default.fileExists(atPath: fullLocation.path) {
             print("Custom database specified but not found; revering to default")
             fullLocation = defaultSaltyLibraryFullPath
