@@ -345,6 +345,38 @@ struct RecipeCategory:  Codable, Hashable, Equatable, PersistableRecord, Fetchab
     }
 }
 
+@Table("shoppingList")
+struct ShoppingList: Hashable, Identifiable, Codable, Equatable {
+    var id: String
+    var name: String
+    var isFreeform: Bool
+    var contentsForFreeform: String?
+    // Only using freeform for now, but putting schema now for future use:
+    @Column(as: [ShoppingListListContents].JSONRepresentation.self)
+    var contentsForList: [ShoppingListListContents] = []
+}
+
+extension ShoppingList: FetchableRecord, PersistableRecord  {
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let name = Column(CodingKeys.name)
+        static let isFreeform = Column(CodingKeys.isFreeform)
+        static let contentsForList = JSONColumn(CodingKeys.contentsForList)
+        static let contentsForFreeform = Column(CodingKeys.contentsForFreeform)
+    }
+    
+    static var databaseSelection: [any SQLSelectable] {
+        [Columns.id, Columns.name, Columns.isFreeform, Columns.contentsForList, Columns.contentsForFreeform]
+    }
+}
+
+struct ShoppingListListContents: Codable, Hashable, Equatable, Identifiable  {
+    var id: String
+    var isCompleted: Bool? = false
+    var isImportant: Bool? = false
+    var text: String
+}
+
 
 // DatabaseWriter code, migrations, etc:
 
@@ -378,13 +410,14 @@ func appDatabase() throws -> any DatabaseWriter {
 #if DEBUG
     migrator.eraseDatabaseOnSchemaChange = false
 #endif
-    migrator.registerMigration("Create initial tables") { db in
+    migrator.registerMigration("0001: Create initial tables") { db in
         logger.info("Running 'Create initial tables' migration")
 
         try db.create(table: "course") { t in
             t.primaryKey("id", .text)
             t.column("name", .text)
         }
+        
         try db.create(table: "category") { t in
             t.primaryKey("id", .text)
             t.column("name", .text)
@@ -421,39 +454,45 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
             t.primaryKey(["recipeId", "categoryId"])
         }
+        
+        try db.create(table: "shoppingList") { t in
+            t.primaryKey("id", .text)
+            t.column("name", .text)
+            t.column("isFreeform", .boolean)
+            t.column("contentsForList", .jsonText)
+            t.column("contentsForFreeform", .text)
+        }
     }
     
-    migrator.registerMigration("Populate default categories and courses") { db in
-        logger.info("Running 'Populate default categories and courses' migration")
+    migrator.registerMigration("0002: Populate default categories, courses, and shopping lists") { db in
+        logger.info("Running 'Populate default categories, courses, and shopping lists' migration")
         
-        // Add default categories if they don't exist
+        // Add default category names to database
         let defaultCategories = [
             "Breakfast", "Quick", "Vegetarian", "Soup", "Pasta", "Holiday", "Beverage"
         ]
         for categoryName in defaultCategories {
-            let existingCategory = try Category.filter(Column("name") == categoryName).fetchOne(db)
-            if existingCategory == nil {
-                let category = Category(id: UUID().uuidString, name: categoryName)
-                try category.insert(db)
-            }
+            let category = Category(id: UUID().uuidString, name: categoryName)
+            try category.insert(db)
         }
         
-        // Add default courses if they don't exist
+        // Add default course names to database
         let defaultCourses = [
             "Appetizer", "Main", "Dessert", "Snack", "Salad", "Fruit", "Cheese", "Vegetable",
             "Side Dish", "Bread", "Sauce"
         ]
         for courseName in defaultCourses {
-            let existingCourse = try Course.filter(Column("name") == courseName).fetchOne(db)
-            if existingCourse == nil {
-                let course = Course(id: UUID().uuidString, name: courseName)
-                try course.insert(db)
-            }
+            let course = Course(id: UUID().uuidString, name: courseName)
+            try course.insert(db)
         }
+        
+        // Add one shopping list (freeform with example format) to database
+        let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
+        try shoppingList.insert(db)
     }
     
-    // Example of what additional future migrations could look like in future (these are all done in initital migration/setup now):
-//    migrator.registerMigration("Convert to single course per recipe") { db in
+      // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):
+//    migrator.registerMigration("0003: Convert to single course per recipe") { db in
 //        // Add column
 //        try db.alter(table: "recipe") { t in
 //            t.add(column: "courseId", .text).references("course", onDelete: .setNull)
@@ -488,7 +527,6 @@ extension Database {
             for course in SampleData.sampleCourses {
                 course
             }
-
             for recipe in SampleData.sampleRecipes {
                 recipe
             }

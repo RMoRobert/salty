@@ -123,51 +123,63 @@ struct ZoomableImageView: View {
 
 struct RecipeFullImageView: View {
     let recipe: Recipe
+    @Environment(\.presentationMode) var presentationMode
     #if os(macOS)
     @State private var keyMonitor: Any?
     #endif
     
     var body: some View {
-        VStack(spacing: 0) {
-            if let imageURL = recipe.fullImageURL {
-                AsyncImage(url: imageURL) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                if let imageURL = recipe.fullImageURL {
+                    AsyncImage(url: imageURL) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        case .success(let image):
+                            ZoomableImageView(image: image)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        case .failure(_):
+                            VStack {
+                                Image(systemName: "photo")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.secondary)
+                                Text("Failed to load image")
+                                    .foregroundColor(.secondary)
+                            }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .success(let image):
-                        ZoomableImageView(image: image)
+                        @unknown default:
+                            VStack {
+                                Image(systemName: "photo")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.secondary)
+                                Text("Unknown error loading image")
+                                    .foregroundColor(.secondary)
+                            }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .failure(_):
-                        VStack {
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.secondary)
-                            Text("Failed to load image")
-                                .foregroundColor(.secondary)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    @unknown default:
-                        VStack {
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.secondary)
-                            Text("Unknown error loading image")
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                } else {
+                    VStack {
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("No image available")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-            } else {
-                VStack {
-                    Image(systemName: "photo")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                    Text("No image available")
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            Button(action: {
+                presentationMode.wrappedValue.dismiss()
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.secondary)
+                    .padding()
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel("Close")
         }
         .navigationTitle("\(recipe.name) - Recipe Image")
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CmdPlusPressed"))) { _ in
@@ -183,6 +195,11 @@ struct RecipeFullImageView: View {
         #if os(macOS)
         .onAppear {
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+                if event.keyCode == 53 { // 53 is the keyCode for Esc
+                    // Call your close action here
+                    presentationMode.wrappedValue.dismiss()
+                    return nil
+                }
                 if event.modifierFlags.contains(.command) {
                     switch event.characters {
                     case "=":

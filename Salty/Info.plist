@@ -4,9 +4,30 @@
 <dict>
 	<key></key>
 	<string></string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-    <key>NSCameraUsageDescription</key>
-    <string>Used for capturing optional recipe photos or document scan imports</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Salty Recipe Library</string>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconBadgeName</key>
+				<string></string>
+			</dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.pavisoft.salty.recipeLibrary</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>saltyRecipeLibrary</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

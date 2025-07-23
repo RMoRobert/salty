@@ -158,4 +158,8 @@ struct SampleData {
         Category(id: UUID().uuidString, name: "Holiday"),
         Category(id: UUID().uuidString, name: "Comfort Food")
     ]
-} 
+    
+    static let sampleShoppingLists = [
+        ShoppingList(id: "shopping-list-1-id", name: "Shopping List 1", isFreeform: true, contentsForFreeform: "#My List\n\n* Example item")
+    ]
+}
