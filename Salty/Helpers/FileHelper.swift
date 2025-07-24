@@ -14,12 +14,12 @@ extension FileManager {
     static let dbFileExt = "sqlite"
     static let backupFolderName = "Backup"
     
-    static func getDocumentsDirectory() -> URL {
+    static let userDocumentsDirectory = {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0]
     }
     
-    static let defaultSaltyLibraryDirectory = FileManager.getDocumentsDirectory()
+    static let defaultSaltyLibraryDirectory = FileManager.userDocumentsDirectory()
         .appendingPathComponent("Salty Recipe Library", isDirectory: true)
         .appendingPathComponent(folderName, isDirectory: true)
         .appendingPathExtension(folderBundleExt)
