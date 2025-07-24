@@ -57,15 +57,6 @@ struct OpenDBView: View {
                     Button("Open") {
                         isOpening = true
                         print("Starting database open...")
-                        #if os(macOS)
-                        if let urlBookmarkData = try?
-                            folder.bookmarkData(options: [.withSecurityScope]) {
-                            UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
-                        }
-                        else {
-                            print("Unable to save bookmark for database path.")
-                        }
-                        #else
                         do {
                             guard folder.startAccessingSecurityScopedResource() else {
                                 print("Unable to startAccessingSecurityScopedResource for \(folder)")
@@ -81,7 +72,6 @@ struct OpenDBView: View {
                         catch {
                             print("Unable to save bookmark for database path: \(error.localizedDescription)")
                         }
-                        #endif
                         isOpening = false
                         hasOpened = true
                     }

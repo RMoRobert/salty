@@ -30,20 +30,20 @@ extension FileManager {
             return nil
         }
         var wasStale = false
-    #if os(macOS)
-        guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], bookmarkDataIsStale: &wasStale) else {
-            print("Unable to resolve databaseLocation")
-            return nil
-        }
-    #else
         guard let databaseLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
             print("Unable to resolve databaseLocation")
             return nil
         }
-    #endif
         if (wasStale) {
-            print("databaseLocation was stale; TODO: update")
-            //UserDefaults.standard.set(databaseLocation.absoluteString, forKey: "databaseLocation")
+            do {
+                let newBookmarkData = try databaseLocation.bookmarkData(
+                    options: []
+                )
+                UserDefaults.standard.set(newBookmarkData, forKey: "databaseLocation")
+                print("Refreshed stale bookmark and saved new bookmark data.")
+            } catch {
+                print("Failed to refresh stale bookmark: \(error)")
+            }
         }
         return databaseLocation
     }
@@ -67,13 +67,8 @@ extension FileManager {
 
     static var customSaltyLibraryFullPath: URL? {
         let databaseLocation = saltyLibraryDirectory
-        // #if os(macOS)
-        // let didStart = databaseLocation.startAccessingSecurityScopedResource()
-        // defer { if didStart { databaseLocation.stopAccessingSecurityScopedResource() } }
-        // #else
         let didStart = databaseLocation.startAccessingSecurityScopedResource()
         defer { if didStart { databaseLocation.stopAccessingSecurityScopedResource() } }
-        // #endif
         print("databaseLocation = \(databaseLocation.absoluteString)")
         
         // Look for the database file inside the SaltyRecipeLibrary.saltyRecipeLibrary bundle
@@ -81,8 +76,7 @@ extension FileManager {
                 .appendingPathComponent(folderName, isDirectory: true)
                 .appendingPathExtension(folderBundleExt)
                 .appendingPathComponent(dbFileName, isDirectory: false)
-                .appendingPathExtension(dbFileExt)
-        
+                .appendingPathExtension(dbFileExt)        
         if !FileManager.default.fileExists(atPath: fullLocation.path) {
             print("Custom database specified but not found; revering to default")
             fullLocation = defaultSaltyLibraryFullPath

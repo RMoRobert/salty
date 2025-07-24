@@ -23,7 +23,7 @@ class RecipeNavigationSplitViewModel {
     
     // MARK: - Data (using SharingGRDB property wrappers)
     @ObservationIgnored
-    @FetchAll(Recipe.order(by: \.name))
+    @FetchAll(#sql("SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE"))
     var recipes: [Recipe]
     
     @ObservationIgnored
