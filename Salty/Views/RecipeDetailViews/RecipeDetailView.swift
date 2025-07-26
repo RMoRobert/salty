@@ -51,6 +51,7 @@ struct RecipeDetailView: View {
             }
             .padding()
         }
+        .fontDesign(.rounded)
         .background(Color.recipeDetailPageBackgroundColorful)
         .foregroundStyle(Color.recipeDetailBoxForeground)
         .textSelection(.enabled)
@@ -105,7 +106,6 @@ private struct TitleAndBasicInfoSection: View {
                 HStack {
                     Text(recipe.name)
                         .font(.title)
-                        .fontDesign(.rounded)
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -267,6 +267,7 @@ private struct IntroductionSection: View {
         if !recipe.introduction.isEmpty {
             VStack {
                 Text(recipe.introduction)
+                    .italic()
                     .padding()
             }
         }
