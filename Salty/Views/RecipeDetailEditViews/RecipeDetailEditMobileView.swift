@@ -20,9 +20,100 @@ struct RecipeDetailEditMobileView: View {
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
         self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
     }
-
+    
     var body: some View {
         List {
+            BasicInformationView(viewModel: $viewModel)
+            IngredientsView(viewModel: $viewModel)
+            DirectionsView(viewModel: $viewModel)
+            PreparationTimesView(viewModel: $viewModel)
+            NotesView(viewModel: $viewModel)
+            TagsView(viewModel: $viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
+            NutritionView(viewModel: $viewModel)
+            ImageView(viewModel: $viewModel)
+        }
+#if !os(macOS)
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("Edit Recipe")
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", role: .cancel) {
+                    if viewModel.hasUnsavedChanges {
+                        viewModel.showingCancelAlert = true
+                    } else {
+                        dismiss()
+                    }
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Save") {
+                    viewModel.saveRecipe()
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Discard", role: .destructive) {
+                viewModel.discardChanges()
+                dismiss()
+            }
+        } message: {
+            Text("You have unsaved changes. Are you sure you want to discard them?")
+        }
+        .alert("Add Tag", isPresented: $showingAddTagAlert) {
+            TextField("Tag name", text: $newTagName)
+            Button("Cancel", role: .cancel) {
+                newTagName = ""
+            }
+            Button("Add") {
+                if !newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    viewModel.addTag(newTagName.trimmingCharacters(in: .whitespacesAndNewlines))
+                    newTagName = ""
+                }
+            }
+        } message: {
+            Text("Enter a name for the new tag")
+        }
+        
+        .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
+            RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
+            RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
+        }
+        .sheet(isPresented: $viewModel.showingEditCategoriesSheet) {
+            NavigationStack {
+                CategoryEditView(recipe: $viewModel.recipe)
+                    .navigationTitle("Select Categories")
+#if !os(macOS)
+                    .navigationBarTitleDisplayMode(.inline)
+#endif
+            }
+        }
+        
+        .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
+            NutritionEditView(recipe: $viewModel.recipe)
+        }
+        .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
+        .onKeyPress(.escape) {
+            if viewModel.hasUnsavedChanges {
+                viewModel.showingCancelAlert = true
+                return .handled
+            }
+            return .ignored
+        }
+    }
+    
+    
+    // MARK: - Basic Information Section
+    struct BasicInformationView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Basic Information") {
                 TextField("Name", text: $viewModel.recipe.name)
                 TextField("Source", text: $viewModel.recipe.source)
@@ -54,8 +145,6 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-//                    Text("Course")
-//                    Spacer()
                     Picker("Course", selection: Binding(
                         get: { viewModel.recipe.courseId },
                         set: { viewModel.recipe.courseId = $0 }
@@ -74,18 +163,22 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Text("Categories")
                     Spacer()
-                    //Text($viewModel.recipe.)
                     Button("Select Categories") {
                         viewModel.showingEditCategoriesSheet.toggle()
                     }
                 }
                 
-                
-                
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                     .lineLimit(5...10)
             }
-            
+        }
+    }
+    
+    // MARK: - Ingredients Section
+    struct IngredientsView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Ingredients") {
                 ForEach($viewModel.recipe.ingredients) { $ingredient in
                     TextField("Ingredient", text: $ingredient.text)
@@ -137,7 +230,14 @@ struct RecipeDetailEditMobileView: View {
                     .modifier(EllipsisButtonModifier())
                 }
             }
-            
+        }
+    }
+    
+    // MARK: - Directions Section
+    struct DirectionsView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Directions") {
                 ForEach($viewModel.recipe.directions) { $direction in
                     TextField("Direction", text: $direction.text)
@@ -187,7 +287,14 @@ struct RecipeDetailEditMobileView: View {
                     .modifier(EllipsisButtonModifier())
                 }
             }
-            
+        }
+    }
+    
+    // MARK: - Preparation Time Section
+    struct PreparationTimesView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Preparation Time") {
                 ForEach($viewModel.recipe.preparationTimes) { $preparationTime in
                     HStack {
@@ -220,7 +327,14 @@ struct RecipeDetailEditMobileView: View {
                     Spacer()
                 }
             }
-            
+        }
+    }
+    
+    // MARK: - Notes Section
+    struct NotesView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Notes") {
                 ForEach($viewModel.recipe.notes) { $note in
                     VStack(alignment: .leading, spacing: 8) {
@@ -254,9 +368,16 @@ struct RecipeDetailEditMobileView: View {
                     Spacer()
                 }
             }
-            
-            
-            // Tags
+        }
+    }
+    
+    // MARK: - Tags Section
+    struct TagsView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        @Binding var showingAddTagAlert: Bool
+        @Binding var newTagName: String
+        
+        var body: some View {
             Section("Tags") {
                 if !viewModel.recipe.tags.isEmpty {
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
@@ -265,16 +386,11 @@ struct RecipeDetailEditMobileView: View {
                                 viewModel.removeTag(tag)
                             }) {
                                 Label(tag, systemImage: "minus.circle")
-                                //                                .padding(.horizontal, 8)
-                                //                                .padding(.vertical, 4)
-                                //                                .background(.quaternary, in: Capsule())
-                                //                                .foregroundColor(.primary)
                             }
                             .buttonStyle(.bordered)
                             .foregroundStyle(.primary)
                             .backgroundStyle(.secondary)
                             .controlSize(.mini)
-                            
                             .accessibilityHint("Remove tag \(tag)")
                         }
                     }
@@ -286,10 +402,16 @@ struct RecipeDetailEditMobileView: View {
                     Label("Add Tag", systemImage: "plus.circle.fill")
                 }
                 .labelStyle(.titleAndIcon)
+            }
         }
-            
+    }
+    
+    // MARK: - Nutrition Section
+    struct NutritionView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Nutrition Information:") {
-                
                 if let nutrition = viewModel.recipe.nutrition {
                     let parts = [
                         nutrition.servingSize.map { "Serving Size: \($0)" },
@@ -325,105 +447,37 @@ struct RecipeDetailEditMobileView: View {
                     }
                 }
             }
-            
-            
+        }
+    }
+    
+    // MARK: - Photo Section
+    struct ImageView: View {
+        @Binding var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
             Section("Photo") {
                 RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
             }
         }
-#if !os(macOS)
-        .environment(\.editMode, .constant(.active))
-        .navigationTitle("Edit Recipe")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", role: .cancel) {
-                    if viewModel.hasUnsavedChanges {
-                        viewModel.showingCancelAlert = true
-                    } else {
-                        dismiss()
-                    }
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Save") {
-                    viewModel.saveRecipe()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Discard", role: .destructive) {
-                viewModel.discardChanges()
-                dismiss()
-            }
-        } message: {
-            Text("You have unsaved changes. Are you sure you want to discard them?")
-        }
-        .alert("Add Tag", isPresented: $showingAddTagAlert) {
-            TextField("Tag name", text: $newTagName)
-            Button("Cancel", role: .cancel) {
-                newTagName = ""
-            }
-            Button("Add") {
-                if !newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    viewModel.addTag(newTagName.trimmingCharacters(in: .whitespacesAndNewlines))
-                    newTagName = ""
-                }
-            }
-        } message: {
-            Text("Enter a name for the new tag")
-        }
-
-        .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
-            RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
-        }
-        .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
-            RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
-        }
-        .sheet(isPresented: $viewModel.showingEditCategoriesSheet) {
-            NavigationStack {
-                CategoryEditView(recipe: $viewModel.recipe)
-                    .navigationTitle("Select Categories")
-#if !os(macOS)
-                    .navigationBarTitleDisplayMode(.inline)
-#endif
-            }
-        }
-
-        .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
-            NutritionEditView(recipe: $viewModel.recipe)
-        }
-        .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
-        .onKeyPress(.escape) {
-            if viewModel.hasUnsavedChanges {
-                viewModel.showingCancelAlert = true
-                return .handled
-            }
-            return .ignored
+    }
+    
+    // MARK: - Helper Modifiers
+    struct EllipsisButtonModifier: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .padding(.trailing, -6)
         }
     }
-}
-
-
-struct EllipsisButtonModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .labelStyle(.iconOnly)
-            .controlSize(.small)
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .padding(.trailing, -6)
-    }
-}
-
-struct EllipsisLabelPadding: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding([.top, .bottom], 5)
+    
+    struct EllipsisLabelPadding: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .padding([.top, .bottom], 5)
+        }
     }
 }
 

@@ -151,21 +151,20 @@ extension Recipe {
 }
 
 // TODO: Consider using something like this when presenting List view on main screen, as lack of lazy loading might mean we're fetching too much to start...
-@Selection
-struct RecipeSummary: Identifiable, Hashable, Equatable {
-    let id: String
-    let name: String
-    let createdDate: Date
-    let lastModifiedDate: Date
-    let lastPrepared: Date?
-    let source: String
-    let sourceDetails: String
-    let introduction: String
-    let difficulty: Difficulty
-    let rating: Rating
-    let imageThumbnailData: Data?
-    let isFavorite: Bool
-}
+// struct RecipeSummary: Identifiable, Hashable, Equatable {
+//     let id: String
+//     let name: String
+//     let createdDate: Date
+//     let lastModifiedDate: Date
+//     let lastPrepared: Date?
+//     let source: String
+//     let sourceDetails: String
+//     let introduction: String
+//     let difficulty: Difficulty
+//     let rating: Rating
+//     let imageThumbnailData: Data?
+//     let isFavorite: Bool
+// }
 
 
 struct Note: Codable, Hashable, Equatable, Identifiable {

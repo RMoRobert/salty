@@ -15,8 +15,8 @@ public final class DatabaseBackupManager {
     
     // MARK: - Constants
     private static let backupFileExtension = "zip"
-    private static let backupRetentionHours: TimeInterval = 4 * 60 * 60 // 4 hours
-    private static let maxBackupsToKeep = 5
+    private static let backupRecencyThreshold: TimeInterval = 36 * 60 * 60 // 36 hours
+    private static let maxBackupsToKeep = 3
     
     // MARK: - Backup Directory
     private var backupDirectory: URL {
@@ -71,12 +71,12 @@ public final class DatabaseBackupManager {
                 return true
             }
             
-            // Check if the most recent backup is older than our retention period
+            // Check if the most recent backup is older than our desired interval
             let mostRecentDate = try mostRecentBackup.resourceValues(forKeys: [.creationDateKey]).creationDate ?? Date.distantPast
             let timeSinceLastBackup = Date().timeIntervalSince(mostRecentDate)
             
-            let shouldCreate = timeSinceLastBackup > Self.backupRetentionHours
-            logger.info("Most recent backup is \(timeSinceLastBackup / 3600) hours old, should create new backup: \(shouldCreate)")
+            let shouldCreate = timeSinceLastBackup > Self.backupRecencyThreshold
+            logger.info("Most recent backup is \(timeSinceLastBackup / 3600) hours old; should create new backup = \(shouldCreate)")
             
             return shouldCreate
             
