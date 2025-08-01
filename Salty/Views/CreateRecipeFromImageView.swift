@@ -189,7 +189,7 @@ struct CreateRecipeFromImageView: View {
                         // Close the sheet after saving
                         showingRecipeEditor = false
                     })
-                        .frame(minWidth: 600, minHeight: 500)
+                       // .frame(minWidth: 600, minHeight: 500)
                 }
             }
         }
@@ -215,7 +215,7 @@ struct CreateRecipeFromImageView: View {
                         // Close the sheet after saving
                         showingRecipeEditor = false
                     })
-                        .frame(minWidth: 600, minHeight: 500)
+                    .frame(minWidth: 625, minHeight: 650)
                 }
             }
         }

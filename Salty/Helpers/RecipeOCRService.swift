@@ -24,7 +24,7 @@ enum RecipeOCRError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidImage:
-            return "The provided image is invalid or cannot be processed."
+            return "The provided image is invalid."
         case .noTextFound:
             return "No text was found in the image."
         case .processingFailed:
