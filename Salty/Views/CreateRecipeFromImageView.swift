@@ -19,6 +19,7 @@ struct CreateRecipeFromImageView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
+    @State private var multiPageScan: VNDocumentCameraScan?
     @State private var showingImagePicker = false
     @State private var showingDocumentScanner = false
     @State private var showingCamera = false
@@ -58,9 +59,9 @@ struct CreateRecipeFromImageView: View {
                             Label("No Image", systemImage: "photo")
                         } description: {
                             #if os(macOS)
-                            Text("Choose an image to scan for recipe data.")
+                            Text("Choose an image to scan for recipe text.")
                             #else
-                            Text("Use the options below to select or create an image to scan for recipe data.")
+                            Text("Choose or capture an image to scan for recipe text.")
                             #endif
                         }
                     }
@@ -69,28 +70,23 @@ struct CreateRecipeFromImageView: View {
                 
                 // Image source buttons
                 HStack(spacing: 12) {
-                    #if os(iOS)
+                    #if !os(macOS)
                     Button("Camera") {
                         showingCamera = true
                     }
                     .buttonStyle(.bordered)
-                    #endif
                     
-                    #if os(iOS)
+                    Button("Document Scanner") {
+                        showingDocumentScanner = true
+                    }
+                    .buttonStyle(.bordered)
                     Button("Photo Library") {
                         showingImagePicker = true
                     }
                     .buttonStyle(.bordered)
-                    #elseif os(macOS)
+                    #else
                     Button("Choose File") {
                         showingFilePicker = true
-                    }
-                    .buttonStyle(.bordered)
-                    #endif
-                    
-                    #if os(iOS)
-                    Button("Document Scanner") {
-                        showingDocumentScanner = true
                     }
                     .buttonStyle(.bordered)
                     #endif
@@ -100,24 +96,9 @@ struct CreateRecipeFromImageView: View {
                 // OCR results
                 if !ocrService.extractedText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Extracted Text")
-                                .font(.headline)
-                            Spacer()
-                            Button("Clear") {
-                                ocrService.clearResults()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        
-                        ScrollView {
-                            Text(ocrService.extractedText)
-                                .font(.system(.body, design: .monospaced))
-                                .padding()
-                                .background(Color.secondary.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .frame(maxHeight: 200)
+                            TextField("Extracted Text", text: $ocrService.extractedText,  axis: .vertical)
+                            .frame(maxHeight: 300)
+                            .border(Color.secondary.opacity(0.3), width: 1)
                     }
                     .padding(.horizontal)
                 }
@@ -137,16 +118,20 @@ struct CreateRecipeFromImageView: View {
                     .padding(.horizontal)
                 }
                 
-                Spacer()
-                
                 // Action buttons
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
+                #if os(macOS)
                     Button("Cancel") {
                         dismiss()
                     }
+                #endif
                     
                     Button("Extract Text") {
-                        if let image = selectedImage {
+                        if let multiPageScan = multiPageScan {
+                            Task {
+                                await ocrService.extractTextFromMultiPageScan(multiPageScan)
+                            }
+                        } else if let image = selectedImage {
                             Task {
                                 await ocrService.extractText(from: image)
                             }
@@ -160,10 +145,12 @@ struct CreateRecipeFromImageView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(ocrService.extractedText.isEmpty)
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding([.top, .bottom], 8)
             }
             .navigationTitle("Create from Image")
-            //.navigationBarTitleDisplayMode(.inline)
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -171,13 +158,14 @@ struct CreateRecipeFromImageView: View {
                     }
                 }
             }
+            #endif
         }
         #if !os(macOS)
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(selectedImage: $selectedImage)
         }
         .sheet(isPresented: $showingDocumentScanner) {
-            DocumentScanner(selectedImage: $selectedImage)
+            DocumentScanner(selectedImage: $selectedImage, multiPageScan: $multiPageScan)
         }
         .sheet(isPresented: $showingCamera) {
             CameraView(selectedImage: $selectedImage)
@@ -223,7 +211,7 @@ struct CreateRecipeFromImageView: View {
     }
     
     private func createRecipeFromExtractedText() {
-        let parser = RecipeParser()
+        let parser = RecipeFromTextParser()
         parsedRecipe = parser.parseRecipe(from: ocrService.extractedText)
         showingRecipeEditor = true
     }
@@ -317,6 +305,7 @@ struct ImagePicker: UIViewControllerRepresentable {
 // MARK: - Document Scanner
 struct DocumentScanner: UIViewControllerRepresentable {
     @Binding var selectedImage: CGImage?
+    @Binding var multiPageScan: VNDocumentCameraScan?
     @Environment(\.dismiss) private var dismiss
     
     func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
@@ -339,10 +328,23 @@ struct DocumentScanner: UIViewControllerRepresentable {
         }
         
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            // Use the first page for now
-            let uiImage = scan.imageOfPage(at: 0)
-            if let cgImage = uiImage.cgImage {
-                parent.selectedImage = cgImage
+            // Combine all pages into one image
+            let pageCount = scan.pageCount
+            if pageCount == 1 {
+                // Single page - use directly
+                let uiImage = scan.imageOfPage(at: 0)
+                if let cgImage = uiImage.cgImage {
+                    parent.selectedImage = cgImage
+                }
+            } else {
+                // Multiple pages - use the first page for display, but note that OCR will process all pages
+                let uiImage = scan.imageOfPage(at: 0)
+                if let cgImage = uiImage.cgImage {
+                    parent.selectedImage = cgImage
+                }
+                
+                // Store the scan for multi-page OCR processing
+                parent.multiPageScan = scan
             }
             parent.dismiss()
         }

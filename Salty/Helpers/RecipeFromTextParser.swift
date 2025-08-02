@@ -8,7 +8,7 @@
 import Foundation
 import OSLog
 
-struct RecipeParser {
+struct RecipeFromTextParser {
     private let logger = Logger(subsystem: "Salty", category: "App")
     
     func parseRecipe(from text: String) -> Recipe {
