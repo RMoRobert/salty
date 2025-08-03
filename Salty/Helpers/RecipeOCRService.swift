@@ -6,10 +6,15 @@
 //
 
 import Vision
-import VisionKit
 import Foundation
 import OSLog
+
+#if os(iOS)
+import VisionKit
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 
 enum RecipeOCRError: Error, LocalizedError {
@@ -56,6 +61,7 @@ class RecipeOCRService: ObservableObject {
         isProcessing = false
     }
     
+    #if os(iOS)
     func extractTextFromMultiPageScan(_ scan: VNDocumentCameraScan) async {
         isProcessing = true
         error = nil
@@ -88,6 +94,37 @@ class RecipeOCRService: ObservableObject {
         
         isProcessing = false
     }
+    #elseif os(macOS)
+    func extractTextFromMultiPageScan(_ scan: [CGImage]) async {
+        isProcessing = true
+        error = nil
+        extractedText = ""
+        
+        do {
+            var allText: [String] = []
+            let pageCount = scan.count
+            
+            for (i, cgImage) in scan.enumerated() {
+                let pageText = try await performOCR(on: cgImage)
+                allText.append(pageText)
+                
+                // Add page separator
+                if i < pageCount - 1 {
+                    allText.append("\n--- Page \(i + 2) ---\n")
+                }
+            }
+            
+            extractedText = allText.joined(separator: "\n")
+            logger.info("Successfully extracted text from \(pageCount) pages")
+            
+        } catch {
+            self.error = error as? RecipeOCRError ?? RecipeOCRError.processingFailed
+            logger.error("Multi-page OCR failed: \(error.localizedDescription)")
+        }
+        
+        isProcessing = false
+    }
+    #endif
     
     private func performOCR(on cgImage: CGImage) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in

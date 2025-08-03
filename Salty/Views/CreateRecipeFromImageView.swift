@@ -7,9 +7,9 @@
 
 import SwiftUI
 import PhotosUI
-import VisionKit
 
 #if os(iOS)
+import VisionKit
 import UIKit
 #elseif os(macOS)
 import AppKit
@@ -19,7 +19,11 @@ struct CreateRecipeFromImageView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
+    #if os(iOS)
     @State private var multiPageScan: VNDocumentCameraScan?
+    #elseif os(macOS)
+    @State private var multiPageImages: [CGImage] = []
+    #endif
     @State private var showingImagePicker = false
     @State private var showingDocumentScanner = false
     @State private var showingCamera = false
@@ -107,9 +111,12 @@ struct CreateRecipeFromImageView: View {
                 // OCR results
                 if !ocrService.extractedText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                            TextField("Extracted Text", text: $ocrService.extractedText,  axis: .vertical)
-                            .frame(maxHeight: 300)
-                            .border(Color.secondary.opacity(0.3), width: 1)
+                        TextEditor(text: $ocrService.extractedText)
+                            .frame(maxHeight: 800)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color.secondary).opacity(0.5)
+                            )
                     }
                     .padding(.horizontal)
                 }
@@ -138,6 +145,7 @@ struct CreateRecipeFromImageView: View {
                 #endif
                     
                     Button("Extract Text") {
+                        #if os(iOS)
                         if let multiPageScan = multiPageScan {
                             Task {
                                 await ocrService.extractTextFromMultiPageScan(multiPageScan)
@@ -147,6 +155,17 @@ struct CreateRecipeFromImageView: View {
                                 await ocrService.extractText(from: image)
                             }
                         }
+                        #elseif os(macOS)
+                        if !multiPageImages.isEmpty {
+                            Task {
+                                await ocrService.extractTextFromMultiPageScan(multiPageImages)
+                            }
+                        } else if let image = selectedImage {
+                            Task {
+                                await ocrService.extractText(from: image)
+                            }
+                        }
+                        #endif
                     }
                     .disabled(selectedImage == nil || ocrService.isProcessing)
                     
@@ -159,8 +178,8 @@ struct CreateRecipeFromImageView: View {
                 .padding(.horizontal)
                 .padding([.top, .bottom], 8)
             }
-            .navigationTitle("Create from Image")
             #if !os(macOS)
+            .navigationTitle("Create from Image")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
