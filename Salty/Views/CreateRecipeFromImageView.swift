@@ -54,6 +54,17 @@ struct CreateRecipeFromImageView: View {
                                     .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                             )
                         #endif
+                        if ocrService.extractedText.isEmpty {
+                            Group {
+                                Text("Image added!")
+                                    .fontWeight(.semibold)
+                                Text("Select \"Extract Text\" to scan for text. Then, select \"Create Recipe\" (tip: you can edit the text before creating the recipe to try to clean up the detected text and improve the accuracy of the created recipe).")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                                
+                        }
                     } else {
                         ContentUnavailableView {
                             Label("No Image", systemImage: "photo")
