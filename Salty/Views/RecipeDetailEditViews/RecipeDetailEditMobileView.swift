@@ -98,6 +98,9 @@ struct RecipeDetailEditMobileView: View {
         .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
             NutritionEditView(recipe: $viewModel.recipe)
         }
+        .sheet(isPresented: $viewModel.showingScanTextSheet) {
+            ScanTextForRecipeView(viewModel: $viewModel, initialTarget: viewModel.scanTextTarget)
+        }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -215,13 +218,20 @@ struct RecipeDetailEditMobileView: View {
                                 text: "New Heading"
                             ))
                         }) {
-                            Label("Add Heading", systemImage: "paragraphsign")
+                            Label("Add Heading", systemImage: "folder.badge.plus")
                         }
                         
                         Button(action: {
                             viewModel.showingBulkEditIngredientsSheet.toggle()
                         }) {
                             Label("Edit as Text (Bulk Edit)", systemImage: "text.alignleft")
+                        }
+                        
+                        Button(action: {
+                            viewModel.scanTextTarget = .ingredients
+                            viewModel.showingScanTextSheet.toggle()
+                        }) {
+                            Label("Scan Text", systemImage: "text.viewfinder")
                         }
                     } label: {
                         Label("More", systemImage: "ellipsis")
@@ -272,13 +282,20 @@ struct RecipeDetailEditMobileView: View {
                                 text: "New Heading"
                             ))
                         }) {
-                            Label("Add Heading", systemImage: "paragraphsign")
+                            Label("Add Heading", systemImage: "folder.badge.plus")
                         }
                         
                         Button(action: {
                             viewModel.showingBulkEditDirectionsSheet.toggle()
                         }) {
                             Label("Edit as Text (Bulk Edit)", systemImage: "text.alignleft")
+                        }
+                        
+                        Button(action: {
+                            viewModel.scanTextTarget = .directions
+                            viewModel.showingScanTextSheet.toggle()
+                        }) {
+                            Label("Scan Text", systemImage: "text.viewfinder")
                         }
                     } label: {
                         Label("More", systemImage: "ellipsis")

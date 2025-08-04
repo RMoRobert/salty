@@ -87,6 +87,8 @@ struct NotesEditView: View {
                     }
                     .padding(.trailing)
                     
+                    Spacer()
+                    
                     Button(role: .destructive) {
                         for index in selectedIndices.sorted(by: >) {
                             deleteNote(at: index)
@@ -95,8 +97,6 @@ struct NotesEditView: View {
                         Label("Delete", systemImage: "trash")
                     }
                     .disabled(selectedIndices.isEmpty)
-                    
-                    Spacer()
                 }
             }
             .padding()

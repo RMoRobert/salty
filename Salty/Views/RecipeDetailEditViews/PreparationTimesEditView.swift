@@ -56,7 +56,7 @@ struct PreparationTimesEditView: View {
                         } label: {
                             Label("Add Preparation Time", systemImage: "plus")
                         }
-                        .padding(.trailing)
+                        Spacer()
                         Button(role: .destructive) {
                         for index in selectedIndices.sorted(by: >) {
                             deletePreparationTime(at: index)

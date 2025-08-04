@@ -78,7 +78,9 @@ struct OpenDBView: View {
                         UserDefaults.standard.removeObject(forKey: "databaseLocation")
                         showingSuccessAlert = true
                     }
+                    #if os(macOS)
                     .buttonStyle(.link)
+                    #endif
                 }
                 .padding()
                 
@@ -88,7 +90,9 @@ struct OpenDBView: View {
             Button("Dismiss") {
                dismiss()
             }
+            #if os(macOS)
             .buttonStyle(.link)
+            #endif
             .padding()
         }
         .padding()

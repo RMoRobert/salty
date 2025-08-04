@@ -1,5 +1,5 @@
 //
-//  CreateRecipeFromImageView.swift
+//  ScanTextForRecipeView.swift
 //  Salty
 //
 //  Created by Robert on 7/13/25.
@@ -15,30 +15,54 @@ import UIKit
 import AppKit
 #endif
 
-struct CreateRecipeFromImageView: View {
+#if os(macOS)
+let targetSectionPickerTitle: String = "Target Section:"
+#else
+let targetSectionPickerTitle: String = "Target Section"
+#endif
+
+struct ScanTextForRecipeView: View {
     @Environment(\.dismiss) private var dismiss
+    @Binding var viewModel: RecipeDetailEditViewModel
     @StateObject private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
-#if os(iOS)
+    #if os(iOS)
     @State private var multiPageScan: VNDocumentCameraScan?
-#elseif os(macOS)
+    #elseif os(macOS)
     @State private var multiPageImages: [CGImage] = []
-#endif
+    #endif
     @State private var showingImagePicker = false
     @State private var showingDocumentScanner = false
     @State private var showingCamera = false
     @State private var showingFilePicker = false
-    @State private var parsedRecipe: Recipe?
-    @State private var showingRecipeEditor = false
-    @State private var showingTextParsingTips = false
+    @State private var targetSection: RecipeDetailEditViewModel.ScanTextTarget
+    
+    init(viewModel: Binding<RecipeDetailEditViewModel>, initialTarget: RecipeDetailEditViewModel.ScanTextTarget = .ingredients) {
+        self._viewModel = viewModel
+        self._targetSection = State(initialValue: initialTarget)
+    }
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
+                // Target selection
+                VStack {
+                    Text("Insert scanned text into:")
+                        .padding(.top)
+                    Picker(targetSectionPickerTitle, selection: $targetSection) {
+                        ForEach(RecipeDetailEditViewModel.ScanTextTarget.allCases, id: \.self) { target in
+                            Text(target.rawValue).tag(target)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+                .padding(.horizontal)
+                
                 // Image selection area
                 VStack {
                     if let image = selectedImage {
-#if os(iOS)
+                        #if os(iOS)
                         Image(uiImage: UIImage(cgImage: image))
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -48,7 +72,7 @@ struct CreateRecipeFromImageView: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                             )
-#elseif os(macOS)
+                        #elseif os(macOS)
                         Image(nsImage: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -58,29 +82,27 @@ struct CreateRecipeFromImageView: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                             )
-#endif
+                        #endif
+                        
                         if ocrService.extractedText.isEmpty {
                             Group {
                                 Text("Image added!")
                                     .fontWeight(.semibold)
-                                    .padding()
-                                Text("Select \"Extract Text\" to scan for text, then, select \"Create Recipe.\"")
-                                Button("Tips") {
-                                    showingTextParsingTips = true
-                                }
-                                .padding(.bottom)
+                                Text("Select \"Extract Text\" to scan for text, then \"Insert Text\" to add it to your \(targetSection.rawValue.lowercased()).")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
-                            
+                            .padding()
                         }
                     } else {
                         ContentUnavailableView {
                             Label("No Image", systemImage: "photo")
                         } description: {
-#if os(macOS)
-                            Text("Choose an image to scan for recipe text.")
-#else
-                            Text("Choose or capture an image to scan for recipe text.")
-#endif
+                            #if os(macOS)
+                            Text("Choose an image to scan for text.")
+                            #else
+                            Text("Choose or capture an image to scan for text.")
+                            #endif
                         }
                     }
                 }
@@ -88,7 +110,7 @@ struct CreateRecipeFromImageView: View {
                 
                 // Image source buttons
                 HStack(spacing: 12) {
-#if !os(macOS)
+                    #if !os(macOS)
                     Button("Camera") {
                         showingCamera = true
                     }
@@ -98,27 +120,31 @@ struct CreateRecipeFromImageView: View {
                         showingDocumentScanner = true
                     }
                     .buttonStyle(.bordered)
+                    
                     Button("Photo Library") {
                         showingImagePicker = true
                     }
                     .buttonStyle(.bordered)
-#else
+                    #else
                     Button("Choose File") {
                         showingFilePicker = true
                     }
                     .buttonStyle(.bordered)
-#endif
+                    #endif
                 }
                 .padding(.horizontal)
                 
                 // OCR results
                 if !ocrService.extractedText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
+                        Text("Extracted Text:")
+                            .font(.headline)
+                        
                         TextEditor(text: $ocrService.extractedText)
-                            .frame(maxHeight: 800)
+                            .frame(maxHeight: 200)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color.secondary).opacity(0.5)
+                                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
                             )
                     }
                     .padding(.horizontal)
@@ -141,14 +167,13 @@ struct CreateRecipeFromImageView: View {
                 
                 // Action buttons
                 HStack(spacing: 16) {
-#if os(macOS)
+                    #if os(macOS)
                     Button("Cancel") {
                         dismiss()
                     }
-#endif
-                    
+                    #endif
                     Button("Extract Text") {
-#if os(iOS)
+                        #if os(iOS)
                         if let multiPageScan = multiPageScan {
                             Task {
                                 await ocrService.extractTextFromMultiPageScan(multiPageScan)
@@ -158,7 +183,7 @@ struct CreateRecipeFromImageView: View {
                                 await ocrService.extractText(from: image)
                             }
                         }
-#elseif os(macOS)
+                        #elseif os(macOS)
                         if !multiPageImages.isEmpty {
                             Task {
                                 await ocrService.extractTextFromMultiPageScan(multiPageImages)
@@ -168,12 +193,13 @@ struct CreateRecipeFromImageView: View {
                                 await ocrService.extractText(from: image)
                             }
                         }
-#endif
+                        #endif
                     }
+                    .buttonStyle(.bordered)
                     .disabled(selectedImage == nil || ocrService.isProcessing)
                     
-                    Button("Create Recipe") {
-                        createRecipeFromExtractedText()
+                    Button("Insert Text") {
+                        insertScannedText()
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(ocrService.extractedText.isEmpty)
@@ -181,8 +207,8 @@ struct CreateRecipeFromImageView: View {
                 .padding(.horizontal)
                 .padding([.top, .bottom], 8)
             }
-#if !os(macOS)
-            .navigationTitle("Create from Image")
+            .navigationTitle("Scan Text")
+            #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -191,9 +217,9 @@ struct CreateRecipeFromImageView: View {
                     }
                 }
             }
-#endif
+            #endif
         }
-#if !os(macOS)
+        #if !os(macOS)
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(selectedImage: $selectedImage)
         }
@@ -203,24 +229,6 @@ struct CreateRecipeFromImageView: View {
         .sheet(isPresented: $showingCamera) {
             CameraView(selectedImage: $selectedImage)
         }
-        .sheet(isPresented: $showingRecipeEditor) {
-            if let recipe = parsedRecipe {
-                NavigationStack {
-                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
-                        // Close the sheet after saving
-                        showingRecipeEditor = false
-                    })
-                    // .frame(minWidth: 600, minHeight: 500)
-                }
-            }
-        }
-        .alert(
-            "Tips for Best Results",
-            isPresented: $showingTextParsingTips,
-            actions: {},
-            message: {
-                Text("For best results:\n\n• Remove excess text like page numbers.\n\n• Provide titles like \"Directions\" or \"Ingredients\" on their own line before the relevant sections to improve detection. Number or label direction steps if possible. (Other helpful labels include \"yield,\" \"servings,\" and \"introduction.\")\n\n• For certain recipes, it may be easier to use the built-in \"Scan Text\" feature on iPhone/iPad in any text field or the \"Edit as Text (Bulk Edit)\" feature for directions or ingredients.")
-            })
         #else
         .fileImporter(
             isPresented: $showingFilePicker,
@@ -236,24 +244,37 @@ struct CreateRecipeFromImageView: View {
                 print("File picker error: \(error)")
             }
         }
-        .sheet(isPresented: $showingRecipeEditor) {
-            if let recipe = parsedRecipe {
-                NavigationStack {
-                    RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
-                        // Close the sheet after saving
-                        showingRecipeEditor = false
-                    })
-                    .frame(minWidth: 625, minHeight: 650)
-                }
-            }
-        }
         #endif
     }
     
-    private func createRecipeFromExtractedText() {
+    private func insertScannedText() {
         let parser = RecipeFromTextParser()
-        parsedRecipe = parser.parseRecipe(from: ocrService.extractedText)
-        showingRecipeEditor = true
+        let scannedRecipe = parser.parseRecipe(from: ocrService.extractedText)
+        
+        switch targetSection {
+        case .introduction:
+            //  scanned text to existing introduction
+            let newText = ocrService.extractedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !newText.isEmpty {
+                if viewModel.recipe.introduction.isEmpty {
+                    viewModel.recipe.introduction = newText
+                } else {
+                    viewModel.recipe.introduction += "\n\n" + newText
+                }
+            }
+        case .ingredients:
+            // Add scanned ingredients to existing ones
+            for ingredient in scannedRecipe.ingredients {
+                viewModel.recipe.ingredients.append(ingredient)
+            }
+        case .directions:
+            // Add scanned directions to existing ones
+            for direction in scannedRecipe.directions {
+                viewModel.recipe.directions.append(direction)
+            }
+        }
+        
+        dismiss()
     }
     
     #if os(macOS)
@@ -292,153 +313,11 @@ struct CreateRecipeFromImageView: View {
     #endif
 }
 
-#if os(iOS)
-// MARK: - Image Picker
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var selectedImage: CGImage?
-    @Environment(\.dismiss) private var dismiss
-    
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var config = PHPickerConfiguration()
-        config.filter = .images
-        config.selectionLimit = 1
-        
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let parent: ImagePicker
-        
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-        
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            parent.dismiss()
-            
-            guard let provider = results.first?.itemProvider else { return }
-            
-            if provider.canLoadObject(ofClass: UIImage.self) {
-                provider.loadObject(ofClass: UIImage.self) { image, _ in
-                    DispatchQueue.main.async {
-                        if let uiImage = image as? UIImage,
-                           let cgImage = uiImage.cgImage {
-                            self.parent.selectedImage = cgImage
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-#endif
 
-#if os(iOS)
-// MARK: - Document Scanner
-struct DocumentScanner: UIViewControllerRepresentable {
-    @Binding var selectedImage: CGImage?
-    @Binding var multiPageScan: VNDocumentCameraScan?
-    @Environment(\.dismiss) private var dismiss
-    
-    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
-        let scanner = VNDocumentCameraViewController()
-        scanner.delegate = context.coordinator
-        return scanner
-    }
-    
-    func updateUIViewController(_ uiViewController: VNDocumentCameraViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
-        let parent: DocumentScanner
-        
-        init(_ parent: DocumentScanner) {
-            self.parent = parent
-        }
-        
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            // Combine all pages into one image
-            let pageCount = scan.pageCount
-            if pageCount == 1 {
-                // Single page - use directly
-                let uiImage = scan.imageOfPage(at: 0)
-                if let cgImage = uiImage.cgImage {
-                    parent.selectedImage = cgImage
-                }
-            } else {
-                // Multiple pages - use the first page for display, but note that OCR will process all pages
-                let uiImage = scan.imageOfPage(at: 0)
-                if let cgImage = uiImage.cgImage {
-                    parent.selectedImage = cgImage
-                }
-                
-                // Store the scan for multi-page OCR processing
-                parent.multiPageScan = scan
-            }
-            parent.dismiss()
-        }
-        
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-            parent.dismiss()
-        }
-        
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            parent.dismiss()
-        }
-    }
-}
-
-// MARK: - Camera View
-struct CameraView: UIViewControllerRepresentable {
-    @Binding var selectedImage: CGImage?
-    @Environment(\.dismiss) private var dismiss
-    
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: CameraView
-        
-        init(_ parent: CameraView) {
-            self.parent = parent
-        }
-        
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let uiImage = info[.originalImage] as? UIImage,
-               let cgImage = uiImage.cgImage {
-                parent.selectedImage = cgImage
-            }
-            parent.dismiss()
-        }
-        
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
-        }
-    }
-}
-#endif
 
 #Preview {
-    CreateRecipeFromImageView()
-}
+    ScanTextForRecipeView(
+        viewModel: .constant(RecipeDetailEditViewModel(recipe: Recipe(id: "test", name: "Test Recipe"))),
+        initialTarget: .ingredients
+    )
+} 

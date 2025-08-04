@@ -433,7 +433,7 @@ private struct RecipeSectionBoxModifier: ViewModifier {
             .background(Color.recipeDetailBoxBackground)
             .foregroundStyle(Color.recipeDetailBoxForeground)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: Color.recipeDetailBoxShadow, radius: 6, x:0.5, y:0.5)
+            .shadow(color: Color.recipeDetailBoxShadow.opacity(0.7), radius: 4, x:1, y:1)
             .padding(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
     }
 }

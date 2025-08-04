@@ -79,6 +79,9 @@ struct RecipeDetailEditDesktopView: View {
         } message: {
             Text("Enter a name for the new tag")
         }
+        .sheet(isPresented: $viewModel.showingScanTextSheet) {
+            ScanTextForRecipeView(viewModel: $viewModel, initialTarget: viewModel.scanTextTarget)
+        }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -107,7 +110,7 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 Form {
                     TextField("Name:", text: $viewModel.recipe.name)
                     TextField("Source:", text: $viewModel.recipe.source)
@@ -173,9 +176,22 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Introduction:")
-                    .modifier(TitleDesktopEditorStyle())
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Introduction:")
+                        .modifier(TitleDesktopEditorStyle())
+                    Spacer()
+                    Menu {
+                        Button("Scan Text") {
+                            viewModel.scanTextTarget = .introduction
+                            viewModel.showingScanTextSheet.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .controlSize(.large)
+                    }
+                    .buttonStyle(.plain)
+                }
                 
                 VStack(spacing: 12) {
                     TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
@@ -192,7 +208,7 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Ingredients:")
                         .modifier(TitleDesktopEditorStyle())
@@ -206,6 +222,11 @@ struct RecipeDetailEditDesktopView: View {
                         Button("Edit as Text (Bulk Edit)") {
                             viewModel.showingBulkEditIngredientsSheet.toggle()
                         }
+                        
+                        Button("Scan Text") {
+                            viewModel.scanTextTarget = .ingredients
+                            viewModel.showingScanTextSheet.toggle()
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .controlSize(.large)
@@ -217,12 +238,13 @@ struct RecipeDetailEditDesktopView: View {
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 8)
                 } else {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
                         ForEach(viewModel.recipe.ingredients) { ingredient in
                             if ingredient.isHeading {
                                 Text(ingredient.text)
                                     .font(.callout)
                                     .fontWeight(.semibold)
+                                    .padding(.top, 2)
                             } else {
                                 Text(ingredient.text)
                                     .font(.body)
@@ -246,7 +268,7 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Directions:")
                         .modifier(TitleDesktopEditorStyle())
@@ -259,6 +281,10 @@ struct RecipeDetailEditDesktopView: View {
                     Menu {
                         Button("Edit as Text (Bulk Edit)") {
                             viewModel.showingBulkEditDirectionsSheet.toggle()
+                        }
+                        Button("Scan Text") {
+                            viewModel.scanTextTarget = .directions
+                            viewModel.showingScanTextSheet.toggle()
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -316,7 +342,7 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Preparation Times:")
                         .modifier(TitleDesktopEditorStyle())
@@ -332,9 +358,13 @@ struct RecipeDetailEditDesktopView: View {
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 8)
                 } else {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
                         ForEach(viewModel.recipe.preparationTimes) { preparationTime in
-                            Text("\(preparationTime.type): \(preparationTime.timeString)")
+                            HStack {
+                                Text("\(preparationTime.type):")
+                                    .fontWeight(.semibold)
+                                Text("\(preparationTime.timeString)")
+                            }
                         }
                     }
                 }
@@ -351,7 +381,7 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Notes:")
                         .modifier(TitleDesktopEditorStyle())
@@ -432,7 +462,7 @@ struct RecipeDetailEditDesktopView: View {
         @Binding var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Nutrition Information:")
                         .modifier(TitleDesktopEditorStyle())

@@ -37,7 +37,15 @@ class RecipeDetailEditViewModel {
     var showingEditPreparationTimes = false
     var showingEditNotesSheet = false
     var showingNutritionEditSheet = false
+    var showingScanTextSheet = false
+    var scanTextTarget: ScanTextTarget = .ingredients
     var showingCancelAlert = false
+    
+    enum ScanTextTarget: String, CaseIterable {
+        case introduction = "Introduction"
+        case ingredients = "Ingredients"
+        case directions = "Directions"
+    }
     
     // MARK: - Computed Properties
     var hasUnsavedChanges: Bool {

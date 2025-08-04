@@ -103,7 +103,9 @@ struct ImportRecipesFromFileView: View {
             Button("Dismiss") {
                dismiss()
             }
-            .buttonStyle(.link)
+#if os(macOS)
+.buttonStyle(.link)
+#endif
             .padding()
             
         }

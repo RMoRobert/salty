@@ -30,6 +30,8 @@ struct CategoryEditView: View {
     @State private var showingNewCategoryAlert = false
     @State private var newCategoryName = ""
     @State private var showingDuplicateNameAlert = false
+    
+
 
     var body: some View {
         VStack {
@@ -39,6 +41,7 @@ struct CategoryEditView: View {
             macOSButtons
             #endif
         }
+        .navigationTitle("Edit Categories")
         #if os(macOS)
         .padding([.top, .leading, .trailing])
         #endif

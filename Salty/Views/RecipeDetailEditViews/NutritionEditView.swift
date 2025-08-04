@@ -23,7 +23,6 @@ struct ValidatedTextField: View {
     
     var body: some View {
         #if !os(macOS)
-        // iOS: Use LabeledContent for HIG-compliant label display
         LabeledContent(placeholder) {
             HStack {
                 TextField("No Information", text: $text)
@@ -42,9 +41,8 @@ struct ValidatedTextField: View {
             }
         }
         #else
-        // macOS: Keep existing HStack layout
         HStack {
-            TextField(placeholder, text: $text)
+            TextField(placeholder + ":", text: $text)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .onChange(of: text) { _, newValue in
                     validateNumericField(newValue)
@@ -120,18 +118,24 @@ struct NutritionEditView: View {
         !isCalciumValid || !isIronValid || !isPotassiumValid || !isVitaminAValid || !isVitaminCValid
     }
 
-    private func addColonIfMacOS(_ originalString: String) -> String {
-        #if os(macOS)
-        return originalString + ":"
-        #else
-        return originalString
-        #endif
+    struct PlatformSpecificSectionHeading: View {
+        let baseText: String
+        var body: some View {
+            #if os(macOS)
+            Text(baseText + ":")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top, 4)
+            #else
+            Text(baseText)
+            #endif
+        }
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section(addColonIfMacOS("General")) {
+                Section(header: PlatformSpecificSectionHeading(baseText: "General")) {
                     #if !os(macOS)
                     LabeledContent("Serving Size") {
                         TextField("e.g., 1 cup, 2 slices", text: $servingSizeText)
@@ -139,14 +143,14 @@ struct NutritionEditView: View {
                             .multilineTextAlignment(.trailing)
                     }
                     #else
-                    TextField("Serving Size (e.g., 1 cup, 2 slices)", text: $servingSizeText)
+                    TextField("Serving Size:", text: $servingSizeText)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                     #endif
                     
                     ValidatedTextField("Calories", text: $caloriesText, isValid: $isCaloriesValid)
                 }
                 
-                Section(addColonIfMacOS("Macronutrients")) {
+                Section(header: PlatformSpecificSectionHeading(baseText: "Macronutrients")) {
                     ValidatedTextField("Protein (g)", text: $proteinText, isValid: $isProteinValid)
                     ValidatedTextField("Carbohydrates (g)", text: $carbohydratesText, isValid: $isCarbohydratesValid)
                     ValidatedTextField("Total Fat (g)", text: $fatText, isValid: $isFatValid)
@@ -157,12 +161,12 @@ struct NutritionEditView: View {
                     ValidatedTextField("Added Sugar (g)", text: $addedSugarText, isValid: $isAddedSugarValid)
                 }
                 
-                Section(addColonIfMacOS("Other Nutrients")) {
+                Section(header: PlatformSpecificSectionHeading(baseText: "Other Nutrients")) {
                     ValidatedTextField("Sodium (mg)", text: $sodiumText, isValid: $isSodiumValid)
                     ValidatedTextField("Cholesterol (mg)", text: $cholesterolText, isValid: $isCholesterolValid)
                 }
                 
-                Section(addColonIfMacOS("Vitamins and Minerals")) {
+                Section(header: PlatformSpecificSectionHeading(baseText: "Vitamins and Minerals")) {
                     ValidatedTextField("Vitamin D (μg)", text: $vitaminDText, isValid: $isVitaminDValid)
                     ValidatedTextField("Calcium (mg)", text: $calciumText, isValid: $isCalciumValid)
                     ValidatedTextField("Iron (mg)", text: $ironText, isValid: $isIronValid)
@@ -196,7 +200,7 @@ struct NutritionEditView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 500, minHeight: 700)
+        .frame(minWidth: 300, minHeight: 700)
         #endif
     }
     

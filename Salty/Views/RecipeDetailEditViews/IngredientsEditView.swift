@@ -111,7 +111,8 @@ struct IngredientsEditView: View {
                         } label: {
                             Label("Add Heading", systemImage: "folder.badge.plus")
                         }
-                        .padding(.trailing)
+                        
+                        Spacer()
                         
                         Button(role: .destructive) {
                             for index in selectedIndices.sorted(by: >) {
@@ -121,8 +122,6 @@ struct IngredientsEditView: View {
                             Label("Delete", systemImage: "trash")
                         }
                         .disabled(selectedIndices.isEmpty)
-                        
-                        Spacer()
                     }
                 }
                 .padding()
