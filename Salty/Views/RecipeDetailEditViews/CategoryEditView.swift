@@ -143,7 +143,7 @@ struct CategoryEditView: View {
                 // Add newly selected categories
                 let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
                 for categoryId in categoriesToAdd {
-                    let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: categoryId)
+                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
                     try recipeCategory.insert(db)
                 }
             }

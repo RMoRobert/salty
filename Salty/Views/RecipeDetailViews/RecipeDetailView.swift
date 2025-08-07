@@ -11,42 +11,26 @@ import SharingGRDB
 import Flow
 
 struct RecipeDetailView: View {
-    let recipe: Recipe
+    @State private var viewModel: RecipeDetailViewModel
     @Environment(\.openWindow) private var openWindow
-    @State private var showingFullImage = false
-
-    @State private var courseName: String?
-    #if !os(macOS)
-    @State private var isTitleVisible: Bool = true
-    #else
-    @State private var isTitleVisible = false
-    #endif
     
-
-
-    // TODO: Offload to ViewModel at some point:
-    @Dependency(\.defaultDatabase) private var database
-    
-    #if !os(macOS)
-    private var shouldShowNavigationTitle: Bool {
-        // Show navigation title when the recipe title is no longer visible
-        return !isTitleVisible
+    init(recipe: Recipe) {
+        self._viewModel = State(initialValue: RecipeDetailViewModel(recipe: recipe))
     }
-    #endif
     
     var body: some View {
         ScrollView {
             Group {
-                TitleAndBasicInfoSection(recipe: recipe, isTitleVisible: $isTitleVisible, showingFullImage: $showingFullImage, courseName: courseName)
-                PrepTimeAndFavoriteEtcSection(recipe: recipe)
-                IntroductionSection(recipe: recipe)
+                TitleAndBasicInfoSection(viewModel: viewModel)
+                PrepTimeAndFavoriteEtcSection(recipe: viewModel.recipe)
+                IntroductionSection(recipe: viewModel.recipe)
                 AdaptiveStack(verticalAlignment: .top) {
-                    IngredientsSection(recipe: recipe)
-                    DirectionsSection(recipe: recipe)
+                    IngredientsSection(recipe: viewModel.recipe)
+                    DirectionsSection(recipe: viewModel.recipe)
                 }
-                NotesSection(recipe: recipe)
+                NotesSection(recipe: viewModel.recipe)
                     .padding(.top, 2)
-                TagsSection(recipe: recipe)
+                TagsSection(recipe: viewModel.recipe)
                     .padding(.top, 2)
             }
             .padding()
@@ -55,56 +39,32 @@ struct RecipeDetailView: View {
         .background(Color.recipeDetailPageBackgroundColorful)
         .foregroundStyle(Color.recipeDetailBoxForeground)
         .textSelection(.enabled)
-        .sheet(isPresented: $showingFullImage) {
-            RecipeFullImageView(recipe: recipe)
+        .sheet(isPresented: $viewModel.showingFullImage) {
+            RecipeFullImageView(recipe: viewModel.recipe)
                 .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
         }
-        .onAppear {
-            loadCourseName()
+        .onChange(of: viewModel.recipe.courseId) { _, _ in
+            viewModel.loadCourseName()
         }
-        .onChange(of: recipe.courseId) { _, _ in
-            // I feel like there is a better way to do this, but this works for now...
-            loadCourseName()
-        }
-            #if !os(macOS)
-            .navigationTitle(shouldShowNavigationTitle ? recipe.name : "")
-            #else
-            .navigationTitle(recipe.name)  // do I need this on macOS? Not displayed but doesn't seem to hurt
-            #endif
-            .toolbarTitleDisplayMode(.inline)
+        #if !os(macOS)
+        .navigationTitle(viewModel.shouldShowNavigationTitle ? viewModel.recipe.name : "")
+        #else
+        .navigationTitle(viewModel.recipe.name)  // do I need this on macOS? Not displayed but doesn't seem to hurt
+        #endif
+        .toolbarTitleDisplayMode(.inline)
     }
-
-    
-    private func loadCourseName() {
-        guard let courseId = recipe.courseId else {
-            courseName = nil
-            return
-        }
-        
-        do {
-            let course = try database.read { db in
-                try Course.fetchOne(db, id: courseId)
-            }
-            courseName = course?.name
-        } catch {
-            courseName = nil
-        }
-    }
-
 }
 
 // MARK: - Private Subviews
 
 private struct TitleAndBasicInfoSection: View {
-    let recipe: Recipe
-    @Binding var isTitleVisible: Bool
-    @Binding var showingFullImage: Bool
-    let courseName: String?
+    @Bindable var viewModel: RecipeDetailViewModel
+    
     var body: some View {
         AdaptiveStack {
             VStack(spacing: 4) {
                 HStack {
-                    Text(recipe.name)
+                    Text(viewModel.recipe.name)
                         .font(.title)
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
@@ -117,11 +77,11 @@ private struct TitleAndBasicInfoSection: View {
                                     .onAppear {
                                         let titleFrame = titleGeometry.frame(in: .global)
                                         let buffer: CGFloat = 90
-                                        isTitleVisible = titleFrame.maxY > buffer
+                                        viewModel.isTitleVisible = titleFrame.maxY > buffer
                                     }
                                     .onChange(of: titleGeometry.frame(in: .global)) { _, newFrame in
                                         let buffer: CGFloat = 90
-                                        isTitleVisible = newFrame.maxY > buffer
+                                        viewModel.isTitleVisible = newFrame.maxY > buffer
                                     }
                                     .accessibilityHidden(true)
                             }
@@ -129,16 +89,16 @@ private struct TitleAndBasicInfoSection: View {
 #endif
                 }
                 Spacer()
-                if !recipe.source.isEmpty {
+                if !viewModel.recipe.source.isEmpty {
                     HStack {
                         Image(systemName: "text.book.closed")
-                        Text(recipe.source)
+                        Text(viewModel.recipe.source)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Source: \(recipe.source)")
+                    .accessibilityLabel("Source: \(viewModel.recipe.source)")
                 }
-                if !recipe.sourceDetails.trimmingCharacters(in: .whitespaces).isEmpty {
-                    let sourceDetails = recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
+                if !viewModel.recipe.sourceDetails.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let sourceDetails = viewModel.recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
                     if let url = URL(string: sourceDetails),
                        let scheme = url.scheme?.lowercased().starts(with: "http") {
                         Link(destination: url) {
@@ -149,12 +109,12 @@ private struct TitleAndBasicInfoSection: View {
                         }
                     }
                     else {
-                        Text(recipe.sourceDetails)
+                        Text(viewModel.recipe.sourceDetails)
                     }
                 }
                 Spacer()
                 HFlow(itemSpacing: 12) {
-                    if let courseName = courseName {
+                    if let courseName = viewModel.courseName {
                         HStack {
                             Image(systemName: "fork.knife.circle")
                             Text(courseName)
@@ -163,16 +123,16 @@ private struct TitleAndBasicInfoSection: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Course: \(courseName)")
                     }
-                    if !recipe.yield.isEmpty {
+                    if !viewModel.recipe.yield.isEmpty {
                         HStack {
                             Image(systemName: "circle.grid.2x2")
-                            Text(recipe.yield)
+                            Text(viewModel.recipe.yield)
                         }
                         .modifier(CapsuleBackgroundModifier())
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Yield: \(recipe.yield)")
+                        .accessibilityLabel("Yield: \(viewModel.recipe.yield)")
                     }
-                    if let servings = recipe.servings, servings > 0 {
+                    if let servings = viewModel.recipe.servings, servings > 0 {
                         HStack {
                             Image(systemName: "person.2")
                             Text(servings.description)
@@ -184,11 +144,11 @@ private struct TitleAndBasicInfoSection: View {
                 }
             }
             .padding()
-            if recipe.imageFilename != nil {
-                RecipeImageView(recipe: recipe)
+            if viewModel.recipe.imageFilename != nil {
+                RecipeImageView(recipe: viewModel.recipe)
                     .padding()
                     .onTapGesture {
-                        showingFullImage = true
+                        viewModel.showFullImage()
                     }
             }
         }
@@ -375,23 +335,15 @@ private struct NotesSection: View {
 
 private struct TagsSection: View {
     let recipe: Recipe
+    
     var body: some View {
-        if recipe.tags.count > 0 {
-            VStack(alignment: .leading) {
-                Text("Tags")
-                    .modifier(TitleStyle())
-                HFlow(itemSpacing: 8, rowSpacing: 16) {
-                    ForEach(recipe.sortedTags, id: \.self) { tag in
-                        Label(tag, systemImage: "tag")
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 6)
-                            .background(Color.recipeDetailPageBackgroundColorful.opacity(0.66), in: Capsule())
-                    }
-                }
-            }
-            .modifier(RecipeSectionBoxModifier())
-            .frame(maxWidth: .infinity)
+        VStack(alignment: .leading) {
+            Text("Tags")
+                .modifier(TitleStyle())
+            Text("Coming soon!")
         }
+        .modifier(RecipeSectionBoxModifier())
+        .frame(maxWidth: .infinity)
     }
 }
 

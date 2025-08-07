@@ -64,7 +64,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                                 
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
-                                    let recipeCategory = RecipeCategory(recipeId: recipe.id, categoryId: category.id)
+                                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: category.id)
                                     try recipeCategory.insert(db)
                                 }
                             }

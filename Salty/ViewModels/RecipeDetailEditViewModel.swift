@@ -21,11 +21,18 @@ class RecipeDetailEditViewModel {
     @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
     var courses: [Course]
     
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
+    var allTags: [Tag]
+    
     // MARK: - State
     var recipe: Recipe
     var originalRecipe: Recipe
     var isNewRecipe: Bool
     var onNewRecipeSaved: ((String) -> Void)?
+    
+    // Cache for recipe tags
+    private var recipeTags: [Tag] = []
    
     // MARK: - Sheet States
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
@@ -60,7 +67,13 @@ class RecipeDetailEditViewModel {
     }
     
     var sortedTags: [String] {
-        recipe.tags.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        // TODO: Implement tag fetching
+        return []
+    }
+    
+    var hasTags: Bool {
+        // TODO: Implement tag checking
+        return false
     }
     
     // MARK: - Initialization
@@ -101,14 +114,18 @@ class RecipeDetailEditViewModel {
         }
     }
     
+    // MARK: - Tag Management
+    
+    // TODO: Implement tag management similar to categories
+    // For now, just provide basic structure
     func addTag(_ tagName: String) {
-        let trimmedTag = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTag.isEmpty && !recipe.tags.contains(trimmedTag) else { return }
-        recipe.tags.append(trimmedTag)
+        // TODO: Implement tag addition
+        logger.info("Tag addition not yet implemented")
     }
     
     func removeTag(_ tagName: String) {
-        recipe.tags.removeAll(where: {$0 == tagName} )
+        // TODO: Implement tag removal
+        logger.info("Tag removal not yet implemented")
     }
     
     func discardChanges() {

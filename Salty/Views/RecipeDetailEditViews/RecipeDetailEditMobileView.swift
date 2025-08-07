@@ -396,7 +396,7 @@ struct RecipeDetailEditMobileView: View {
         
         var body: some View {
             Section("Tags") {
-                if !viewModel.recipe.tags.isEmpty {
+                if viewModel.hasTags {
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
                         ForEach(viewModel.sortedTags, id: \.self) { tag in
                             Button(action: {

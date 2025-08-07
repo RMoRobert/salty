@@ -96,7 +96,7 @@ struct RecipeDetailEditDesktopView: View {
     // MARK: - Helper Methods
     private func addNewTag() {
         let trimmedTag = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTag.isEmpty && !viewModel.recipe.tags.contains(trimmedTag) else { 
+        guard !trimmedTag.isEmpty else { 
             newTagName = ""
             return 
         }

@@ -25,7 +25,7 @@ struct LibraryCategoriesEditView: View {
                     }
                 }
             
-            // Custom bottom bar
+            // Bottom button bar
             HStack(spacing: 12) {
                 Button {
                     viewModel.showEditAlert()
@@ -34,6 +34,7 @@ struct LibraryCategoriesEditView: View {
                 }
                 .disabled(!viewModel.canEdit)
                 .labelStyle(.titleAndIcon)
+                .padding(.leading)
                 
                 Button(role: .destructive) {
                     viewModel.deleteSelectedCategories()
@@ -52,6 +53,7 @@ struct LibraryCategoriesEditView: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.bordered)
+                .padding(.trailing)
             }
             .padding([.top, .bottom])
 #if !os(macOS)

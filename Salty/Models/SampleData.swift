@@ -76,8 +76,7 @@ struct SampleData {
                 fiber: 2.8,
                 sugar: 4.2,
                 sodium: 420
-            ),
-            tags: ["tag1", "another-tag"]
+            )
         ),
         
         // Minimal sample recipe
@@ -157,6 +156,14 @@ struct SampleData {
         Category(id: UUID().uuidString, name: "Kid-Friendly"),
         Category(id: UUID().uuidString, name: "Holiday"),
         Category(id: UUID().uuidString, name: "Comfort Food")
+    ]
+    
+    // MARK: - Sample Tags
+    
+    static let sampleTags = [
+        Tag(id: "tag1-id", name: "quick"),
+        Tag(id: "tag2-id", name: "healthy"),
+        Tag(id: "tag3-id", name: "high protein"),
     ]
     
     static let sampleShoppingLists = [

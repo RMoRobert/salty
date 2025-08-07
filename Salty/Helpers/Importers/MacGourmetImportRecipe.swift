@@ -348,7 +348,8 @@ struct MacGourmetImportRecipe: Decodable {
                         .trimmingCharacters(in: .punctuationCharacters)
                 )
             }
-            recipe.tags = keywordsArray
+            // Note: Tags will be handled separately during import process
+            // as they now require creating Tag records and RecipeTag relationships
         }
         
         // Set servings on the recipe if it's a valid positive number (see if need to check? haven't so far...)

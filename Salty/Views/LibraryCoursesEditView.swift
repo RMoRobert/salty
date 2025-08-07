@@ -34,6 +34,7 @@ struct LibraryCoursesEditView: View {
                 }
                 .disabled(!viewModel.canEdit)
                 .labelStyle(.titleAndIcon)
+                .padding(.leading)
                 
                 Button(role: .destructive) {
                     viewModel.deleteSelectedCourses()
@@ -52,6 +53,7 @@ struct LibraryCoursesEditView: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.bordered)
+                .padding(.trailing)
             }
             .padding([.top, .bottom])
 #if !os(macOS)

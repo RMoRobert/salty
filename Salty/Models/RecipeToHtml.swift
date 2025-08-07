@@ -146,18 +146,18 @@ extension Recipe {
                         }
                         .id("recipe-notes-container")
                         
-                        
-                        if tags.count > 0 {
-                            Section {
-                                H2("Tags").id("recipe-tags")
-                                Ul {
-                                    for tag in tags {
-                                        Li(tag).class("recipe-tag")
-                                    }
-                                }.id(("tags-list"))
-                            }
-                            .id("recipe-tags-container")
-                        }
+                    // TODO: Adapt to new tags table (not row) -- and see if can apply to course and category, too?
+//                        if tags.count > 0 {
+//                            Section {
+//                                H2("Tags").id("recipe-tags")
+//                                Ul {
+//                                    for tag in tags {
+//                                        Li(tag).class("recipe-tag")
+//                                    }
+//                                }.id(("tags-list"))
+//                            }
+//                            .id("recipe-tags-container")
+//                        }
                         
                     }
                 }

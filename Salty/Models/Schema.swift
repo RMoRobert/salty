@@ -48,8 +48,6 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
     var preparationTimes: [PreparationTime] = []
     @Column(as: NutritionInformation?.JSONRepresentation.self)
     var nutrition: NutritionInformation? = nil
-    @Column(as: [String].JSONRepresentation.self)
-    var tags: [String] = []
     
     var summary: String {
         return (
@@ -59,10 +57,6 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
                 )
             )
         )
-    }
-    
-    var sortedTags: [String] {
-        tags.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
     
     //    var categories: [Category]?
@@ -93,7 +87,6 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
         static let notes  = JSONColumn(CodingKeys.notes)
         static let preparationTimes = JSONColumn(CodingKeys.preparationTimes)
         static let nutrition = JSONColumn(CodingKeys.nutrition)
-        static let tags = JSONColumn(CodingKeys.tags)
     }
     
     static var databaseSelection: [any SQLSelectable] {
@@ -104,7 +97,7 @@ extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
          Columns.yield, Columns.servings, Columns.courseId,
          Database.json(Columns.directions), Database.json(Columns.ingredients),
          Database.json(Columns.notes), Database.json(Columns.preparationTimes),
-         Database.json(Columns.nutrition), Database.json(Columns.tags)]
+         Database.json(Columns.nutrition)]
     }
 }
 
@@ -250,6 +243,25 @@ extension Category: FetchableRecord, PersistableRecord  {
     }
 }
 
+@Table("tag")
+struct Tag: Hashable, Identifiable, Codable, Equatable {
+    var id: String
+    var name: String
+}
+
+extension Tag: FetchableRecord, PersistableRecord  {
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let name = Column(CodingKeys.name)
+        
+        static let recipes = hasMany(Recipe.self)
+    }
+    
+    static var databaseSelection: [any SQLSelectable] {
+        [Columns.id, Columns.name]
+    }
+}
+
 
 enum Difficulty: Int, Codable, CaseIterable, QueryBindable {
     case notSet = 0,  easy, somewhatEasy, medium, slightlyDifficult, difficult
@@ -331,16 +343,38 @@ enum Rating: Int, CaseIterable, Identifiable, Codable, QueryBindable {
 
 @Table("recipeCategory")
 struct RecipeCategory:  Codable, Hashable, Equatable, PersistableRecord, FetchableRecord {
+    var id: String
     var recipeId: String
     var categoryId: String
     
     enum Columns {
+        static let id = Column(CodingKeys.id)
         static let recipeId = Column(CodingKeys.recipeId)
         static let categoryId = Column(CodingKeys.categoryId)
     }
     
     static var databaseSelection: [any SQLSelectable] {
-        [Columns.recipeId, Columns.categoryId]
+        [Columns.id, Columns.recipeId, Columns.categoryId]
+    }
+}
+
+@Table("recipeTag")
+struct RecipeTag:  Codable, Hashable, Equatable, PersistableRecord, FetchableRecord {
+    var id: String
+    var recipeId: String
+    var tagId: String
+    
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let recipeId = Column(CodingKeys.recipeId)
+        static let tagId = Column(CodingKeys.tagId)
+        
+        static let tag = belongsTo(Tag.self)
+        static let recipe = belongsTo(Recipe.self)
+    }
+    
+    static var databaseSelection: [any SQLSelectable] {
+        [Columns.id, Columns.recipeId, Columns.tagId]
     }
 }
 
@@ -413,17 +447,18 @@ func appDatabase() throws -> any DatabaseWriter {
         logger.info("Running 'Create initial tables' migration")
 
         try db.create(table: "course") { t in
-            t.primaryKey("id", .text)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            
             t.column("name", .text)
         }
         
         try db.create(table: "category") { t in
-            t.primaryKey("id", .text)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
             t.column("name", .text)
         }
         
         try db.create(table: "recipe") { t in
-            t.primaryKey("id", .text)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
             t.column("name", .text).notNull()
             t.column("createdDate", .datetime)
             t.column("lastModifiedDate", .datetime)
@@ -449,13 +484,13 @@ func appDatabase() throws -> any DatabaseWriter {
         }
         
         try db.create(table: "recipeCategory") { t in
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
-            t.primaryKey(["recipeId", "categoryId"])
         }
         
         try db.create(table: "shoppingList") { t in
-            t.primaryKey("id", .text)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
             t.column("name", .text)
             t.column("isFreeform", .boolean)
             t.column("contentsForList", .jsonText)
@@ -488,6 +523,58 @@ func appDatabase() throws -> any DatabaseWriter {
         // Add one shopping list (freeform with example format) to database
         let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
         try shoppingList.insert(db)
+    }
+    
+    migrator.registerMigration("0003: Convert tags to relational structure") { db in
+        logger.info("Running 'Convert tags to relational structure' migration")
+        
+        // Create tag table
+        try db.create(table: "tag") { t in
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.column("name", .text)
+        }
+        
+        // Create recipeTag junction table
+        try db.create(table: "recipeTag") { t in
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
+            t.column("tagId", .text).notNull().indexed().references("tag", onDelete: .cascade)
+        }
+        
+        // Migrate existing tags data
+        let recipes = try Recipe.fetchAll(db)
+        var tagNameToId: [String: String] = [:]
+        
+        for recipe in recipes {
+            // Get existing tags from JSON column (we need to access it directly since we removed it from the struct)
+            let row = try Row.fetchOne(db, sql: "SELECT tags FROM recipe WHERE id = ?", arguments: [recipe.id])
+            if let tagsJson = row?["tags"] as? String, let tagsData = tagsJson.data(using: .utf8) {
+                do {
+                    let tags = try JSONDecoder().decode([String].self, from: tagsData)
+                    
+                    for tagName in tags {
+                        // Create tag if it doesn't exist
+                        if tagNameToId[tagName] == nil {
+                            let tagId = UUID().uuidString
+                            let tag = Tag(id: tagId, name: tagName)
+                            try tag.insert(db)
+                            tagNameToId[tagName] = tagId
+                        }
+                        
+                        // Create recipe-tag relationship
+                        let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagNameToId[tagName]!)
+                        try recipeTag.insert(db)
+                    }
+                } catch {
+                    logger.error("Failed to decode tags for recipe \(recipe.id): \(error)")
+                }
+            }
+        }
+        
+        // Remove the tags column from recipe table
+        try db.alter(table: "recipe") { t in
+            t.drop(column: "tags")
+        }
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):
@@ -525,6 +612,9 @@ extension Database {
             }
             for course in SampleData.sampleCourses {
                 course
+            }
+            for tag in SampleData.sampleTags {
+                tag
             }
             for recipe in SampleData.sampleRecipes {
                 recipe
