@@ -479,7 +479,6 @@ func appDatabase() throws -> any DatabaseWriter {
             t.column("ingredients", .jsonText)
             t.column("notes", .jsonText)
             t.column("preparationTimes", .jsonText)
-            t.column("tags", .jsonText)
             t.column("nutrition", .jsonText)
         }
         
@@ -487,6 +486,17 @@ func appDatabase() throws -> any DatabaseWriter {
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
+        }
+        
+        try db.create(table: "tag") { t in
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.column("name", .text)
+        }
+        
+        try db.create(table: "recipeTag") { t in
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
+            t.column("tagId", .text).notNull().indexed().references("tag", onDelete: .cascade)
         }
         
         try db.create(table: "shoppingList") { t in
@@ -523,58 +533,6 @@ func appDatabase() throws -> any DatabaseWriter {
         // Add one shopping list (freeform with example format) to database
         let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
         try shoppingList.insert(db)
-    }
-    
-    migrator.registerMigration("0003: Convert tags to relational structure") { db in
-        logger.info("Running 'Convert tags to relational structure' migration")
-        
-        // Create tag table
-        try db.create(table: "tag") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
-            t.column("name", .text)
-        }
-        
-        // Create recipeTag junction table
-        try db.create(table: "recipeTag") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
-            t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
-            t.column("tagId", .text).notNull().indexed().references("tag", onDelete: .cascade)
-        }
-        
-        // Migrate existing tags data
-        let recipes = try Recipe.fetchAll(db)
-        var tagNameToId: [String: String] = [:]
-        
-        for recipe in recipes {
-            // Get existing tags from JSON column (we need to access it directly since we removed it from the struct)
-            let row = try Row.fetchOne(db, sql: "SELECT tags FROM recipe WHERE id = ?", arguments: [recipe.id])
-            if let tagsJson = row?["tags"] as? String, let tagsData = tagsJson.data(using: .utf8) {
-                do {
-                    let tags = try JSONDecoder().decode([String].self, from: tagsData)
-                    
-                    for tagName in tags {
-                        // Create tag if it doesn't exist
-                        if tagNameToId[tagName] == nil {
-                            let tagId = UUID().uuidString
-                            let tag = Tag(id: tagId, name: tagName)
-                            try tag.insert(db)
-                            tagNameToId[tagName] = tagId
-                        }
-                        
-                        // Create recipe-tag relationship
-                        let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagNameToId[tagName]!)
-                        try recipeTag.insert(db)
-                    }
-                } catch {
-                    logger.error("Failed to decode tags for recipe \(recipe.id): \(error)")
-                }
-            }
-        }
-        
-        // Remove the tags column from recipe table
-        try db.alter(table: "recipe") { t in
-            t.drop(column: "tags")
-        }
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):

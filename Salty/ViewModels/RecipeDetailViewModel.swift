@@ -19,7 +19,6 @@ class RecipeDetailViewModel {
     
     // MARK: - State
     let recipe: Recipe
-    var courseName: String?
     var showingFullImage = false
     
     #if !os(macOS)
@@ -27,6 +26,18 @@ class RecipeDetailViewModel {
     #else
     var isTitleVisible = false
     #endif
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
+    var courses: [Course]
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
+    var categories: [Category]
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
+    var tags: [Tag]
     
     // MARK: - Computed Properties
     #if !os(macOS)
@@ -36,28 +47,46 @@ class RecipeDetailViewModel {
     }
     #endif
     
+    var courseName: String? {
+        guard let courseId = recipe.courseId else { return nil }
+        return courses.first { $0.id == courseId }?.name
+    }
+    
+    var recipeCategories: [Category] {
+        do {
+            let recipeCategoryIds = try database.read { db in
+                try RecipeCategory
+                    .filter(RecipeCategory.Columns.recipeId == recipe.id)
+                    .fetchAll(db)
+                    .map { $0.categoryId }
+            }
+            return categories.filter { recipeCategoryIds.contains($0.id) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        } catch {
+            logger.error("Error loading recipe categories: \(error)")
+            return []
+        }
+    }
+    
+    var recipeTags: [Tag] {
+        do {
+            let recipeTagIds = try database.read { db in
+                try RecipeTag
+                    .filter(RecipeTag.Columns.recipeId == recipe.id)
+                    .fetchAll(db)
+                    .map { $0.tagId }
+            }
+            return tags.filter { recipeTagIds.contains($0.id) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        } catch {
+            logger.error("Error loading recipe tags: \(error)")
+            return []
+        }
+    }
+    
     // MARK: - Initialization
     init(recipe: Recipe) {
         self.recipe = recipe
-        loadCourseName()
-    }
-    
-    // MARK: - Public Methods
-    func loadCourseName() {
-        guard let courseId = recipe.courseId else {
-            courseName = nil
-            return
-        }
-        
-        do {
-            let course = try database.read { db in
-                try Course.fetchOne(db, id: courseId)
-            }
-            courseName = course?.name
-        } catch {
-            logger.error("Error loading course name: \(error)")
-            courseName = nil
-        }
     }
     
     func showFullImage() {

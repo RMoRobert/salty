@@ -30,7 +30,7 @@ struct RecipeDetailView: View {
                 }
                 NotesSection(recipe: viewModel.recipe)
                     .padding(.top, 2)
-                TagsSection(recipe: viewModel.recipe)
+                TagsSection(viewModel: viewModel)
                     .padding(.top, 2)
             }
             .padding()
@@ -43,9 +43,7 @@ struct RecipeDetailView: View {
             RecipeFullImageView(recipe: viewModel.recipe)
                 .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
         }
-        .onChange(of: viewModel.recipe.courseId) { _, _ in
-            viewModel.loadCourseName()
-        }
+
         #if !os(macOS)
         .navigationTitle(viewModel.shouldShowNavigationTitle ? viewModel.recipe.name : "")
         #else
@@ -334,16 +332,25 @@ private struct NotesSection: View {
 }
 
 private struct TagsSection: View {
-    let recipe: Recipe
+    @Bindable var viewModel: RecipeDetailViewModel
     
     var body: some View {
-        VStack(alignment: .leading) {
-            Text("Tags")
-                .modifier(TitleStyle())
-            Text("Coming soon!")
+        if !viewModel.recipeTags.isEmpty {
+            VStack(alignment: .leading) {
+                Text("Tags")
+                    .modifier(TitleStyle())
+                HFlow(itemSpacing: 8, rowSpacing: 16) {
+                    ForEach(viewModel.recipeTags, id: \.id) { tag in
+                        Label(tag.name, systemImage: "tag")
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 6)
+                            .background(Color.recipeDetailPageBackgroundColorful.opacity(0.66), in: Capsule())
+                    }
+                }
+            }
+            .modifier(RecipeSectionBoxModifier())
+            .frame(maxWidth: .infinity)
         }
-        .modifier(RecipeSectionBoxModifier())
-        .frame(maxWidth: .infinity)
     }
 }
 
