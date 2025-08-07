@@ -157,7 +157,7 @@ struct RecipeDetailEditMobileView: View {
                         Text("(none)")
                             .tag(nil as String?)
                             .foregroundStyle(.secondary)
-                        ForEach(viewModel.courses) { course in
+                        ForEach(viewModel.allCourses) { course in
                             Text(course.name)
                                 .tag(course.id as String?)
                         }
@@ -168,8 +168,13 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Text("Categories")
                     Spacer()
-                    Button("Select Categories") {
+                    Button(action: {
                         viewModel.showingEditCategoriesSheet.toggle()
+                    }) {
+                        Text(viewModel.hasCategories ? viewModel.sortedCategories.joined(separator: ", ") : "Select Categories…")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 400, alignment: .trailing)
                     }
                 }
                 
@@ -438,33 +443,18 @@ struct RecipeDetailEditMobileView: View {
         
         var body: some View {
             Section("Nutrition Information:") {
-                if let nutrition = viewModel.recipe.nutrition {
-                    let parts = [
-                        nutrition.servingSize.map { "Serving Size: \($0)" },
-                        nutrition.calories.map { "Calories: \($0.formatted())" },
-                        nutrition.fat.map { "Total fat: \($0.formatted())g" },
-                        nutrition.saturatedFat.map { "Saturated Fat: \($0.formatted())g" },
-                        nutrition.transFat.map { "Trans Fat: \($0.formatted())g" },
-                        nutrition.cholesterol.map { "Cholesterol: \($0.formatted())mg" },
-                        nutrition.sodium.map { "Sodium: \($0.formatted())mg" },
-                        nutrition.carbohydrates.map { "Total Carbs: \($0.formatted())g" },
-                        nutrition.fiber.map { "Fiber: \($0.formatted())g" },
-                        nutrition.sugar.map { "Sugars: \($0.formatted())g" },
-                        nutrition.protein.map { "Protein: \($0.formatted())g" }
-                    ].compactMap { $0 }
-                    
-                    if parts.isEmpty {
-                        Button("Add Nutrition Info", systemImage: "plus.circle.fill") {
-                            viewModel.showingNutritionEditSheet.toggle()
-                        }
-                    }
-                    else {
-                        Text(parts.joined(separator: ", "))
-                            .padding(.vertical, 8)
-                            .font(.caption)
-                        Button("Edit Nutrition Info", systemImage: "pencil") {
-                            viewModel.showingNutritionEditSheet.toggle()
-                        }
+                
+                
+                Text(viewModel.nutritionSummary ?? "No nutrition information added")
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+                
+                if let nutritionSummary = viewModel.nutritionSummary {
+                    Text(nutritionSummary)
+                        .padding(.vertical, 8)
+                        .font(.caption)
+                    Button("Edit Nutrition Info", systemImage: "pencil") {
+                        viewModel.showingNutritionEditSheet.toggle()
                     }
                 }
                 else {

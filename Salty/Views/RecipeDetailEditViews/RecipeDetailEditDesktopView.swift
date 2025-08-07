@@ -132,7 +132,7 @@ struct RecipeDetailEditDesktopView: View {
                         Text("(No Course)")
                             .tag(nil as String?)
                         
-                        ForEach(viewModel.courses) { course in
+                        ForEach(viewModel.allCourses) { course in
                             Text(course.name)
                                 .tag(course.id as String?)        
                         }
@@ -480,36 +480,11 @@ struct RecipeDetailEditDesktopView: View {
                         viewModel.showingNutritionEditSheet.toggle()
                     }
                     .buttonStyle(.bordered)
-                }
+                }                
+                Text(viewModel.nutritionSummary ?? "No nutrition information added")
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
                 
-                if let nutrition = viewModel.recipe.nutrition {
-                    let parts = [
-                        nutrition.servingSize.map { "Serving Size: \($0)" },
-                        nutrition.calories.map { "Calories: \($0.formatted())" },
-                        nutrition.fat.map { "Total fat: \($0.formatted())g" },
-                        nutrition.saturatedFat.map { "Saturated Fat: \($0.formatted())g" },
-                        nutrition.transFat.map { "Trans Fat: \($0.formatted())g" },
-                        nutrition.cholesterol.map { "Cholesterol: \($0.formatted())mg" },
-                        nutrition.sodium.map { "Sodium: \($0.formatted())mg" },
-                        nutrition.carbohydrates.map { "Total Carbs: \($0.formatted())g" },
-                        nutrition.fiber.map { "Fiber: \($0.formatted())g" },
-                        nutrition.sugar.map { "Sugars: \($0.formatted())g" },
-                        nutrition.protein.map { "Protein: \($0.formatted())g" }
-                    ].compactMap { $0 }
-                    
-                    if parts.isEmpty {
-                        Text("No nutrition values entered")
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
-                    } else {
-                        Text(parts.joined(separator: ", "))
-                            .padding(.vertical, 8)
-                    }
-                } else {
-                    Text("No nutrition information added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                }
             }
             .sheet(isPresented: $viewModel.showingNutritionEditSheet) {
                 NutritionEditView(recipe: $viewModel.recipe)

@@ -19,14 +19,22 @@ class RecipeDetailEditViewModel {
     
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
-    var courses: [Course]
+    var allCourses: [Course]
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
+    var allCategories: [Category]
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(RecipeCategory.columns) FROM \(RecipeCategory.self)"))
+    var allRecipeCategories: [RecipeCategory]
     
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var allTags: [Tag]
     
     @ObservationIgnored
-    @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self) ORDER BY \(RecipeTag.id)"))
+    @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self)"))
     var allRecipeTags: [RecipeTag]
     
     // MARK: - State
@@ -35,8 +43,9 @@ class RecipeDetailEditViewModel {
     var isNewRecipe: Bool
     var onNewRecipeSaved: ((String) -> Void)?
     
-    // Cache for recipe tags
+    // Caches for tags and categories
     private var recipeTags: [Tag] = []
+    private var recipeCategories: [Category] = []
    
     // MARK: - Sheet States
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
@@ -79,6 +88,17 @@ class RecipeDetailEditViewModel {
     
     var hasTags: Bool {
         !sortedTags.isEmpty
+    }
+        
+    var sortedCategories: [String] {
+        let recipeCategoryIds = allRecipeCategories.filter { $0.recipeId == recipe.id }.map { $0.categoryId }
+        return allCategories.filter { recipeCategoryIds.contains($0.id) }
+            .map { $0.name }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+    
+    var hasCategories: Bool {
+        !sortedCategories.isEmpty
     }
     
     // MARK: - Initialization
@@ -179,7 +199,7 @@ class RecipeDetailEditViewModel {
             }
             
             // Remove the recipe-tag association
-            try database.write { db in
+            let _ = try database.write { db in
                 try RecipeTag
                     .filter(RecipeTag.Columns.recipeId == recipe.id && RecipeTag.Columns.tagId == tag.id)
                     .deleteAll(db)
@@ -194,5 +214,48 @@ class RecipeDetailEditViewModel {
     func discardChanges() {
         recipe = originalRecipe
     }
+   
+    var nutritionSummary: String? {
+        guard let nutrition = recipe.nutrition else { return nil }
+
+        var parts: [String] = []
+
+        if let servingSize = nutrition.servingSize {
+            parts.append("Serving Size: \(servingSize)")
+        }
+        if let calories = nutrition.calories {
+            parts.append("Calories: \(calories.formatted())")
+        }
+        if let fat = nutrition.fat {
+            parts.append("Total Fat: \(fat.formatted())g")
+        }
+        if let saturatedFat = nutrition.saturatedFat {
+            parts.append("Saturated Fat: \(saturatedFat.formatted())g")
+        }
+        if let transFat = nutrition.transFat {
+            parts.append("Trans Fat: \(transFat.formatted())g")
+        }
+        if let cholesterol = nutrition.cholesterol {
+            parts.append("Cholesterol: \(cholesterol.formatted())mg")
+        }
+        if let sodium = nutrition.sodium {
+            parts.append("Sodium: \(sodium.formatted())mg")
+        }
+        if let carbs = nutrition.carbohydrates {
+            parts.append("Total Carbs: \(carbs.formatted())g")
+        }
+        if let fiber = nutrition.fiber {
+            parts.append("Fiber: \(fiber.formatted())g")
+        }
+        if let sugar = nutrition.sugar {
+            parts.append("Sugars: \(sugar.formatted())g")
+        }
+        if let protein = nutrition.protein {
+            parts.append("Protein: \(protein.formatted())g")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
 }
 
