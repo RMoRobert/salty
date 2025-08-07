@@ -248,33 +248,239 @@ struct ScanTextForRecipeView: View {
     }
     
     private func insertScannedText() {
-        let parser = RecipeFromTextParser()
-        let scannedRecipe = parser.parseRecipe(from: ocrService.extractedText)
+        let scannedText = ocrService.extractedText.trimmingCharacters(in: .whitespacesAndNewlines)
         
         switch targetSection {
         case .introduction:
-            //  scanned text to existing introduction
-            let newText = ocrService.extractedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !newText.isEmpty {
+            // Add scanned text to existing introduction
+            if !scannedText.isEmpty {
                 if viewModel.recipe.introduction.isEmpty {
-                    viewModel.recipe.introduction = newText
+                    viewModel.recipe.introduction = scannedText
                 } else {
-                    viewModel.recipe.introduction += "\n\n" + newText
+                    viewModel.recipe.introduction += "\n\n" + scannedText
                 }
             }
         case .ingredients:
-            // Add scanned ingredients to existing ones
-            for ingredient in scannedRecipe.ingredients {
+            // Parse scanned text as ingredients using lenient parsing
+            let ingredients = parseIngredientsFromText(scannedText)
+            for ingredient in ingredients {
                 viewModel.recipe.ingredients.append(ingredient)
             }
         case .directions:
-            // Add scanned directions to existing ones
-            for direction in scannedRecipe.directions {
+            // Parse scanned text as directions using lenient parsing
+            let directions = parseDirectionsFromText(scannedText)
+            for direction in directions {
                 viewModel.recipe.directions.append(direction)
             }
         }
         
         dismiss()
+    }
+    
+    // MARK: - Lenient Parsing for Section-Specific Scanning
+    // adjusted from whole-document scanner
+    
+    private func parseIngredientsFromText(_ text: String) -> [Ingredient] {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        var ingredients: [Ingredient] = []
+        
+        for line in lines {
+            // Skip obvious non-ingredient lines
+            if isObviousNonIngredient(line) {
+                continue
+            }
+            
+            // Clean the ingredient text
+            let cleanedText = cleanIngredientText(line)
+            
+            // Only add if we have meaningful content
+            if cleanedText.count >= 2 {
+                ingredients.append(Ingredient(
+                    id: UUID().uuidString,
+                    isHeading: false,
+                    isMain: false,
+                    text: cleanedText
+                ))
+            }
+        }
+        
+        return ingredients
+    }
+    
+    private func parseDirectionsFromText(_ text: String) -> [Direction] {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        var directions: [Direction] = []
+        var currentDirection = ""
+        
+        for line in lines {
+            // Skip obvious non-direction lines
+            if isObviousNonDirection(line) {
+                continue
+            }
+            
+            // Check if this line starts a new step
+            if isDirectionStep(line) {
+                // Save the previous direction if we have one
+                if !currentDirection.isEmpty {
+                    let cleanedText = cleanDirectionText(currentDirection)
+                    if cleanedText.count >= 5 {
+                        directions.append(Direction(
+                            id: UUID().uuidString,
+                            isHeading: false,
+                            text: cleanedText
+                        ))
+                    }
+                }
+                
+                // Start a new direction
+                currentDirection = line
+            } else {
+                // Continue the current direction
+                if !currentDirection.isEmpty {
+                    currentDirection += " " + line
+                } else {
+                    // This might be a direction without a step number
+                    currentDirection = line
+                }
+            }
+        }
+        
+        // Add the last direction if we have one
+        if !currentDirection.isEmpty {
+            let cleanedText = cleanDirectionText(currentDirection)
+            if cleanedText.count >= 5 {
+                directions.append(Direction(
+                    id: UUID().uuidString,
+                    isHeading: false,
+                    text: cleanedText
+                ))
+            }
+        }
+        
+        return directions
+    }
+    
+    private func isObviousNonIngredient(_ line: String) -> Bool {
+        let lowercased = line.lowercased()
+        
+        // Skip section headers
+        let sectionHeaders = ["ingredients", "directions", "instructions", "method", "steps", "preparation", "cooking", "notes", "tips", "variations"]
+        if sectionHeaders.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+        
+        // Skip metadata lines
+        let metadataPatterns = ["prep time", "cook time", "total time", "servings", "yield", "makes", "serves"]
+        if metadataPatterns.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+        
+        // Skip very short lines that are likely not ingredients
+        if line.count < 2 {
+            return true
+        }
+        
+        return false
+    }
+    
+    private func isObviousNonDirection(_ line: String) -> Bool {
+        let lowercased = line.lowercased()
+        
+        // Skip section headers
+        let sectionHeaders = ["ingredients", "directions", "instructions", "method", "steps", "preparation", "cooking", "notes", "tips", "variations"]
+        if sectionHeaders.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+        
+        // Skip metadata lines
+        let metadataPatterns = ["prep time", "cook time", "total time", "servings", "yield", "makes", "serves"]
+        if metadataPatterns.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+        
+        // Skip very short lines that are likely not directions
+        if line.count < 3 {
+            return true
+        }
+        
+        return false
+    }
+    
+    private func isDirectionStep(_ line: String) -> Bool {
+        // Check for step numbers at the beginning
+        let stepNumberPatterns = [
+            /^\d+\.\s*/, // 1. 2. etc.
+            /^\d+\)\s*/, // 1) 2) etc.
+            /^[Ss]tep\s*\d+:?\s*/, // Step 1: Step 2 etc.
+            /^\d+:\s*/, // 1: 2: etc.
+            /^\d+\s+-\s*/, // 1 - 2 - etc.
+            /^\s*\d+\.\s*/, // Indented numbered steps like "    1. "
+            /^\s*[Ss]tep\s*\d+:?\s*/, // Indented Step 1: Step 2 etc.
+        ]
+        
+        for pattern in stepNumberPatterns {
+            if line.matches(of: pattern).count > 0 {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    private func cleanIngredientText(_ text: String) -> String {
+        var cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Remove common bullet points and list delimiters
+        let bulletPatterns = [
+            /^•\s*/, // Bullet point
+            /^-\s*/, // Dash
+            /^\*\s*/, // Asterisk
+            /^\+\s*/, // Plus sign
+            /^>\s*/, // Greater than
+            /^→\s*/, // Arrow
+            /^▪\s*/, // Small bullet
+            /^▫\s*/, // White bullet
+            /^‣\s*/, // Triangular bullet
+            /^⁃\s*/, // Hyphen bullet
+            /^\d+\.\s*/, // Numbered list with period: 1., 2., etc.
+            /^\d+\)\s*/, // Numbered list with parenthesis: 1), 2), etc.
+        ]
+        
+        for pattern in bulletPatterns {
+            cleanedText = cleanedText.replacing(pattern, with: "")
+        }
+        
+        return cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    private func cleanDirectionText(_ text: String) -> String {
+        var cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Remove step numbers at the beginning (including indented ones)
+        let stepNumberPatterns = [
+            /^\d+\.\s*/, // 1. 2. etc.
+            /^\d+\)\s*/, // 1) 2) etc.
+            /^[Ss]tep\s*\d+:?\s*/, // Step 1: Step 2 etc.
+            /^\d+:\s*/, // 1: 2: etc.
+            /^\d+\s+-\s*/, // 1 - 2 - etc.
+            /^\s*\d+\.\s*/, // Indented numbered steps like "    1. "
+            /^\s*[Ss]tep\s*\d+:?\s*/, // Indented Step 1: Step 2 etc.
+        ]
+        
+        for pattern in stepNumberPatterns {
+            cleanedText = cleanedText.replacing(pattern, with: "")
+        }
+        
+        // Clean up any extra whitespace that might be left
+        cleanedText = cleanedText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        
+        return cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     #if os(macOS)
