@@ -71,7 +71,9 @@ struct RecipeDetailEditMobileView: View {
             }
             Button("Add") {
                 if !newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    viewModel.addTag(newTagName.trimmingCharacters(in: .whitespacesAndNewlines))
+                    withAnimation {
+                        viewModel.addTag(newTagName.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
                     newTagName = ""
                 }
             }
@@ -400,7 +402,9 @@ struct RecipeDetailEditMobileView: View {
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
                         ForEach(viewModel.sortedTags, id: \.self) { tag in
                             Button(action: {
-                                viewModel.removeTag(tag)
+                                withAnimation {
+                                    viewModel.removeTag(tag)
+                                }
                             }) {
                                 Label(tag, systemImage: "minus.circle")
                             }
@@ -409,8 +413,13 @@ struct RecipeDetailEditMobileView: View {
                             .backgroundStyle(.secondary)
                             .controlSize(.mini)
                             .accessibilityHint("Remove tag \(tag)")
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .scale.combined(with: .opacity)
+                            ))
                         }
                     }
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.sortedTags)
                 }
                 Button(action: {
                     newTagName = ""

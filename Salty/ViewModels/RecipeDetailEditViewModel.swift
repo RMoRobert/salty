@@ -25,6 +25,10 @@ class RecipeDetailEditViewModel {
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var allTags: [Tag]
     
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self) ORDER BY \(RecipeTag.id)"))
+    var allRecipeTags: [RecipeTag]
+    
     // MARK: - State
     var recipe: Recipe
     var originalRecipe: Recipe
@@ -67,13 +71,14 @@ class RecipeDetailEditViewModel {
     }
     
     var sortedTags: [String] {
-        // TODO: Implement tag fetching
-        return []
+        let recipeTagIds = allRecipeTags.filter { $0.recipeId == recipe.id }.map { $0.tagId }
+        return allTags.filter { recipeTagIds.contains($0.id) }
+            .map { $0.name }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
     
     var hasTags: Bool {
-        // TODO: Implement tag checking
-        return false
+        !sortedTags.isEmpty
     }
     
     // MARK: - Initialization
@@ -116,16 +121,74 @@ class RecipeDetailEditViewModel {
     
     // MARK: - Tag Management
     
-    // TODO: Implement tag management similar to categories
-    // For now, just provide basic structure
     func addTag(_ tagName: String) {
-        // TODO: Implement tag addition
-        logger.info("Tag addition not yet implemented")
+        let trimmedName = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        
+        do {
+            // Check if tag already exists
+            let existingTag = try database.read { db in
+                try Tag
+                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .fetchOne(db)
+            }
+            
+            let tagToUse: Tag
+            if let existing = existingTag {
+                tagToUse = existing
+            } else {
+                // Create new tag
+                tagToUse = Tag(id: UUID().uuidString, name: trimmedName)
+                try database.write { db in
+                    try tagToUse.insert(db)
+                }
+            }
+            
+            // Check if recipe already has this tag
+            let existingRecipeTag = try database.read { db in
+                try RecipeTag
+                    .filter(RecipeTag.Columns.recipeId == recipe.id && RecipeTag.Columns.tagId == tagToUse.id)
+                    .fetchOne(db)
+            }
+            
+            if existingRecipeTag == nil {
+                // Add tag to recipe
+                let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagToUse.id)
+                try database.write { db in
+                    try recipeTag.insert(db)
+                }
+                logger.info("Tag '\(trimmedName)' added to recipe")
+            }
+        } catch {
+            logger.error("Error adding tag: \(error)")
+        }
     }
     
     func removeTag(_ tagName: String) {
-        // TODO: Implement tag removal
-        logger.info("Tag removal not yet implemented")
+        do {
+            // Find the tag
+            let tag = try database.read { db in
+                try Tag
+                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [tagName])
+                    .fetchOne(db)
+            }
+            
+            guard let tag = tag else {
+                logger.warning("Tag '\(tagName)' not found")
+                return
+            }
+            
+            // Remove the recipe-tag association
+            try database.write { db in
+                try RecipeTag
+                    .filter(RecipeTag.Columns.recipeId == recipe.id && RecipeTag.Columns.tagId == tag.id)
+                    .deleteAll(db)
+            }
+            
+            logger.info("Tag '\(tagName)' removed from recipe")
+        } catch {
+            logger.error("Error removing tag: \(error)")
+        }
     }
     
     func discardChanges() {

@@ -100,7 +100,9 @@ struct RecipeDetailEditDesktopView: View {
             newTagName = ""
             return 
         }
-        viewModel.addTag(trimmedTag)
+        withAnimation {
+            viewModel.addTag(trimmedTag)
+        }
         newTagName = ""
     }
     
@@ -441,7 +443,9 @@ struct RecipeDetailEditDesktopView: View {
                 HFlow(itemSpacing: 8, rowSpacing: 4) {
                     ForEach(viewModel.sortedTags, id: \.self) { tag in
                         Button(action: {
-                            viewModel.removeTag(tag)
+                            withAnimation {
+                                viewModel.removeTag(tag)
+                            }
                         }) {
                             Label(tag, systemImage: "minus.circle")
                                 .padding(.horizontal, 8)
@@ -451,8 +455,13 @@ struct RecipeDetailEditDesktopView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint("Remove tag \(tag)")
+                        .transition(.asymmetric(
+                            insertion: .scale.combined(with: .opacity),
+                            removal: .scale.combined(with: .opacity)
+                        ))
                     }
                 }
+                .animation(.easeInOut(duration: 0.3), value: viewModel.sortedTags)
             }
         }
     }

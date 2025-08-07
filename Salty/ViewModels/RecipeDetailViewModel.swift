@@ -39,6 +39,10 @@ class RecipeDetailViewModel {
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var tags: [Tag]
     
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self) ORDER BY \(RecipeTag.id)"))
+    var allRecipeTags: [RecipeTag]
+    
     // MARK: - Computed Properties
     #if !os(macOS)
     var shouldShowNavigationTitle: Bool {
@@ -69,19 +73,9 @@ class RecipeDetailViewModel {
     }
     
     var recipeTags: [Tag] {
-        do {
-            let recipeTagIds = try database.read { db in
-                try RecipeTag
-                    .filter(RecipeTag.Columns.recipeId == recipe.id)
-                    .fetchAll(db)
-                    .map { $0.tagId }
-            }
-            return tags.filter { recipeTagIds.contains($0.id) }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        } catch {
-            logger.error("Error loading recipe tags: \(error)")
-            return []
-        }
+        let recipeTagIds = allRecipeTags.filter { $0.recipeId == recipe.id }.map { $0.tagId }
+        return tags.filter { recipeTagIds.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     
     // MARK: - Initialization
