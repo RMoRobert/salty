@@ -24,7 +24,7 @@ struct MacGourmetImportRecipe: Decodable {
     var prepTimes: [MGPrepTime]?
     var publicationPage: String?
     var courseName: String?
-    var keywords: String?
+
     
     enum CodingKeys: String, CodingKey {
         case name = "NAME"
@@ -42,7 +42,7 @@ struct MacGourmetImportRecipe: Decodable {
         case prepTimes = "PREP_TIMES"
         case publicationPage = "PUBLICATION_PAGE"
         case courseName = "COURSE_NAME"
-        case keywords = "KEYWORDS"
+
     }
     
     struct MGDirection: Decodable {
@@ -339,18 +339,7 @@ struct MacGourmetImportRecipe: Decodable {
             arrCategories = cats
         }
                 
-        if let keywords = keywords, !keywords.isEmpty {
-            var keywordsArray: [String] = []
-            keywords.split(separator: " ").forEach { keyword in
-                keywordsArray.append(
-                    String(keyword)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: .punctuationCharacters)
-                )
-            }
-            // Note: Tags will be handled separately during import process
-            // as they now require creating Tag records and RecipeTag relationships
-        }
+
         
         // Set servings on the recipe if it's a valid positive number (see if need to check? haven't so far...)
         if let servingsValue = servings, servingsValue > 0 {

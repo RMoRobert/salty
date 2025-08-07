@@ -19,6 +19,7 @@ struct RecipeNavigationSplitView: View {
     
     //@State private var showEditRecipeView = false
     @State private var showingEditLibCategoriesSheet = false
+    @State private var showingEditLibTagsSheet = false
     @State private var showingEditLibCoursesSheet = false
     @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
@@ -153,6 +154,9 @@ struct RecipeNavigationSplitView: View {
                         Divider()
                         Button("Category Editor") {
                             showingEditLibCategoriesSheet = true
+                        }
+                        Button("Tag Editor") {
+                            showingEditLibTagsSheet = true
                         }
                         Button("Course Editor") {
                             showingEditLibCoursesSheet = true
@@ -323,6 +327,16 @@ struct RecipeNavigationSplitView: View {
             }
             #else
             LibraryCategoriesEditView()
+                .frame(minWidth: 500, minHeight: 400)
+            #endif
+        }
+        .sheet(isPresented: $showingEditLibTagsSheet) {
+            #if os(iOS)
+            NavigationStack {
+                LibraryTagsEditView()
+            }
+            #else
+            LibraryTagsEditView()
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }
