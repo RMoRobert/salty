@@ -37,7 +37,7 @@ class RecipeDetailEditViewModel {
     @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self)"))
     var allRecipeTags: [RecipeTag]
     
-    // MARK: - State
+    // MARK: - State  
     var recipe: Recipe
     var originalRecipe: Recipe
     var isNewRecipe: Bool
@@ -214,6 +214,25 @@ class RecipeDetailEditViewModel {
     func discardChanges() {
         recipe = originalRecipe
     }
+    
+    private func refreshRecipeFromDatabase() {
+        do {
+            if let refreshedRecipe = try database.read({ db in
+                try Recipe.fetchOne(db, key: recipe.id)
+            }) {
+                recipe = refreshedRecipe
+                originalRecipe = refreshedRecipe
+            }
+        } catch {
+            logger.error("Error refreshing recipe from database: \(error)")
+        }
+    }
+    
+
+    
+
+    
+
    
     var nutritionSummary: String? {
         guard let nutrition = recipe.nutrition else { return nil }

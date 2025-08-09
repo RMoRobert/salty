@@ -15,26 +15,26 @@ import Flow
 
 struct RecipeDetailEditDesktopView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var viewModel: RecipeDetailEditViewModel
+    @Bindable var viewModel: RecipeDetailEditViewModel
     @State private var showingAddTagAlert = false
     @State private var newTagName = ""
     
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
-        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
+        self.viewModel = RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved)
     }
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                BasicInformationView(viewModel: $viewModel)
-                IntroductionView(viewModel: $viewModel)
-                IngredientsView(viewModel: $viewModel)
-                DirectionsView(viewModel: $viewModel)
-                PreparationTimesView(viewModel: $viewModel)
-                NotesView(viewModel: $viewModel)
-                TagsView(viewModel: $viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
-                NutritionView(viewModel: $viewModel)
-                PhotoView(viewModel: $viewModel)
+                BasicInformationView(viewModel: viewModel)
+                IntroductionView(viewModel: viewModel)
+                IngredientsView(viewModel: viewModel)
+                DirectionsView(viewModel: viewModel)
+                PreparationTimesView(viewModel: viewModel)
+                NotesView(viewModel: viewModel)
+                TagsView(viewModel: viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
+                NutritionView(viewModel: viewModel)
+                PhotoView(viewModel: viewModel)
             }
             .padding()
         }
@@ -80,7 +80,7 @@ struct RecipeDetailEditDesktopView: View {
             Text("Enter a name for the new tag")
         }
         .sheet(isPresented: $viewModel.showingScanTextSheet) {
-            ScanTextForRecipeView(viewModel: $viewModel, initialTarget: viewModel.scanTextTarget)
+            ScanTextForRecipeView(viewModel: viewModel, initialTarget: viewModel.scanTextTarget)
         }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
@@ -109,7 +109,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Basic Information View
     struct BasicInformationView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -125,10 +125,7 @@ struct RecipeDetailEditDesktopView: View {
                         }
                     ))
                     TextField("Yield:", text: $viewModel.recipe.yield)
-                    Picker("Course:", selection: Binding(
-                        get: { viewModel.recipe.courseId },
-                        set: { viewModel.recipe.courseId = $0 }
-                    )) {
+                    Picker("Course:", selection: $viewModel.recipe.courseId) {
                         Text("(No Course)")
                             .tag(nil as String?)
                         
@@ -175,7 +172,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Introduction View
     struct IntroductionView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -207,7 +204,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Ingredients View
     struct IngredientsView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -267,7 +264,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Directions View
     struct DirectionsView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -341,7 +338,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Preparation Times View
     struct PreparationTimesView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -380,7 +377,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Notes View
     struct NotesView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -423,7 +420,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Tags View
     struct TagsView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         @Binding var showingAddTagAlert: Bool
         @Binding var newTagName: String
         
@@ -468,7 +465,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Nutrition View
     struct NutritionView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -494,7 +491,7 @@ struct RecipeDetailEditDesktopView: View {
     
     // MARK: - Photo View
     struct PhotoView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             VStack(alignment: .leading, spacing: 16) {

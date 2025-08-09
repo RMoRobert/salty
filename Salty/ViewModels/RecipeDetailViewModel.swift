@@ -18,8 +18,11 @@ class RecipeDetailViewModel {
     @Dependency(\.defaultDatabase) private var database
     
     // MARK: - State
-    let recipe: Recipe
+    let recipeId: String
     var showingFullImage = false
+    
+    @ObservationIgnored
+    @FetchOne var recipe: Recipe?
     
     #if !os(macOS)
     var isTitleVisible: Bool = true
@@ -52,11 +55,12 @@ class RecipeDetailViewModel {
     #endif
     
     var courseName: String? {
-        guard let courseId = recipe.courseId else { return nil }
+        guard let recipe = recipe, let courseId = recipe.courseId else { return nil }
         return courses.first { $0.id == courseId }?.name
     }
     
     var recipeCategories: [Category] {
+        guard let recipe = recipe else { return [] }
         do {
             let recipeCategoryIds = try database.read { db in
                 try RecipeCategory
@@ -73,6 +77,7 @@ class RecipeDetailViewModel {
     }
     
     var recipeTags: [Tag] {
+        guard let recipe = recipe else { return [] }
         let recipeTagIds = allRecipeTags.filter { $0.recipeId == recipe.id }.map { $0.tagId }
         return tags.filter { recipeTagIds.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -80,7 +85,11 @@ class RecipeDetailViewModel {
     
     // MARK: - Initialization
     init(recipe: Recipe) {
-        self.recipe = recipe
+        self.recipeId = recipe.id
+        self._recipe = FetchOne(
+            wrappedValue: recipe, 
+            #sql("SELECT * FROM \(Recipe.self) WHERE \(Recipe.id) = \(bind: recipe.id)")
+        )
     }
     
     func showFullImage() {

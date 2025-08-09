@@ -19,37 +19,44 @@ struct RecipeDetailView: View {
     }
     
     var body: some View {
-        ScrollView {
-            Group {
-                TitleAndBasicInfoSection(viewModel: viewModel)
-                PrepTimeAndFavoriteEtcSection(recipe: viewModel.recipe)
-                IntroductionSection(recipe: viewModel.recipe)
-                AdaptiveStack(verticalAlignment: .top) {
-                    IngredientsSection(recipe: viewModel.recipe)
-                    DirectionsSection(recipe: viewModel.recipe)
+        Group {
+            if let recipe = viewModel.recipe {
+                ScrollView {
+                    Group {
+                        TitleAndBasicInfoSection(viewModel: viewModel)
+                        PrepTimeAndFavoriteEtcSection(recipe: recipe)
+                        IntroductionSection(recipe: recipe)
+                        AdaptiveStack(verticalAlignment: .top) {
+                            IngredientsSection(recipe: recipe)
+                            DirectionsSection(recipe: recipe)
+                        }
+                        NotesSection(recipe: recipe)
+                            .padding(.top, 2)
+                        TagsSection(viewModel: viewModel)
+                            .padding(.top, 2)
+                    }
+                    .padding()
                 }
-                NotesSection(recipe: viewModel.recipe)
-                    .padding(.top, 2)
-                TagsSection(viewModel: viewModel)
-                    .padding(.top, 2)
-            }
-            .padding()
-        }
-        .fontDesign(.rounded)
-        .background(Color.recipeDetailPageBackgroundColorful)
-        .foregroundStyle(Color.recipeDetailBoxForeground)
-        .textSelection(.enabled)
-        .sheet(isPresented: $viewModel.showingFullImage) {
-            RecipeFullImageView(recipe: viewModel.recipe)
-                .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
-        }
+                .fontDesign(.rounded)
+                .background(Color.recipeDetailPageBackgroundColorful)
+                .foregroundStyle(Color.recipeDetailBoxForeground)
+                .textSelection(.enabled)
+                .sheet(isPresented: $viewModel.showingFullImage) {
+                    RecipeFullImageView(recipe: recipe)
+                        .frame(minWidth: 300, idealWidth: 800, minHeight: 450, idealHeight: 900)
+                }
 
-        #if !os(macOS)
-        .navigationTitle(viewModel.shouldShowNavigationTitle ? viewModel.recipe.name : "")
-        #else
-        .navigationTitle(viewModel.recipe.name)  // do I need this on macOS? Not displayed but doesn't seem to hurt
-        #endif
-        .toolbarTitleDisplayMode(.inline)
+                #if !os(macOS)
+                .navigationTitle(viewModel.shouldShowNavigationTitle ? recipe.name : "")
+                #else
+                .navigationTitle(recipe.name)  // do I need this on macOS? Not displayed but doesn't seem to hurt
+                #endif
+                .toolbarTitleDisplayMode(.inline)
+            } else {
+                ProgressView("Loading recipe...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
     }
 }
 
@@ -62,7 +69,7 @@ private struct TitleAndBasicInfoSection: View {
         AdaptiveStack {
             VStack(spacing: 4) {
                 HStack {
-                    Text(viewModel.recipe.name)
+                    Text(viewModel.recipe?.name ?? "")
                         .font(.title)
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
@@ -87,16 +94,16 @@ private struct TitleAndBasicInfoSection: View {
 #endif
                 }
                 Spacer()
-                if !viewModel.recipe.source.isEmpty {
+                if let recipe = viewModel.recipe, !recipe.source.isEmpty {
                     HStack {
                         Image(systemName: "text.book.closed")
-                        Text(viewModel.recipe.source)
+                        Text(recipe.source)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Source: \(viewModel.recipe.source)")
+                    .accessibilityLabel("Source: \(recipe.source)")
                 }
-                if !viewModel.recipe.sourceDetails.trimmingCharacters(in: .whitespaces).isEmpty {
-                    let sourceDetails = viewModel.recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
+                if let recipe = viewModel.recipe, !recipe.sourceDetails.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let sourceDetails = recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
                     if let url = URL(string: sourceDetails),
                        let scheme = url.scheme?.lowercased().starts(with: "http") {
                         Link(destination: url) {
@@ -107,7 +114,7 @@ private struct TitleAndBasicInfoSection: View {
                         }
                     }
                     else {
-                        Text(viewModel.recipe.sourceDetails)
+                        Text(recipe.sourceDetails)
                     }
                 }
                 Spacer()
@@ -121,16 +128,16 @@ private struct TitleAndBasicInfoSection: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Course: \(courseName)")
                     }
-                    if !viewModel.recipe.yield.isEmpty {
+                    if let recipe = viewModel.recipe, !recipe.yield.isEmpty {
                         HStack {
                             Image(systemName: "circle.grid.2x2")
-                            Text(viewModel.recipe.yield)
+                            Text(recipe.yield)
                         }
                         .modifier(CapsuleBackgroundModifier())
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Yield: \(viewModel.recipe.yield)")
+                        .accessibilityLabel("Yield: \(recipe.yield)")
                     }
-                    if let servings = viewModel.recipe.servings, servings > 0 {
+                    if let recipe = viewModel.recipe, let servings = recipe.servings, servings > 0 {
                         HStack {
                             Image(systemName: "person.2")
                             Text(servings.description)
@@ -142,8 +149,8 @@ private struct TitleAndBasicInfoSection: View {
                 }
             }
             .padding()
-            if viewModel.recipe.imageFilename != nil {
-                RecipeImageView(recipe: viewModel.recipe)
+            if let recipe = viewModel.recipe, recipe.imageFilename != nil {
+                RecipeImageView(recipe: recipe)
                     .padding()
                     .onTapGesture {
                         viewModel.showFullImage()

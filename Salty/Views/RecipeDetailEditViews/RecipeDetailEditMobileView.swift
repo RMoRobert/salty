@@ -12,25 +12,25 @@ import Flow
 
 struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var viewModel: RecipeDetailEditViewModel
+    @Bindable var viewModel: RecipeDetailEditViewModel
     
     @State private var showingAddTagAlert = false
     @State private var newTagName = ""
     
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
-        self._viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
+        self.viewModel = RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved)
     }
     
     var body: some View {
         List {
-            BasicInformationView(viewModel: $viewModel)
-            IngredientsView(viewModel: $viewModel)
-            DirectionsView(viewModel: $viewModel)
-            PreparationTimesView(viewModel: $viewModel)
-            NotesView(viewModel: $viewModel)
-            TagsView(viewModel: $viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
-            NutritionView(viewModel: $viewModel)
-            ImageView(viewModel: $viewModel)
+            BasicInformationView(viewModel: viewModel)
+            IngredientsView(viewModel: viewModel)
+            DirectionsView(viewModel: viewModel)
+            PreparationTimesView(viewModel: viewModel)
+            NotesView(viewModel: viewModel)
+            TagsView(viewModel: viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
+            NutritionView(viewModel: viewModel)
+            ImageView(viewModel: viewModel)
         }
 #if !os(macOS)
         .environment(\.editMode, .constant(.active))
@@ -101,7 +101,7 @@ struct RecipeDetailEditMobileView: View {
             NutritionEditView(recipe: $viewModel.recipe)
         }
         .sheet(isPresented: $viewModel.showingScanTextSheet) {
-            ScanTextForRecipeView(viewModel: $viewModel, initialTarget: viewModel.scanTextTarget)
+            ScanTextForRecipeView(viewModel: viewModel, initialTarget: viewModel.scanTextTarget)
         }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
@@ -116,7 +116,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Basic Information Section
     struct BasicInformationView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Basic Information") {
@@ -134,7 +134,7 @@ struct RecipeDetailEditMobileView: View {
                         in: 0...2000)
                 .foregroundColor(viewModel.recipe.servings != nil ? .primary : .secondary)
                 TextField("Yield", text: $viewModel.recipe.yield)
-                Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
+                                            Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                 
                 HStack {
@@ -150,10 +150,7 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-                    Picker("Course", selection: Binding(
-                        get: { viewModel.recipe.courseId },
-                        set: { viewModel.recipe.courseId = $0 }
-                    )) {
+                    Picker("Course", selection: $viewModel.recipe.courseId) {
                         Text("(none)")
                             .tag(nil as String?)
                             .foregroundStyle(.secondary)
@@ -186,7 +183,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Ingredients Section
     struct IngredientsView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Ingredients") {
@@ -252,7 +249,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Directions Section
     struct DirectionsView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Directions") {
@@ -316,7 +313,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Preparation Time Section
     struct PreparationTimesView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Preparation Time") {
@@ -356,7 +353,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Notes Section
     struct NotesView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Notes") {
@@ -397,7 +394,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Tags Section
     struct TagsView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         @Binding var showingAddTagAlert: Bool
         @Binding var newTagName: String
         
@@ -439,7 +436,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Nutrition Section
     struct NutritionView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Nutrition Information:") {
@@ -468,7 +465,7 @@ struct RecipeDetailEditMobileView: View {
     
     // MARK: - Photo Section
     struct ImageView: View {
-        @Binding var viewModel: RecipeDetailEditViewModel
+        @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
             Section("Photo") {

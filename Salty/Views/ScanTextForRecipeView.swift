@@ -23,7 +23,7 @@ let targetSectionPickerTitle: String = "Target Section"
 
 struct ScanTextForRecipeView: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var viewModel: RecipeDetailEditViewModel
+    @Bindable var viewModel: RecipeDetailEditViewModel
     @StateObject private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
     #if os(iOS)
@@ -37,8 +37,8 @@ struct ScanTextForRecipeView: View {
     @State private var showingFilePicker = false
     @State private var targetSection: RecipeDetailEditViewModel.ScanTextTarget
     
-    init(viewModel: Binding<RecipeDetailEditViewModel>, initialTarget: RecipeDetailEditViewModel.ScanTextTarget = .ingredients) {
-        self._viewModel = viewModel
+    init(viewModel: RecipeDetailEditViewModel, initialTarget: RecipeDetailEditViewModel.ScanTextTarget = .ingredients) {
+        self.viewModel = viewModel
         self._targetSection = State(initialValue: initialTarget)
     }
     
@@ -523,7 +523,7 @@ struct ScanTextForRecipeView: View {
 
 #Preview {
     ScanTextForRecipeView(
-        viewModel: .constant(RecipeDetailEditViewModel(recipe: Recipe(id: "test", name: "Test Recipe"))),
+        viewModel: RecipeDetailEditViewModel(recipe: Recipe(id: "test", name: "Test Recipe")),
         initialTarget: .ingredients
     )
 } 
