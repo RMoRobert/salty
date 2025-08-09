@@ -31,7 +31,7 @@ struct RecipeImageView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
                             .frame(width: imageFrameSize, height: imageFrameSize, alignment: .center)
                     case .failure(let error):
                         // Check if it's a cancellation error and retry (see -999 cancelled sometimes on iOS -- no idea why, but this seems to work around)

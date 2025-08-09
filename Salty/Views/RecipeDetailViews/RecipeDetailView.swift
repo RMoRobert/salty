@@ -151,6 +151,7 @@ private struct TitleAndBasicInfoSection: View {
             .padding()
             if let recipe = viewModel.recipe, recipe.imageFilename != nil {
                 RecipeImageView(recipe: recipe)
+                    .shadow(radius: 2)
                     .padding()
                     .onTapGesture {
                         viewModel.showFullImage()
