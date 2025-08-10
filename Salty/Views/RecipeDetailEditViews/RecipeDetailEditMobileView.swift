@@ -441,7 +441,8 @@ struct RecipeDetailEditMobileView: View {
         var body: some View {
             Section("Nutrition Information") {
                 Group {
-                    if let nutritionSummary = viewModel.nutritionSummary {                Text(nutritionSummary)
+                    if let nutritionSummary = viewModel.nutritionSummary {
+                        Text(nutritionSummary)
                             .font(.callout)
                             .padding(.vertical, 8)
                         Button("Edit…") {
