@@ -36,12 +36,15 @@ struct RecipeRowView: View {
                     .padding(4)
             } else {
                 // Show default recipe image when no thumbnail data
-                Image("recipe-default")
-                    .resizable()
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundColor(.gray.opacity(0.45))
                     .frame(width: 64, height: 64)
-                    .opacity(0.10)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .shadow(radius: 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(.gray.opacity((0.06)))
+                            .shadow(radius: 2)
+                    )
                     .padding(4)
             }
             VStack(alignment: .leading) {

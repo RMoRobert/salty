@@ -41,7 +41,7 @@ struct RecipeNavigationSplitView: View {
                 // Categories:
                 Section {
                     ForEach(viewModel.categories) { category in
-                        Label(category.name, systemImage: "doc.plaintext")
+                        Label(category.name, systemImage: "rectangle.stack")
                             .tag(category.id)
                     }
                 } header: {

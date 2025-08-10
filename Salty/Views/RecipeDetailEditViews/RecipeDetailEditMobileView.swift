@@ -228,7 +228,7 @@ struct RecipeDetailEditMobileView: View {
                         Button(action: {
                             viewModel.showingBulkEditIngredientsSheet.toggle()
                         }) {
-                            Label("Edit as Text (Bulk Edit)", systemImage: "text.alignleft")
+                            Label("Edit as Text (Bulk Edit)", systemImage: "text.page")
                         }
                         
                         Button(action: {
@@ -292,7 +292,7 @@ struct RecipeDetailEditMobileView: View {
                         Button(action: {
                             viewModel.showingBulkEditDirectionsSheet.toggle()
                         }) {
-                            Label("Edit as Text (Bulk Edit)", systemImage: "text.alignleft")
+                            Label("Edit as Text (Bulk Edit)", systemImage: "text.page")
                         }
                         
                         Button(action: {
