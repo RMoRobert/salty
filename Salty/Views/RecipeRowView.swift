@@ -38,7 +38,7 @@ struct RecipeRowView: View {
                 // Show default recipe image when no thumbnail data
                 Image(systemName: "list.bullet.rectangle")
                     .font(.system(size: 32, weight: .light))
-                    .foregroundColor(.gray.opacity(0.45))
+                    .foregroundColor(.gray.opacity(0.4))
                     .frame(width: 64, height: 64)
                     .background(
                         RoundedRectangle(cornerRadius: 5)

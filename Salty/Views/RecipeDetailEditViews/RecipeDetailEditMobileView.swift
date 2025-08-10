@@ -439,24 +439,18 @@ struct RecipeDetailEditMobileView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            Section("Nutrition Information:") {
-                
-                
-                Text(viewModel.nutritionSummary ?? "No nutrition information added")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-                
-                if let nutritionSummary = viewModel.nutritionSummary {
-                    Text(nutritionSummary)
-                        .padding(.vertical, 8)
-                        .font(.caption)
-                    Button("Edit Nutrition Info", systemImage: "pencil") {
-                        viewModel.showingNutritionEditSheet.toggle()
-                    }
-                }
-                else {
-                    Button("Add Nutrition Info", systemImage: "plus.circle.fill") {
-                        viewModel.showingNutritionEditSheet.toggle()
+            Section("Nutrition Information") {
+                Group {
+                    if let nutritionSummary = viewModel.nutritionSummary {                Text(nutritionSummary)
+                            .font(.callout)
+                            .padding(.vertical, 8)
+                        Button("Edit…") {
+                            viewModel.showingNutritionEditSheet.toggle()
+                        }
+                    } else {
+                        Button("Add Nutrition Info", systemImage: "plus.circle.fill") {
+                            viewModel.showingNutritionEditSheet.toggle()
+                        }
                     }
                 }
             }
