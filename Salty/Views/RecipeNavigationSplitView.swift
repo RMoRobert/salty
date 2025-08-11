@@ -24,6 +24,7 @@ struct RecipeNavigationSplitView: View {
     @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
     @State private var showingCreateFromImageSheet = false
+    @State private var showingCreateFromWebSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingSettingsSheet = false
     
@@ -201,7 +202,11 @@ struct RecipeNavigationSplitView: View {
                    // .buttonStyle(.button)
                     Menu(content: {
                         Button("Create Recipe from Web…") {
+                            #if os(iOS)
+                            showingCreateFromWebSheet.toggle()
+                            #else
                             openWindow(id: "create-recipe-from-web-window")
+                            #endif
                         }
                         Button("Create Recipe from Image…") {
                             showingCreateFromImageSheet.toggle()
@@ -316,6 +321,12 @@ struct RecipeNavigationSplitView: View {
         }
         .sheet(isPresented: $showingCreateFromImageSheet) {
             CreateRecipeFromImageView()
+            #if os(macOS)
+                .frame(minWidth: 800, minHeight: 700)
+            #endif
+        }
+        .sheet(isPresented: $showingCreateFromWebSheet) {
+            CreateRecipeFromWebView()
             #if os(macOS)
                 .frame(minWidth: 800, minHeight: 700)
             #endif

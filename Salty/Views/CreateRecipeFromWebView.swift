@@ -2,10 +2,9 @@
 //  CreateRecipeFromWebView.swift
 //  Salty
 //
-//  Created by Robert on 1/13/25.
+//  Created by Robert on 7/13/25.
 //
 
-#if os(macOS)
 import SwiftUI
 
 struct CreateRecipeFromWebView: View {
@@ -15,6 +14,8 @@ struct CreateRecipeFromWebView: View {
     
     var body: some View {
         NavigationStack {
+            #if os(macOS)
+            // macOS: Use HSplitView with browser and editor side by side
             HSplitView {
                 // Left side - Web Browser
                 RecipeWebBrowserView(viewModel: viewModel, webView: $webView)
@@ -24,29 +25,52 @@ struct CreateRecipeFromWebView: View {
                 RecipeWebImportEditView(viewModel: viewModel)
                     .frame(minWidth: 400, idealWidth: 500)
             }
-            .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button("Cancel") {
-                        if viewModel.hasRecipeData {
-                            viewModel.showingCancelAlert = true
-                        } else {
-                            dismiss()
-                        }
+            #else
+            // iOS/iPadOS: Use simplified layout with browser and direct editor
+            RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onClose: { dismiss() })
+                .sheet(isPresented: $viewModel.showingExtractedDataSheet) {
+                    NavigationStack {
+                        RecipeDetailEditMobileView(recipe: viewModel.recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
+                            // Close the editor after saving
+                            viewModel.showingExtractedDataSheet = false
+                            dismiss() // Close the web browser window
+                        })
                     }
-                    .buttonStyle(.bordered)
-                    
-                    Button("Save Recipe") {
-                        if viewModel.hasRecipeData {
-                            viewModel.saveRecipe()
-                            dismiss()
-                        } else {
-                            viewModel.showingSaveAlert = true
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
                 }
+            #endif
+        }
+        .navigationTitle("Import Recipe from Web")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                #if os(iOS)
+                Button("Close") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                #else
+                Button("Cancel") {
+                    if viewModel.hasRecipeData {
+                        viewModel.showingCancelAlert = true
+                    } else {
+                        dismiss()
+                    }
+                }
+                .buttonStyle(.bordered)
+                
+                Button("Save Recipe") {
+                    if viewModel.hasRecipeData {
+                        viewModel.saveRecipe()
+                        dismiss()
+                    } else {
+                        viewModel.showingSaveAlert = true
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                #endif
             }
         }
+        #if os(macOS)
         .onKeyPress(.init("1"), phases: .down) { keyPress in
             if keyPress.modifiers.contains(.command) {
                 return handleKeyPress("1")
@@ -95,6 +119,7 @@ struct CreateRecipeFromWebView: View {
             }
             return .ignored
         }
+        #endif
         .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Discard", role: .destructive) {
@@ -108,8 +133,19 @@ struct CreateRecipeFromWebView: View {
         } message: {
             Text("Please add recipe information before saving.")
         }
+        .alert("No Recipe Data Found", isPresented: $viewModel.showingNoRecipeDataAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            #if os(macOS)
+            let txt = "No recipe data was found on this webpage. The page may not contain structured recipe metadata, or the format may not be supported. You can use the manual tools instead."
+            #else
+            let txt = "No recipe data was found on this webpage. The page may not contain structured recipe metadata, or the format may not be supported."
+            #endif
+            Text(txt)
+        }
     }
     
+    #if os(macOS)
     private func handleKeyPress(_ key: String) -> KeyPress.Result {
         let fieldMap: [String: RecipeField] = [
             "1": .name,
@@ -147,6 +183,7 @@ struct CreateRecipeFromWebView: View {
             }
         }
     }
+    #endif
 }
 
 // MARK: - Recipe Web Browser View
@@ -154,6 +191,7 @@ struct RecipeWebBrowserView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     @Binding var webView: WebViewCoordinator?
     @State private var urlText: String = ""
+    var onClose: (() -> Void)?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -174,7 +212,6 @@ struct RecipeWebBrowserView: View {
                 .buttonStyle(.plain)
                 .disabled(!viewModel.canGoForward)
                 .padding(4)
-                
                 
                 Button(action: {
                     goHome()
@@ -215,7 +252,17 @@ struct RecipeWebBrowserView: View {
                 
                 Spacer()
                 
-                Button( action: {
+                #if os(iOS)
+                Button(action: {
+                    onClose?()
+                }) {
+                    Label("Close", systemImage: "xmark")
+                }
+                .buttonStyle(.bordered)
+                .padding([.trailing], 8)
+                #endif
+                
+                Button(action: {
                     scanWebpageForRecipeData()
                 }) {
                     Label("Auto Import", systemImage: "square.and.arrow.down")
@@ -251,7 +298,7 @@ struct RecipeWebBrowserView: View {
                 }
             )
         }
-        .background(Color(.windowBackgroundColor))
+        //.background(Color(.windowBackgroundColor))
     }
     
     private func navigateToURL() {
@@ -290,19 +337,28 @@ struct RecipeWebBrowserView: View {
                 if let firstRecipe = recipes.first {
                     // Populate the viewModel with the found recipe data
                     self.viewModel.populateFromScannedRecipe(firstRecipe)
+                    
+                    #if os(iOS)
+                    // On iOS, save the recipe and show the editor directly
+                    self.viewModel.saveRecipe()
+                    self.viewModel.showingExtractedDataSheet = true
+                    #endif
+                } else {
+                    // No recipe data found - show alert
+                    self.viewModel.showingNoRecipeDataAlert = true
                 }
             }
         }
     }
 }
 
-// MARK: - Recipe Web Import Edit View
+#if os(macOS)
+// MARK: - Recipe Web Import Edit View (macOS only)
 struct RecipeWebImportEditView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     
     var body: some View {
         ScrollView {
-            
             VStack(alignment: .leading, spacing: 16) {
                 Text("Import Recipe Contents")
                     .font(.title2)
@@ -312,9 +368,7 @@ struct RecipeWebImportEditView: View {
                 Text("Basic Information")
                     .font(.headline)
                 
-                
                 Form {
-                    
                     TextField("Name:", text: $viewModel.recipe.name, prompt: Text("Name (⌘1)"))
                     TextField("Source:", text: $viewModel.recipe.source, prompt: Text("Source (⌘2)"))
                     TextField("Source Details:", text: $viewModel.recipe.sourceDetails, prompt: Text("Source Details (⌘3)"))
@@ -353,7 +407,6 @@ struct RecipeWebImportEditView: View {
                     TextEditor(text: $viewModel.ingredientsText)
                         .frame(minHeight: 120)
                         .border(Color.secondary.opacity(0.3))
-                        .font(.system(.body, design: .monospaced))
                     
                     Button("Clean Up Text") {
                         viewModel.ingredientsText = IngredientTextParser.cleanUpText(viewModel.ingredientsText)
@@ -377,7 +430,6 @@ struct RecipeWebImportEditView: View {
                     TextEditor(text: $viewModel.directionsText)
                         .frame(minHeight: 120)
                         .border(Color.secondary.opacity(0.3))
-                        .font(.system(.body, design: .monospaced))
                     
                     Button("Clean Up Text") {
                         viewModel.directionsText = DirectionTextParser.cleanUpText(viewModel.directionsText)
@@ -386,7 +438,6 @@ struct RecipeWebImportEditView: View {
                     .disabled(viewModel.directionsText.isEmpty)
                 }
                 .padding(.bottom, 16)
-                
                 
                 // Categories Section
                 VStack(alignment: .leading, spacing: 12) {
@@ -525,8 +576,6 @@ struct RecipeWebImportEditView: View {
                 }
                 .padding(.bottom, 16)
                 
-                
-                
                 // Photo Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Photo")
@@ -535,8 +584,6 @@ struct RecipeWebImportEditView: View {
                     RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 120)
                 }
                 .padding(.bottom, 16)
-                
-                
             }
             .padding()
         }
@@ -563,9 +610,10 @@ struct RecipeWebImportEditView: View {
         }
     }
 }
+#endif
+
+
 
 #Preview {
     CreateRecipeFromWebView()
 }
-
-#endif

@@ -44,6 +44,8 @@ class CreateRecipeFromWebViewModel {
     var showingNutritionEditSheet = false
     var showingSaveAlert = false
     var showingCancelAlert = false
+    var showingExtractedDataSheet = false
+    var showingNoRecipeDataAlert = false
     
     // MARK: - Computed Properties
     var hasRecipeData: Bool {
@@ -220,6 +222,12 @@ class CreateRecipeFromWebViewModel {
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
         self.isLoading = isLoading
+    }
+    
+    func openRecipeEditorForNewRecipe() {
+        // This will be called after saving the recipe to open the editor
+        // The recipe editor will be opened by the parent view
+        logger.info("Recipe saved, ready to open editor for: \(self.recipe.id)")
     }
     
     /// Decodes common HTML entities that might appear in scraped content

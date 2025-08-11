@@ -5,7 +5,6 @@
 //  Created by Robert on 7/13/25.
 //
 
-#if os(macOS)
 import SwiftUI
 import WebKit
 
@@ -15,6 +14,7 @@ enum WebViewContent {
     case htmlString(String)
 }
 
+#if os(macOS)
 struct WebViewRepresentable: NSViewRepresentable {
     let content: WebViewContent
     @Binding var coordinator: WebViewCoordinator?
@@ -91,6 +91,84 @@ struct WebViewRepresentable: NSViewRepresentable {
         }
     }
 }
+#elseif os(iOS)
+struct WebViewRepresentable: UIViewRepresentable {
+    let content: WebViewContent
+    @Binding var coordinator: WebViewCoordinator?
+    let onNavigationStateChange: (Bool, Bool, Bool) -> Void
+    let onURLChange: (String) -> Void
+    
+    // Convenience initializer for URL (maintains backward compatibility)
+    init(url: String, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {
+        self.content = .url(url)
+        self._coordinator = coordinator
+        self.onNavigationStateChange = onNavigationStateChange
+        self.onURLChange = onURLChange
+    }
+    
+    // New initializer for content
+    init(content: WebViewContent, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {
+        self.content = content
+        self._coordinator = coordinator
+        self.onNavigationStateChange = onNavigationStateChange
+        self.onURLChange = onURLChange
+    }
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        
+        let coord = WebViewCoordinator(
+            webView: webView,
+            onNavigationStateChange: onNavigationStateChange,
+            onURLChange: onURLChange
+        )
+        
+        webView.navigationDelegate = coord
+        
+        // Update the binding on the main thread
+        DispatchQueue.main.async {
+            self.coordinator = coord
+        }
+        
+        return webView
+    }
+    
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        switch content {
+        case .url(let urlString):
+            let currentURL = uiView.url?.absoluteString ?? ""
+            let isLoading = uiView.isLoading
+            
+            // Only load if URL is different AND we're not currently loading
+            if currentURL != urlString && !isLoading {
+                if let newURL = URL(string: urlString) {
+                    uiView.load(URLRequest(url: newURL))
+                }
+            }
+            
+        case .htmlResource(let filename):
+            // Load HTML from bundle resource
+            if let htmlPath = Bundle.main.path(forResource: filename, ofType: "html"),
+               let htmlContent = try? String(contentsOfFile: htmlPath, encoding: .utf8) {
+                uiView.loadHTMLString(htmlContent, baseURL: Bundle.main.bundleURL)
+                // Force navigation state update for HTML content since delegate methods may not fire
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    self.onNavigationStateChange(uiView.canGoBack, uiView.canGoForward, uiView.isLoading)
+                }
+            }
+            
+        case .htmlString(let htmlContent):
+            // Load HTML from string
+            uiView.loadHTMLString(htmlContent, baseURL: nil)
+            // Force navigation state update for HTML content since delegate methods may not fire
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.onNavigationStateChange(uiView.canGoBack, uiView.canGoForward, uiView.isLoading)
+            }
+        }
+    }
+}
+#endif
 
 class WebViewCoordinator: NSObject, WKNavigationDelegate {
     private let webView: WKWebView
@@ -185,5 +263,3 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
         onNavigationStateChange(webView.canGoBack, webView.canGoForward, webView.isLoading)
     }
 }
-
-#endif 
