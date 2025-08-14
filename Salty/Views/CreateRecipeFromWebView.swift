@@ -40,7 +40,9 @@ struct CreateRecipeFromWebView: View {
             #endif
         }
         .navigationTitle("Import Recipe from Web")
+        #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 #if os(iOS)

@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "Salty Glass Temp-iOS-Default-1024x1024@1x.png",
+      "filename" : "iTunesArtwork@2x.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,6 @@
           "value" : "dark"
         }
       ],
-      "filename" : "Salty Glass Temp-iOS-Dark-1024x1024@1x.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,67 +24,66 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "Salty Glass Temp-iOS-ClearLight-1024x1024@1x.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x 2.png",
+      "filename" : "16-mac.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "16x16"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x@0.5x@0.5x@0.5x@0.5x 1.png",
+      "filename" : "32-mac 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "16x16"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x@0.5x@0.5x@0.5x@0.5x.png",
+      "filename" : "32-mac.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "32x32"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x@0.5x@0.5x@0.5x.png",
+      "filename" : "64-mac.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "32x32"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x@0.5x@0.5x.png",
+      "filename" : "128-mac.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "128x128"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x@0.5x 1.png",
+      "filename" : "256-mac 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "128x128"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x@0.5x.png",
+      "filename" : "256-mac.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "256x256"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x.png",
+      "filename" : "512-mac 1.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "256x256"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x@0.5x 1.png",
+      "filename" : "512-mac.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "512x512"
     },
     {
-      "filename" : "Salty Glass Temp-macOS-Default-1024x1024@1x 1.png",
+      "filename" : "1024-mac.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"
