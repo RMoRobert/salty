@@ -42,7 +42,8 @@ struct OpenDBView: View {
                 }
                 .padding()
             }
-            VStack {
+            
+            VStack(spacing: 8) {
                 Text("A Salty recipe library must already exist at the selected location.")
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
@@ -124,15 +125,14 @@ struct OpenDBView: View {
                 return
             }
             
-            let urlBookmarkData = try url.bookmarkData(options: [])
-            UserDefaults.standard.set(urlBookmarkData, forKey: "databaseLocation")
-            print("Saved bookmark for database path: \(urlBookmarkData)")
+            // Save multiple bookmarks for different components
+            try FileManager.saveCustomLocationBookmarks(parentDirectory: url)
             url.stopAccessingSecurityScopedResource()
             
             isOpening = false
             showingSuccessAlert = true
         } catch {
-            print("Unable to save bookmark for database path: \(error.localizedDescription)")
+            print("Unable to save bookmarks for database path: \(error.localizedDescription)")
             errorMessage = "Failed to save database location: \(error.localizedDescription)"
             showingErrorAlert = true
             isOpening = false

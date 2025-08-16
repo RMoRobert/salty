@@ -6,19 +6,149 @@
 //
 
 import SwiftUI
+import SharingGRDB
 
 struct SettingsView: View {
+    @Dependency(\.defaultDatabase) private var database
+    @State private var diagnosticsInfo: [String: Any] = [:]
+    
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") {
                 GeneralSettingsView()
             }
+            Tab("Database", systemImage: "externaldrive") {
+                DatabaseSettingsView(diagnosticsInfo: $diagnosticsInfo)
+            }
             Tab("Advanced", systemImage: "gearshape.2") {
                 AdvancedSettingsView()
             }
         }
+        #if os(macOS)
         .scenePadding()
         .frame(maxWidth: 450, minHeight: 200)
+        #endif
+        .onAppear {
+            diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
+        }
+    }
+}
+
+struct DatabaseSettingsView: View {
+    @Binding var diagnosticsInfo: [String: Any]
+    @State private var showingResetConfirmation = false
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Database Location Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Database Location")
+                        .font(.headline)
+                    
+                    if FileManager.customParentDirectory != nil {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Custom Location")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Parent Directory:")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Text(FileManager.customParentDirectory?.path ?? "Unknown")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(6)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Database Bundle:")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Text(FileManager.customDatabaseBundleDirectory?.path ?? "Unknown")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(6)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Images Directory:")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Text(FileManager.customImagesDirectory?.path ?? "Unknown")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(6)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
+                            
+                            Button("Reset to Default Location", role: .destructive) {
+                                showingResetConfirmation = true
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Default Location")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            Text(FileManager.defaultSaltyLibraryFullPath.path)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(8)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+                
+                Divider()
+                
+                // Diagnostics Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Database Diagnostics")
+                            .font(.headline)
+                        
+                        Spacer()
+                        
+                        Button("Refresh") {
+                            diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
+                            DiagnosticRow(key: key, value: diagnosticsInfo[key])
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .alert("Reset Database Location", isPresented: $showingResetConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                resetToDefaultDatabaseLocation()
+            }
+        } message: {
+            Text("This will reset your database location to the default location. You'll need to restart the app for changes to take effect.")
+        }
+    }
+    
+    private func resetToDefaultDatabaseLocation() {
+        FileManager.clearCustomLocationBookmarks()
+        print("Reset database location to default")
+        // Refresh diagnostics after reset
+        diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
     }
 }
 
@@ -138,6 +268,29 @@ struct AdvancedSettingsView: View {
         } catch {
             backupMessage = "Error deleting backups: \(error.localizedDescription)"
         }
+    }
+}
+
+struct DiagnosticRow: View {
+    let key: String
+    let value: Any?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(key)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+            
+            Text("\(value ?? "nil")")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(4)
+        }
+        .padding(.vertical, 2)
     }
 }
 

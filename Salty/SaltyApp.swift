@@ -15,6 +15,19 @@ struct SaltyApp: App {
     init() {
         if context == .live {
             do {
+                // Proactively refresh bookmarks to prevent permission issues
+                FileManager.refreshBookmarksIfNeeded()
+                
+                // Validate database access before attempting to open it
+                if !FileManager.validateDatabaseAccess() {
+                    print("Warning: Database access validation failed. Attempting to refresh bookmarks...")
+                    if FileManager.refreshCustomDatabaseBookmark() {
+                        print("Successfully refreshed database bookmarks")
+                    } else {
+                        print("Failed to refresh database bookmarks - may need user intervention")
+                    }
+                }
+                
                 try prepareDependencies {
                     $0.defaultDatabase = try Salty.appDatabase()
                 }

@@ -126,6 +126,21 @@ public final class DatabaseBackupManager {
         // Get the entire Salty library directory (the *.saltyRecipeLibrary folder)
         let saltyLibraryDirectory = FileManager.saltyLibraryDirectory
         
+        // Handle security-scoped resources for custom database locations
+        var didStartAccessing = false
+        if FileManager.customSaltyLibraryDirectory != nil {
+            didStartAccessing = saltyLibraryDirectory.startAccessingSecurityScopedResource()
+            if !didStartAccessing {
+                logger.error("Failed to start accessing security-scoped resource for backup")
+                throw NSError(domain: "DatabaseBackup", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access custom database location"])
+            }
+        }
+        defer {
+            if didStartAccessing {
+                saltyLibraryDirectory.stopAccessingSecurityScopedResource()
+            }
+        }
+        
         // Create a temporary directory to organize our backup contents
         let tempBackupDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SaltyBackup-\(UUID().uuidString)")
