@@ -51,6 +51,13 @@
 			);
 			target = D47F8FDE2DF35EB300A64304 /* Salty */;
 		};
+		D4E2759C2E51887300E8F82D /* Exceptions for "Salty" folder in "SaltyUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Helpers/ImportExport/SaltyRecipeExport.swift,
+			);
+			target = D47F8FF62DF35EB400A64304 /* SaltyUITests */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -58,6 +65,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				D4D697D22E1B0ADF00B13B2B /* Exceptions for "Salty" folder in "Salty" target */,
+				D4E2759C2E51887300E8F82D /* Exceptions for "Salty" folder in "SaltyUITests" target */,
 			);
 			path = Salty;
 			sourceTree = "<group>";

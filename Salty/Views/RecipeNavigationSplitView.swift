@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
@@ -27,6 +28,25 @@ struct RecipeNavigationSplitView: View {
     @State private var showingCreateFromWebSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingSettingsSheet = false
+    
+    private var isAnySheetShown: Bool {
+        showingEditLibCategoriesSheet ||
+        showingEditLibTagsSheet ||
+        showingEditLibCoursesSheet ||
+        showingOpenDBSheet ||
+        showingImportFromFileSheet ||
+        showingCreateFromImageSheet ||
+        showingCreateFromWebSheet ||
+        showingSettingsSheet
+    }
+    
+    private func notifySheetStateChanged() {
+        NotificationCenter.default.post(
+            name: .sheetStateChanged,
+            object: nil,
+            userInfo: ["isShown": isAnySheetShown]
+        )
+    }
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -75,6 +95,9 @@ struct RecipeNavigationSplitView: View {
                                 Button("Edit") {
                                     viewModel.recipeToEditID = recipe.id
                                     viewModel.showingEditSheet = true
+                                }
+                                Button("Export…") {
+                                    viewModel.exportRecipe(recipe.id)
                                 }
                                 Button(role: .destructive, action: {
                                     withAnimation {
@@ -127,13 +150,21 @@ struct RecipeNavigationSplitView: View {
             .toolbar {
                 #if !os(macOS)
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-//                    if isEditMode && !viewModel.selectedRecipeIDs.isEmpty {
-//                        Button(role: .destructive, action: {
-//                            showingDeleteConfirmation = true
-//                        }) {
-//                            Label("Delete", systemImage: "trash")
-//                        }
-//                    }
+                    if isEditMode {
+                        Button(action: {
+                            viewModel.exportSelectedRecipes()
+                        }) {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                        
+                        Button(role: .destructive, action: {
+                            showingDeleteConfirmation = true
+                        }) {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    }
                     
                     Button(action: {
                         viewModel.addNewRecipe()
@@ -150,7 +181,7 @@ struct RecipeNavigationSplitView: View {
                         Button(action: {
                             isEditMode.toggle()
                         }) {
-                            Label(isEditMode ? "Done" : "Edit", systemImage: "pencil")
+                            Label(isEditMode ? "Done" : "Edit", systemImage: isEditMode ? "checkmark" : "pencil")
                         }
                         Divider()
                         Button("Category Editor") {
@@ -169,6 +200,9 @@ struct RecipeNavigationSplitView: View {
                         Button("Import Recipes from File…") {
                             showingImportFromFileSheet.toggle()
                         }
+                        Button("Create Recipe from Web…") {
+                            showingCreateFromWebSheet.toggle()
+                        }
                         Button("Open Database…") {
                             showingOpenDBSheet.toggle()
                         }
@@ -184,6 +218,13 @@ struct RecipeNavigationSplitView: View {
                 }
                 #else
                 ToolbarItemGroup(placement: .primaryAction) {
+                    Button(action: {
+                        viewModel.exportSelectedRecipes()
+                    }) {
+                        Label("Export Recipe", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    
                     Button(role: .destructive, action: {
                         showingDeleteConfirmation = true
                     }) {
@@ -239,6 +280,26 @@ struct RecipeNavigationSplitView: View {
                 }
             } message: {
                 Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
+            }
+            .fileExporter(
+                isPresented: $viewModel.showingExportSheet,
+                document: ExportDocument(data: viewModel.exportData ?? Data(), suggestedName: viewModel.exportFileName),
+                contentType: .saltyRecipe,
+                defaultFilename: viewModel.exportFileName
+            ) { result in
+                switch result {
+                case .success(_):
+                    // Export successful
+                    break
+                case .failure(let error):
+                    viewModel.exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    viewModel.showingExportErrorAlert = true
+                }
+            }
+            .alert("Export Failed", isPresented: $viewModel.showingExportErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text(viewModel.exportErrorMessage)
             }
             #if os(macOS)
             .onDeleteCommand {
@@ -325,11 +386,11 @@ struct RecipeNavigationSplitView: View {
                 .frame(minWidth: 800, minHeight: 700)
             #endif
         }
-        .sheet(isPresented: $showingCreateFromWebSheet) {
+        .fullScreenCover(isPresented: $showingCreateFromWebSheet) {
             CreateRecipeFromWebView()
-            #if os(macOS)
-                .frame(minWidth: 800, minHeight: 700)
-            #endif
+//            #if os(macOS)
+//                .frame(minWidth: 800, minHeight: 700)
+//            #endif
         }
         .sheet(isPresented: $showingEditLibCategoriesSheet) {
             #if os(iOS)
@@ -366,12 +427,22 @@ struct RecipeNavigationSplitView: View {
                 SettingsView()
             }
         }
-
+        .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipes)) { _ in
+            viewModel.exportSelectedRecipes()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
+            showingImportFromFileSheet = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showOpenDatabaseSheet)) { _ in
+            showingOpenDBSheet = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showCreateFromWebSheet)) { _ in
+            showingCreateFromWebSheet = true
+        }
+        .onChange(of: isAnySheetShown) { _, _ in
+            notifySheetStateChanged()
+        }
     }
-    
-
-    
-
 }
 
 #Preview {
@@ -379,3 +450,28 @@ struct RecipeNavigationSplitView: View {
         viewModel: RecipeNavigationSplitViewModel()
     )
 }
+
+// MARK: - Export Document
+
+struct ExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.saltyRecipe] }
+    
+    var data: Data
+    var suggestedName: String
+    
+    init(data: Data, suggestedName: String = "recipe") {
+        self.data = data
+        self.suggestedName = suggestedName
+    }
+    
+    init(configuration: ReadConfiguration) throws {
+        data = Data()
+        suggestedName = "recipe"
+    }
+    
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
+
+

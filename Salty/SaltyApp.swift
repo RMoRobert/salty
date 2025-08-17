@@ -77,12 +77,13 @@ struct SaltyApp: App {
                 .navigationTitle("Open Database")
         }
 
-        // "Import from File" window
-        WindowGroup(id: "import-from-file-window") {
-            ImportRecipesFromFileView()
-                .frame(idealWidth: 300)
-                .navigationTitle("Import Recipes from File")
-        }
+        // // "Import from File" window
+        // WindowGroup(id: "import-from-file-window") {
+        //     ImportRecipesFromFileView()
+        //         .frame(minWidth: 300, maxWidth: 450, minHeight: 200, maxHeight: 400)
+        //         .navigationTitle("Import Recipes from File")
+        // }
+        // .defaultSize(width: 350, height: 300)
         // "Import from Web" window
         WindowGroup(id: "create-recipe-from-web-window") {
             CreateRecipeFromWebView()

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SharingGRDB
+import UniformTypeIdentifiers
 
 struct ImportRecipesFromFileView: View {
     @Dependency(\.defaultDatabase) private var database
@@ -17,12 +18,32 @@ struct ImportRecipesFromFileView: View {
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    
+    private var detectedFileType: String? {
+        guard let file = selectedFileUrl else { return nil }
+        let fileExtension = file.pathExtension.lowercased()
+        switch fileExtension {
+        case "saltyrecipe":
+            return "Salty Recipe"
+        case "mgourmet":
+            return "MacGourmet"
+        default:
+            return nil
+        }
+    }
     var body: some View {
         VStack {
             VStack {
                 if let importUrl = selectedFileUrl?.relativePath {
-                    Text("Import from: \(importUrl)")
-                        .padding()
+                    VStack(spacing: 4) {
+                        Text("Import from: \(importUrl)")
+                        if let fileType = detectedFileType {
+                            Text("Detected: \(fileType) file")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
                 }
                 else {
                     Text("Import from:")
@@ -31,7 +52,7 @@ struct ImportRecipesFromFileView: View {
                 Button("Choose File…") {  showingImportFilePicker.toggle() }
                     .fileImporter(
                         isPresented: $showingImportFilePicker,
-                        allowedContentTypes: [.data]
+                        allowedContentTypes: [.data, .saltyRecipe]
                     ) { result in
                         switch result {
                         case .success(let file):
@@ -44,9 +65,11 @@ struct ImportRecipesFromFileView: View {
                     }
             }
             VStack {
-                Text("Choose your MacGourgmet (.mgourmet) export file above, then select \"Import\" below to start importing into the current Salty recipe library.")
+                Text("Choose your MacGourmet (.mgourmet) or Salty (.saltyRecipe) export file above, then select \"Import\" below to start importing into the current Salty recipe library.")
                     .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(4)
+                    .lineLimit(5)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                     .padding()
             }
             Spacer()
@@ -58,7 +81,12 @@ struct ImportRecipesFromFileView: View {
                      
                      Task {
                          do {
-                             try await MacGourmetImportHelper.importIntoDatabase(database, xmlFileUrl: file)
+                             // Detect file type and use appropriate importer
+                             if file.pathExtension.lowercased() == "saltyrecipe" {
+                                 try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: file)
+                             } else {
+                                 try await MacGourmetImportHelper.importIntoDatabase(database, xmlFileUrl: file)
+                             }
                              
                              await MainActor.run {
                                  print("Done with import")
@@ -78,7 +106,7 @@ struct ImportRecipesFromFileView: View {
                      }
                  }
                 .buttonStyle(.borderedProminent)
-                .disabled(isImporting)
+                .disabled(isImporting || detectedFileType == nil)
                 
                 if isImporting {
                     VStack(spacing: 12) {
@@ -95,9 +123,15 @@ struct ImportRecipesFromFileView: View {
                 }
             }
             else {
-                Text("No file selected to import.")
-                    .padding()
-                    .foregroundColor(.secondary)
+                if let file = selectedFileUrl, detectedFileType == nil {
+                    Text("Unsupported file type. Please select a .mgourmet or .saltyRecipe file.")
+                        .padding()
+                        .foregroundColor(.orange)
+                } else {
+                    Text("No file selected to import.")
+                        .padding()
+                        .foregroundColor(.secondary)
+                }
             }
             
             Button("Dismiss") {
@@ -110,13 +144,12 @@ struct ImportRecipesFromFileView: View {
             
         }
         .padding()
-        .frame(idealWidth: 400, maxWidth: 500, idealHeight: 300)
         .alert("Import Complete", isPresented: $showingSuccessAlert) {
             Button("OK") {
                 dismiss()
             }
         } message: {
-            Text("Successfully imported recipes from your MacGourmet file.")
+            Text("Successfully imported recipes from your file.")
         }
         .alert("Import Failed", isPresented: $showingErrorAlert) {
             Button("OK") { }

@@ -9,6 +9,16 @@ import Foundation
 import OSLog
 import SharingGRDB
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let exportSelectedRecipes = Notification.Name("exportSelectedRecipes")
+    static let showImportFromFileSheet = Notification.Name("showImportFromFileSheet")
+    static let showOpenDatabaseSheet = Notification.Name("showOpenDatabaseSheet")
+    static let showCreateFromWebSheet = Notification.Name("showCreateFromWebSheet")
+    static let sheetStateChanged = Notification.Name("sheetStateChanged")
+}
+
 @Observable
 @MainActor
 class RecipeNavigationSplitViewModel {
@@ -40,6 +50,14 @@ class RecipeNavigationSplitViewModel {
     var shouldScrollToNewRecipe = false
     var draftRecipe: Recipe?
     
+    // Export-related state
+    var showingExportSheet = false
+    var exportData: Data?
+    var exportFileName = ""
+    var exportErrorMessage = ""
+    var showingExportErrorAlert = false
+    
+
     // TODO: Do more of this in database and not filtering afterwards
     // Consider also using "@Select" instead of retrieving entire recipe data for preview only
     var filteredRecipes: [Recipe] {
@@ -107,7 +125,6 @@ class RecipeNavigationSplitViewModel {
             name: "New Recipe",
             createdDate: Date(),
             lastModifiedDate: Date(),
-            lastPrepared: Date(timeIntervalSinceNow: 0-60*24*45),
             isFavorite: false,
             wantToMake: false
         )
@@ -180,6 +197,76 @@ class RecipeNavigationSplitViewModel {
         draftRecipe = nil
         
         logger.info("New recipe saved and selected: \(recipeId)")
+    }
+    
+    // MARK: - Export Methods
+    
+    /// Exports a single recipe to JSON format
+    /// - Parameter recipeId: The ID of the recipe to export
+    func exportRecipe(_ recipeId: String) {
+        Task {
+            do {
+                guard let recipe = recipes.first(where: { $0.id == recipeId }) else {
+                    await MainActor.run {
+                        exportErrorMessage = "Recipe not found"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                
+                let exportRecipe = try SaltyRecipeExport.fromRecipe(recipe, database: database)
+                let jsonData = try exportRecipe.toJSONData()
+                
+                await MainActor.run {
+                    exportData = jsonData
+                    exportFileName = "\(recipe.name).saltyRecipe"
+                    showingExportSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingExportErrorAlert = true
+                }
+            }
+        }
+    }
+    
+    /// Exports multiple selected recipes to JSON format
+    func exportSelectedRecipes() {
+        Task {
+            do {
+                let recipesToExport = recipes.filter { selectedRecipeIDs.contains($0.id) }
+                
+                if recipesToExport.isEmpty {
+                    await MainActor.run {
+                        exportErrorMessage = "No recipes selected for export"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                
+                let exportRecipes = try recipesToExport.map { recipe in
+                    try SaltyRecipeExport.fromRecipe(recipe, database: database)
+                }
+                
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let jsonData = try encoder.encode(exportRecipes)
+                
+                await MainActor.run {
+                    exportData = jsonData
+                    let count = recipesToExport.count
+                    exportFileName = count == 1 ? "\(recipesToExport.first!.name).saltyRecipe" : "\(count)_recipes.saltyRecipe"
+                    showingExportSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingExportErrorAlert = true
+                }
+            }
+        }
     }
 }
 
