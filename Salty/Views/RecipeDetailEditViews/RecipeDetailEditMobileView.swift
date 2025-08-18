@@ -452,6 +452,7 @@ struct RecipeDetailEditMobileView: View {
                         Button("Add Nutrition Info", systemImage: "plus.circle.fill") {
                             viewModel.showingNutritionEditSheet.toggle()
                         }
+                        .labelStyle(.titleAndIcon)
                     }
                 }
             }
