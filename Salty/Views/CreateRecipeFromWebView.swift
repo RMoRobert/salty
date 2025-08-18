@@ -45,21 +45,7 @@ struct CreateRecipeFromWebView: View {
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                #if os(iOS)
-                Button("Close") {
-                    dismiss()
-                }
-                .buttonStyle(.bordered)
-                #else
-                Button("Cancel") {
-                    if viewModel.hasRecipeData {
-                        viewModel.showingCancelAlert = true
-                    } else {
-                        dismiss()
-                    }
-                }
-                .buttonStyle(.bordered)
-                
+                #if os(macOS)
                 Button("Save Recipe") {
                     if viewModel.hasRecipeData {
                         viewModel.saveRecipe()
@@ -193,19 +179,54 @@ struct RecipeWebBrowserView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     @Binding var webView: WebViewCoordinator?
     @State private var urlText: String = ""
+    @FocusState private var isAddressFieldFocused: Bool
+    @State private var isCompactScreen: Bool = false
+    
     var onClose: (() -> Void)?
     
+    #if !os(macOS)
+    let toolbarNavButtonsPlacement = ToolbarItemPlacement.topBarLeading
+    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.topBarTrailing
+    #else
+    let toolbarNavButtonsPlacement = ToolbarItemPlacement.principal
+    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.automatic
+    #endif
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // URL Bar and Navigation Controls
-            HStack(spacing: 0) {
+        // Web View
+        WebViewRepresentable(
+            content: viewModel.currentURL.isEmpty ? .htmlResource("createRecipeFromWebLandingPage") : .url(viewModel.currentURL),
+            coordinator: $webView,
+            onNavigationStateChange: { canGoBack, canGoForward, isLoading in
+                viewModel.updateNavigationState(
+                    canGoBack: canGoBack,
+                    canGoForward: canGoForward,
+                    isLoading: isLoading
+                )
+            },
+            onURLChange: { newURL in
+                viewModel.currentURL = newURL
+            }
+        )
+        .background(
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear {
+                        isCompactScreen = geometry.size.width < 500
+                    }
+                    .onChange(of: geometry.size.width) { _, newWidth in
+                        isCompactScreen = newWidth < 500
+                    }
+            }
+        )
+                .toolbar {
+            ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
                 Button(action: { webView?.goBack() }) {
                     Label("Back", systemImage: "chevron.left")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.plain)
                 .disabled(!viewModel.canGoBack)
-                .padding(4)
                 
                 Button(action: { webView?.goForward() }) {
                     Label("Forward", systemImage: "chevron.right")
@@ -213,7 +234,6 @@ struct RecipeWebBrowserView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!viewModel.canGoForward)
-                .padding(4)
                 
                 Button(action: {
                     goHome()
@@ -222,7 +242,6 @@ struct RecipeWebBrowserView: View {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.plain)
-                .padding(4)
                 
                 Button(action: { webView?.reload() }) {
                     Label("Reload", systemImage: "arrow.clockwise")
@@ -230,10 +249,16 @@ struct RecipeWebBrowserView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isLoading)
-                .padding(4)
-                
+            }
+            
+            ToolbarItemGroup(placement: .principal) {
                 TextField("Enter URL", text: $urlText)
+#if !os(macOS)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+#endif
                     .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
                     .onSubmit {
                         navigateToURL()
                     }
@@ -243,64 +268,43 @@ struct RecipeWebBrowserView: View {
                     .onChange(of: viewModel.currentURL) { _, newURL in
                         urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
                     }
-                
-                Button(action: { navigateToURL() }) {
-                    Label("Go", systemImage: "arrow.right")
-                        .labelStyle(.iconOnly)
+                    .focused($isAddressFieldFocused)
+                    .truncationMode(.middle)
+            }
+            
+            ToolbarItemGroup(placement: .status) {
+                // Progress spinner
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(viewModel.isLoading ? 1.0 : 0.0)
+            }
+            
+            ToolbarItemGroup(placement: toolbarImportAndCloseButtonsPlacement) {
+                Button(action: {
+                    scanWebpageForRecipeData()
+                }) {
+                    if isCompactScreen {
+                        Label("Auto Import", systemImage: "square.and.arrow.down")
+                            .labelStyle(.iconOnly)
+                    } else {
+                        Label("Auto Import", systemImage: "square.and.arrow.down")
+                            .labelStyle(.titleAndIcon)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoading || urlText == ((viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL))
-                .padding(2)
+                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                .buttonStyle(.borderedProminent)
                 
-                Spacer()
-                
-                #if os(iOS)
+#if os(iOS)
                 Button(action: {
                     onClose?()
                 }) {
                     Label("Close", systemImage: "xmark")
                 }
                 .buttonStyle(.bordered)
-                .padding([.trailing], 8)
-                #endif
-                
-                Button(action: {
-                    scanWebpageForRecipeData()
-                }) {
-                    Label("Auto Import", systemImage: "square.and.arrow.down")
-                }
-                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
-                .buttonStyle(.bordered)
-                .padding([.trailing], 8)
-                
-                // Reserved space for progress spinner
-                HStack {
-                    ProgressView()
-                        .controlSize(.small)
-                        .opacity(viewModel.isLoading ? 1.0 : 0.0)
-                }
-                .frame(width: 20)
-                .padding([.trailing], 4)
+                .buttonBorderShape(.circle)
+#endif
             }
-            .padding(4)
-            
-            // Web View
-            WebViewRepresentable(
-                content: viewModel.currentURL.isEmpty ? .htmlResource("createRecipeFromWebLandingPage") : .url(viewModel.currentURL),
-                coordinator: $webView,
-                onNavigationStateChange: { canGoBack, canGoForward, isLoading in
-                    viewModel.updateNavigationState(
-                        canGoBack: canGoBack,
-                        canGoForward: canGoForward,
-                        isLoading: isLoading
-                    )
-                },
-                onURLChange: { newURL in
-                    viewModel.currentURL = newURL
-                }
-            )
         }
-        //.background(Color(.windowBackgroundColor))
     }
     
     private func navigateToURL() {

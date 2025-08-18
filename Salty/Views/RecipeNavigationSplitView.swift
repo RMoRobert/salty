@@ -386,12 +386,12 @@ struct RecipeNavigationSplitView: View {
                 .frame(minWidth: 800, minHeight: 700)
             #endif
         }
+        #if !os(macOS)
+        // Show full screen cover on iOS; macOS will use window instead
         .fullScreenCover(isPresented: $showingCreateFromWebSheet) {
             CreateRecipeFromWebView()
-//            #if os(macOS)
-//                .frame(minWidth: 800, minHeight: 700)
-//            #endif
         }
+        #endif
         .sheet(isPresented: $showingEditLibCategoriesSheet) {
             #if os(iOS)
             NavigationStack {
