@@ -243,12 +243,22 @@ struct RecipeWebBrowserView: View {
                 }
                 .buttonStyle(.plain)
                 
-                Button(action: { webView?.reload() }) {
-                    Label("Reload", systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
+                Button(action: {
+                    if viewModel.isLoading {
+                        webView?.stopLoading()
+                    } else {
+                        webView?.reload()
+                    }
+                }) {
+                    if viewModel.isLoading {
+                        Label("Stop", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    } else {
+                        Label("Reload", systemImage: "arrow.clockwise")
+                            .labelStyle(.iconOnly)
+                    }
                 }
                 .buttonStyle(.plain)
-                .disabled(viewModel.isLoading)
             }
             
             ToolbarItemGroup(placement: .principal) {
@@ -298,10 +308,10 @@ struct RecipeWebBrowserView: View {
                 Button(action: {
                     onClose?()
                 }) {
-                    Label("Close", systemImage: "xmark")
+                    Label("Close", systemImage: "xmark.circle.fill")
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.tertiary)
 #endif
             }
         }

@@ -305,39 +305,94 @@ extension FileManager {
                         diagnostics["\(key)_resolved"] = true
                         diagnostics["\(key)_wasStale"] = wasStale
                         diagnostics["\(key)_path"] = resolvedURL.path
+                        
+                        // Test access to each resolved URL
+                        if resolvedURL.startAccessingSecurityScopedResource() {
+                            defer { resolvedURL.stopAccessingSecurityScopedResource() }
+                            
+                            do {
+                                let contents = try FileManager.default.contentsOfDirectory(
+                                    at: resolvedURL,
+                                    includingPropertiesForKeys: [.nameKey],
+                                    options: [.skipsHiddenFiles]
+                                )
+                                diagnostics["\(key)_accessible"] = true
+                                diagnostics["\(key)_contents"] = contents.map { $0.lastPathComponent }
+                            } catch {
+                                diagnostics["\(key)_accessible"] = false
+                                diagnostics["\(key)_accessError"] = error.localizedDescription
+                            }
+                        } else {
+                            diagnostics["\(key)_accessible"] = false
+                            diagnostics["\(key)_accessError"] = "Failed to start accessing security-scoped resource"
+                        }
                     } else {
                         diagnostics["\(key)_resolved"] = false
+                        diagnostics["\(key)_resolveError"] = "Unable to resolve bookmark data"
                     }
                 } else {
                     diagnostics["\(key)_exists"] = false
                 }
             }
+            
+            // Test the actual database path that would be used
+            if let bundleLocation = customDatabaseBundleDirectory {
+                let databasePath = bundleLocation
+                    .appendingPathComponent(dbFileName, isDirectory: false)
+                    .appendingPathExtension(dbFileExt)
+                
+                diagnostics["expectedDatabasePath"] = databasePath.path
+                diagnostics["expectedDatabaseExists"] = FileManager.default.fileExists(atPath: databasePath.path)
+                
+                // Test if we can access the database file
+                if bundleLocation.startAccessingSecurityScopedResource() {
+                    defer { bundleLocation.stopAccessingSecurityScopedResource() }
+                    
+                    if FileManager.default.fileExists(atPath: databasePath.path) {
+                        do {
+                            let attributes = try FileManager.default.attributesOfItem(atPath: databasePath.path)
+                            diagnostics["expectedDatabaseAccessible"] = true
+                            diagnostics["expectedDatabaseSize"] = attributes[.size] ?? 0
+                        } catch {
+                            diagnostics["expectedDatabaseAccessible"] = false
+                            diagnostics["expectedDatabaseAccessError"] = error.localizedDescription
+                        }
+                    } else {
+                        diagnostics["expectedDatabaseAccessible"] = false
+                        diagnostics["expectedDatabaseAccessError"] = "File does not exist"
+                    }
+                } else {
+                    diagnostics["expectedDatabaseAccessible"] = false
+                    diagnostics["expectedDatabaseAccessError"] = "Cannot access security-scoped resource"
+                }
+            }
         }
         
-        // Check database file
+        // Check database file (current path being used)
         let databasePath = saltyLibraryFullPath
-        diagnostics["databasePath"] = databasePath.path
-        diagnostics["databaseExists"] = FileManager.default.fileExists(atPath: databasePath.path)
+        diagnostics["currentDatabasePath"] = databasePath.path
+        diagnostics["currentDatabaseExists"] = FileManager.default.fileExists(atPath: databasePath.path)
         
         if FileManager.default.fileExists(atPath: databasePath.path) {
             do {
                 let attributes = try FileManager.default.attributesOfItem(atPath: databasePath.path)
-                diagnostics["databaseSize"] = attributes[.size] ?? 0
-                diagnostics["databasePermissions"] = attributes[.posixPermissions] ?? 0
+                diagnostics["currentDatabaseSize"] = attributes[.size] ?? 0
+                diagnostics["currentDatabasePermissions"] = attributes[.posixPermissions] ?? 0
             } catch {
-                diagnostics["databaseAccessError"] = error.localizedDescription
+                diagnostics["currentDatabaseAccessError"] = error.localizedDescription
             }
         }
         
-        // Check directory permissions
+        // Check directory permissions for current path
         let directoryPath = databasePath.deletingLastPathComponent()
         do {
             let contents = try FileManager.default.contentsOfDirectory(at: directoryPath, includingPropertiesForKeys: [.nameKey])
-            diagnostics["directoryAccessible"] = true
-            diagnostics["directoryContentsCount"] = contents.count
+            diagnostics["currentDirectoryAccessible"] = true
+            diagnostics["currentDirectoryContentsCount"] = contents.count
+            diagnostics["currentDirectoryContents"] = contents.map { $0.lastPathComponent }
         } catch {
-            diagnostics["directoryAccessible"] = false
-            diagnostics["directoryAccessError"] = error.localizedDescription
+            diagnostics["currentDirectoryAccessible"] = false
+            diagnostics["currentDirectoryAccessError"] = error.localizedDescription
         }
         
         return diagnostics
@@ -353,6 +408,52 @@ extension FileManager {
         
         This ensures the app can access the database file while maintaining compatibility between platforms.
         """
+    }
+    
+    /// Provides actionable guidance based on current diagnostic state
+    static func getDatabaseTroubleshootingGuidance() -> String {
+        let diagnostics = getDatabaseAccessDiagnostics()
+        
+        guard let isCustomLocation = diagnostics["isCustomLocation"] as? Bool, isCustomLocation else {
+            return "Using default database location. No custom location configured."
+        }
+        
+        var guidance = "Custom location configured. "
+        
+        // Check if bookmarks are resolving
+        let parentResolved = diagnostics["databaseParentLocation_resolved"] as? Bool ?? false
+        let bundleResolved = diagnostics["databaseBundleLocation_resolved"] as? Bool ?? false
+        let imagesResolved = diagnostics["imagesLocation_resolved"] as? Bool ?? false
+        
+        if !parentResolved || !bundleResolved || !imagesResolved {
+            guidance += "Some bookmarks are not resolving properly. Try resetting to default and re-selecting the location. "
+        }
+        
+        // Check if expected database is accessible
+        let expectedAccessible = diagnostics["expectedDatabaseAccessible"] as? Bool ?? false
+        if !expectedAccessible {
+            guidance += "Cannot access the database file in the custom location. "
+            
+            if let error = diagnostics["expectedDatabaseAccessError"] as? String {
+                guidance += "Error: \(error). "
+            }
+            
+            guidance += "The app may be falling back to the default location. "
+        }
+        
+        // Check if current database is different from expected
+        let currentPath = diagnostics["currentDatabasePath"] as? String ?? ""
+        let expectedPath = diagnostics["expectedDatabasePath"] as? String ?? ""
+        
+        if currentPath != expectedPath && !expectedPath.isEmpty {
+            guidance += "Using fallback database location instead of custom location. "
+        }
+        
+        if guidance.hasSuffix(". ") {
+            guidance = String(guidance.dropLast(2))
+        }
+        
+        return guidance
     }
     
     /// Proactively refreshes bookmarks to prevent permission issues

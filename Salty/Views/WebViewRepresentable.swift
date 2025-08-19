@@ -194,6 +194,10 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
         webView.reload()
     }
     
+    func stopLoading() {
+        webView.stopLoading()
+    }
+    
     func getSelectedText(completion: @escaping (String?) -> Void) {
         webView.evaluateJavaScript("window.getSelection().toString()") { result, error in
             if error != nil {

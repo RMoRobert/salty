@@ -41,6 +41,21 @@ struct DatabaseSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                // Troubleshooting Guidance Section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Status & Guidance")
+                        .font(.headline)
+                    
+                    Text(FileManager.getDatabaseTroubleshootingGuidance())
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(6)
+                }
+                
+                Divider()
+                
                 // Database Location Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Database Location")
