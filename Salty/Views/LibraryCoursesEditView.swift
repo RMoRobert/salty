@@ -14,85 +14,98 @@ struct LibraryCoursesEditView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        VStack(spacing: 0) {
-            coursesList
-                .navigationTitle("Edit Courses")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            dismiss()
-                        }
+        coursesList
+            .navigationTitle("Edit Courses")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                #if !os(macOS)
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button {
+                        viewModel.showEditAlert()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .disabled(!viewModel.canEdit)
+                    
+                    Button(role: .destructive) {
+                        viewModel.deleteSelectedCourses()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(!viewModel.canDelete)
+                    
+                    Spacer()
+                    
+                    Button {
+                        viewModel.showNewCourseAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
-            
-            // Custom bottom bar
-            HStack(spacing: 12) {
-                Button {
-                    viewModel.showEditAlert()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
+                #else
+                ToolbarItemGroup(placement: .secondaryAction) {
+                    Button {
+                        viewModel.showEditAlert()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .disabled(!viewModel.canEdit)
+                    
+                    Button(role: .destructive) {
+                        viewModel.deleteSelectedCourses()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(!viewModel.canDelete)
                 }
-                .disabled(!viewModel.canEdit)
-                .labelStyle(.titleAndIcon)
-                .padding(.leading)
-                
-                Button(role: .destructive) {
-                    viewModel.deleteSelectedCourses()
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        viewModel.showNewCourseAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
                 }
-                .disabled(!viewModel.canDelete)
-                .labelStyle(.titleAndIcon)
-                
-                Spacer()
-                
-                Button {
-                    viewModel.showNewCourseAlert()
-                } label: {
-                    Label("New", systemImage: "plus")
+                #endif
+            }
+            .alert("New Course", isPresented: $viewModel.showingNewCourseAlert) {
+                TextField("Course Name", text: $viewModel.newCourseName)
+                Button("Cancel", role: .cancel) {
+                    viewModel.clearNewCourseForm()
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.bordered)
-                .padding(.trailing)
-            }
-            .padding([.top, .bottom])
-#if !os(macOS)
-            .padding([.leading, .trailing])
-            .background(.thinMaterial)
-#endif
-        }
-        .padding([.top])
-        .alert("New Course", isPresented: $viewModel.showingNewCourseAlert) {
-            TextField("Course Name", text: $viewModel.newCourseName)
-            Button("Cancel", role: .cancel) {
-                viewModel.clearNewCourseForm()
-            }
-            Button("Add") {
-                viewModel.createNewCourse()
-            }
-            .disabled(!viewModel.canCreateNewCourse)
-        } message: {
-            Text("Enter a name for the new course")
-        }
-        .alert("Course Already Exists", isPresented: $viewModel.showingDuplicateNameAlert) {
-            Button("OK") { }
-        } message: {
-            Text("A course with the name \"\(viewModel.newCourseName)\" already exists.")
-        }
-        .alert("Rename Course", isPresented: $viewModel.showingEditCourseAlert) {
-            TextField("Course name", text: $viewModel.editingCourseName)
-            Button("Cancel", role: .cancel) {
-                viewModel.clearEditCourseForm()
-            }
-            Button("Save") {
-                if let index = viewModel.editingCourseIndex {
-                    viewModel.updateCourseName(at: index, to: viewModel.editingCourseName)
+                Button("Add") {
+                    viewModel.createNewCourse()
                 }
+                .disabled(!viewModel.canCreateNewCourse)
+            } message: {
+                Text("Enter a name for the new course")
             }
-            .disabled(!viewModel.canSaveEdit)
-        } message: {
-            Text("Enter the new name for the course")
-        }
+            .alert("Course Already Exists", isPresented: $viewModel.showingDuplicateNameAlert) {
+                Button("OK") { }
+            } message: {
+                Text("A course with the name \"\(viewModel.newCourseName)\" already exists.")
+            }
+            .alert("Rename Course", isPresented: $viewModel.showingEditCourseAlert) {
+                TextField("Course name", text: $viewModel.editingCourseName)
+                Button("Cancel", role: .cancel) {
+                    viewModel.clearEditCourseForm()
+                }
+                Button("Save") {
+                    if let index = viewModel.editingCourseIndex {
+                        viewModel.updateCourseName(at: index, to: viewModel.editingCourseName)
+                    }
+                }
+                .disabled(!viewModel.canSaveEdit)
+            } message: {
+                Text("Enter the new name for the course")
+            }
     }
     
     private var coursesList: some View {

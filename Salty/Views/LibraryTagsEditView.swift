@@ -14,85 +14,98 @@ struct LibraryTagsEditView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        VStack(spacing: 0) {
-            tagsList
-                .navigationTitle("Edit Tags")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            dismiss()
-                        }
+        tagsList
+            .navigationTitle("Edit Tags")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                #if !os(macOS)
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button {
+                        viewModel.showEditAlert()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .disabled(!viewModel.canEdit)
+                    
+                    Button(role: .destructive) {
+                        viewModel.deleteSelectedTags()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(!viewModel.canDelete)
+                    
+                    Spacer()
+                    
+                    Button {
+                        viewModel.showNewTagAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
-            
-            // Bottom button bar
-            HStack(spacing: 12) {
-                Button {
-                    viewModel.showEditAlert()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
+                #else
+                ToolbarItemGroup(placement: .secondaryAction) {
+                    Button {
+                        viewModel.showEditAlert()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .disabled(!viewModel.canEdit)
+                    
+                    Button(role: .destructive) {
+                        viewModel.deleteSelectedTags()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(!viewModel.canDelete)
                 }
-                .disabled(!viewModel.canEdit)
-                .labelStyle(.titleAndIcon)
-                .padding(.leading)
-                
-                Button(role: .destructive) {
-                    viewModel.deleteSelectedTags()
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        viewModel.showNewTagAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
                 }
-                .disabled(!viewModel.canDelete)
-                .labelStyle(.titleAndIcon)
-                
-                Spacer()
-                
-                Button {
-                    viewModel.showNewTagAlert()
-                } label: {
-                    Label("New", systemImage: "plus")
+                #endif
+            }
+            .alert("New Tag", isPresented: $viewModel.showingNewTagAlert) {
+                TextField("Tag Name", text: $viewModel.newTagName)
+                Button("Cancel", role: .cancel) {
+                    viewModel.clearNewTagForm()
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.bordered)
-                .padding(.trailing)
-            }
-            .padding([.top, .bottom])
-#if !os(macOS)
-            .padding([.leading, .trailing])
-            .background(.thinMaterial)
-#endif
-        }
-        .padding([.top])
-        .alert("New Tag", isPresented: $viewModel.showingNewTagAlert) {
-            TextField("Tag Name", text: $viewModel.newTagName)
-            Button("Cancel", role: .cancel) {
-                viewModel.clearNewTagForm()
-            }
-            Button("Add") {
-                viewModel.createNewTag()
-            }
-            .disabled(!viewModel.canCreateNewTag)
-        } message: {
-            Text("Enter a name for the new tag")
-        }
-        .alert("Tag Already Exists", isPresented: $viewModel.showingDuplicateNameAlert) {
-            Button("OK") { }
-        } message: {
-            Text("A tag with the name \"\(viewModel.newTagName)\" already exists.")
-        }
-        .alert("Rename Tag", isPresented: $viewModel.showingEditTagAlert) {
-            TextField("Tag name", text: $viewModel.editingTagName)
-            Button("Cancel", role: .cancel) {
-                viewModel.clearEditTagForm()
-            }
-            Button("Save") {
-                if let index = viewModel.editingTagIndex {
-                    viewModel.updateTagName(at: index, to: viewModel.editingTagName)
+                Button("Add") {
+                    viewModel.createNewTag()
                 }
+                .disabled(!viewModel.canCreateNewTag)
+            } message: {
+                Text("Enter a name for the new tag")
             }
-            .disabled(!viewModel.canSaveEdit)
-        } message: {
-            Text("Enter the new name for the tag")
-        }
+            .alert("Tag Already Exists", isPresented: $viewModel.showingDuplicateNameAlert) {
+                Button("OK") { }
+            } message: {
+                Text("A tag with the name \"\(viewModel.newTagName)\" already exists.")
+            }
+            .alert("Rename Tag", isPresented: $viewModel.showingEditTagAlert) {
+                TextField("Tag name", text: $viewModel.editingTagName)
+                Button("Cancel", role: .cancel) {
+                    viewModel.clearEditTagForm()
+                }
+                Button("Save") {
+                    if let index = viewModel.editingTagIndex {
+                        viewModel.updateTagName(at: index, to: viewModel.editingTagName)
+                    }
+                }
+                .disabled(!viewModel.canSaveEdit)
+            } message: {
+                Text("Enter the new name for the tag")
+            }
     }
     
     private var tagsList: some View {
