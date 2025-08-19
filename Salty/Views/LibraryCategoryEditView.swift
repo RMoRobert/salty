@@ -14,85 +14,101 @@ struct LibraryCategoriesEditView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        VStack(spacing: 0) {
-            categoriesList
-                .navigationTitle("Edit Categories")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            dismiss()
-                        }
+        categoriesList
+            .navigationTitle("Edit Categories")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                #if !os(macOS)
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button {
+                        viewModel.showEditAlert()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .disabled(!viewModel.canEdit)
+                    
+                    Button(role: .destructive) {
+                        viewModel.deleteSelectedCategories()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(!viewModel.canDelete)
+                    
+                    Spacer()
+                    
+                    Button {
+                        viewModel.showNewCategoryAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
-            
-            // Bottom button bar
-            HStack(spacing: 12) {
-                Button {
-                    viewModel.showEditAlert()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
+                #else
+                ToolbarItemGroup(placement: .secondaryAction) {
+                    Button {
+                        viewModel.showEditAlert()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    //.labelStyle(.titleAndIcon)
+                    .disabled(!viewModel.canEdit)
+                    
+                    Button(role: .destructive) {
+                        viewModel.deleteSelectedCategories()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    //.labelStyle(.titleAndIcon)
+                    .disabled(!viewModel.canDelete)
                 }
-                .disabled(!viewModel.canEdit)
-                .labelStyle(.titleAndIcon)
-                .padding(.leading)
-                
-                Button(role: .destructive) {
-                    viewModel.deleteSelectedCategories()
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        viewModel.showNewCategoryAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    //.labelStyle(.titleAndIcon)
                 }
-                .disabled(!viewModel.canDelete)
-                .labelStyle(.titleAndIcon)
-                
-                Spacer()
-                
-                Button {
-                    viewModel.showNewCategoryAlert()
-                } label: {
-                    Label("New", systemImage: "plus")
+                #endif
+            }
+            .alert("New Category", isPresented: $viewModel.showingNewCategoryAlert) {
+                TextField("Category Name", text: $viewModel.newCategoryName)
+                Button("Cancel", role: .cancel) {
+                    viewModel.clearNewCategoryForm()
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.bordered)
-                .padding(.trailing)
-            }
-            .padding([.top, .bottom])
-#if !os(macOS)
-            .padding([.leading, .trailing])
-            .background(.thinMaterial)
-#endif
-        }
-        .padding([.top])
-        .alert("New Category", isPresented: $viewModel.showingNewCategoryAlert) {
-            TextField("Category Name", text: $viewModel.newCategoryName)
-            Button("Cancel", role: .cancel) {
-                viewModel.clearNewCategoryForm()
-            }
-            Button("Add") {
-                viewModel.createNewCategory()
-            }
-            .disabled(!viewModel.canCreateNewCategory)
-        } message: {
-            Text("Enter a name for the new category")
-        }
-        .alert("Category Already Exists", isPresented: $viewModel.showingDuplicateNameAlert) {
-            Button("OK") { }
-        } message: {
-            Text("A category with the name \"\(viewModel.newCategoryName)\" already exists.")
-        }
-        .alert("Rename Category", isPresented: $viewModel.showingEditCategoryAlert) {
-            TextField("Category name", text: $viewModel.editingCategoryName)
-            Button("Cancel", role: .cancel) {
-                viewModel.clearEditCategoryForm()
-            }
-            Button("Save") {
-                if let index = viewModel.editingCategoryIndex {
-                    viewModel.updateCategoryName(at: index, to: viewModel.editingCategoryName)
+                Button("Add") {
+                    viewModel.createNewCategory()
                 }
+                .disabled(!viewModel.canCreateNewCategory)
+            } message: {
+                Text("Enter a name for the new category")
             }
-            .disabled(!viewModel.canSaveEdit)
-        } message: {
-            Text("Enter the new name for the category")
-        }
+            .alert("Category Already Exists", isPresented: $viewModel.showingDuplicateNameAlert) {
+                Button("OK") { }
+            } message: {
+                Text("A category with the name \"\(viewModel.newCategoryName)\" already exists.")
+            }
+            .alert("Rename Category", isPresented: $viewModel.showingEditCategoryAlert) {
+                TextField("Category name", text: $viewModel.editingCategoryName)
+                Button("Cancel", role: .cancel) {
+                    viewModel.clearEditCategoryForm()
+                }
+                Button("Save") {
+                    if let index = viewModel.editingCategoryIndex {
+                        viewModel.updateCategoryName(at: index, to: viewModel.editingCategoryName)
+                    }
+                }
+                .disabled(!viewModel.canSaveEdit)
+            } message: {
+                Text("Enter the new name for the category")
+            }
     }
     
     private var categoriesList: some View {
