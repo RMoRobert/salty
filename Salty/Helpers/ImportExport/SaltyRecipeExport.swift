@@ -10,7 +10,8 @@ import SharingGRDB
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let saltyRecipe = UTType(exportedAs: "com.salty.recipe")
+    static let saltyRecipe = UTType(exportedAs: "com.pavisoft.salty.recipe")
+    static let saltyRecipeLibrary = UTType(exportedAs: "com.pavisoft.salty.recipeLibrary")
 }
 
 // MARK: - Export-Optimized Structs

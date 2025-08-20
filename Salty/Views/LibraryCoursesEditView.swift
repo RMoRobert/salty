@@ -29,6 +29,8 @@ struct LibraryCoursesEditView: View {
                     }
                     .disabled(!viewModel.canEdit)
                     
+                    Spacer()
+                    
                     Button(role: .destructive) {
                         viewModel.deleteSelectedCourses()
                     } label: {
@@ -36,7 +38,18 @@ struct LibraryCoursesEditView: View {
                     }
                     .disabled(!viewModel.canDelete)
                     
-                    Spacer()
+                    // There has to be a better way...check out
+                    // ToolbarItemSpacer() once iOS 26 is dominant?
+                    Group {
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                    }
                     
                     Button {
                         viewModel.showNewCourseAlert()
@@ -51,14 +64,15 @@ struct LibraryCoursesEditView: View {
                     }
                 }
                 #else
-                ToolbarItemGroup(placement: .secondaryAction) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
-                        viewModel.showEditAlert()
+                        viewModel.showNewCourseAlert()
                     } label: {
-                        Label("Edit", systemImage: "pencil")
+                        Label("New", systemImage: "plus")
                     }
-                    .disabled(!viewModel.canEdit)
-                    
+                    .labelStyle(.titleAndIcon)
+                }
+                ToolbarItem(placement: .secondaryAction) {
                     Button(role: .destructive) {
                         viewModel.deleteSelectedCourses()
                     } label: {
@@ -66,12 +80,13 @@ struct LibraryCoursesEditView: View {
                     }
                     .disabled(!viewModel.canDelete)
                 }
-                ToolbarItemGroup(placement: .primaryAction) {
+                ToolbarItem(placement: .secondaryAction) {
                     Button {
-                        viewModel.showNewCourseAlert()
+                        viewModel.showEditAlert()
                     } label: {
-                        Label("New", systemImage: "plus")
+                        Label("Edit", systemImage: "pencil")
                     }
+                    .disabled(!viewModel.canEdit)
                 }
                 #endif
             }

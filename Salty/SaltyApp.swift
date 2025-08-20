@@ -11,6 +11,8 @@ import SwiftUI
 @main
 struct SaltyApp: App {
     @Dependency(\.context) var context
+    @Environment(\.openWindow) private var openWindow
+    @State private var pendingImportURL: URL?
     
     init() {
         if context == .live {
@@ -45,6 +47,9 @@ struct SaltyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
+                .onOpenURL { url in
+                    handleIncomingURL(url)
+                }
         }
         .commands {
             Menus()
@@ -77,13 +82,15 @@ struct SaltyApp: App {
                 .navigationTitle("Open Database")
         }
 
-        // // "Import from File" window
-        // WindowGroup(id: "import-from-file-window") {
-        //     ImportRecipesFromFileView()
-        //         .frame(minWidth: 300, maxWidth: 450, minHeight: 200, maxHeight: 400)
-        //         .navigationTitle("Import Recipes from File")
-        // }
-        // .defaultSize(width: 350, height: 300)
+        // "Import from File" window
+        WindowGroup(id: "import-from-file-window") {
+            if let url = pendingImportURL {
+                ImportRecipesFromFileView(preSelectedFileURL: url)
+                    .frame(minWidth: 500, minHeight: 400)
+                    .navigationTitle("Import Recipe from File")
+            }
+        }
+        .defaultSize(width: 550, height: 450)
         // "Import from Web" window
         WindowGroup(id: "create-recipe-from-web-window") {
             CreateRecipeFromWebView()
@@ -102,5 +109,16 @@ struct SaltyApp: App {
             SettingsView()
         }
         #endif
+    }
+    
+    private func handleIncomingURL(_ url: URL) {
+        // Check if this is a .saltyRecipe file
+        if url.pathExtension.lowercased() == "saltyrecipe" {
+            print("Received .saltyRecipe file: \(url)")
+            pendingImportURL = url
+            openWindow(id: "import-from-file-window")
+        } else {
+            print("Received unsupported file type: \(url)")
+        }
     }
 }

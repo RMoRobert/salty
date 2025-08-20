@@ -29,14 +29,28 @@ struct LibraryCategoriesEditView: View {
                     }
                     .disabled(!viewModel.canEdit)
                     
+                    Spacer()
+                    
                     Button(role: .destructive) {
                         viewModel.deleteSelectedCategories()
                     } label: {
                         Label("Delete", systemImage: "trash")
+                            .padding(.leading)
                     }
                     .disabled(!viewModel.canDelete)
                     
-                    Spacer()
+                    // There has to be a better way...check out
+                    // ToolbarItemSpacer() once iOS 26 is dominant?
+                    Group {
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                    }
                     
                     Button {
                         viewModel.showNewCategoryAlert()
@@ -51,15 +65,15 @@ struct LibraryCategoriesEditView: View {
                     }
                 }
                 #else
-                ToolbarItemGroup(placement: .secondaryAction) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
-                        viewModel.showEditAlert()
+                        viewModel.showNewCategoryAlert()
                     } label: {
-                        Label("Edit", systemImage: "pencil")
+                        Label("New", systemImage: "plus")
                     }
-                    //.labelStyle(.titleAndIcon)
-                    .disabled(!viewModel.canEdit)
-                    
+                    .labelStyle(.titleAndIcon)
+                }
+                ToolbarItem(placement: .secondaryAction) {
                     Button(role: .destructive) {
                         viewModel.deleteSelectedCategories()
                     } label: {
@@ -68,13 +82,14 @@ struct LibraryCategoriesEditView: View {
                     //.labelStyle(.titleAndIcon)
                     .disabled(!viewModel.canDelete)
                 }
-                ToolbarItemGroup(placement: .primaryAction) {
+                ToolbarItem(placement: .secondaryAction) {
                     Button {
-                        viewModel.showNewCategoryAlert()
+                        viewModel.showEditAlert()
                     } label: {
-                        Label("New", systemImage: "plus")
+                        Label("Edit", systemImage: "pencil")
                     }
                     //.labelStyle(.titleAndIcon)
+                    .disabled(!viewModel.canEdit)
                 }
                 #endif
             }
