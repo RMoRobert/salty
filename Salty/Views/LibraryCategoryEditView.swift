@@ -22,35 +22,23 @@ struct LibraryCategoriesEditView: View {
             .toolbar {
                 #if !os(macOS)
                 ToolbarItemGroup(placement: .bottomBar) {
-                    Button {
-                        viewModel.showEditAlert()
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
+                    HStack(spacing: 5) {
+                        Button {
+                            viewModel.showEditAlert()
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .disabled(!viewModel.canEdit)
+                        
+                        Button(role: .destructive) {
+                            viewModel.deleteSelectedCategories()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(!viewModel.canDelete)
                     }
-                    .disabled(!viewModel.canEdit)
                     
                     Spacer()
-                    
-                    Button(role: .destructive) {
-                        viewModel.deleteSelectedCategories()
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                            .padding(.leading)
-                    }
-                    .disabled(!viewModel.canDelete)
-                    
-                    // There has to be a better way...check out
-                    // ToolbarItemSpacer() once iOS 26 is dominant?
-                    Group {
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                    }
                     
                     Button {
                         viewModel.showNewCategoryAlert()
