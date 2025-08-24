@@ -134,21 +134,6 @@ struct RecipeDetailEditMobileView: View {
                         in: 0...2000)
                 .foregroundColor(viewModel.recipe.servings != nil ? .primary : .secondary)
                 TextField("Yield", text: $viewModel.recipe.yield)
-                                            Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
-                Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
-                
-                HStack {
-                    Text("Rating")
-                    Spacer()
-                    RatingEditView(recipe: $viewModel.recipe)
-                }
-                
-                HStack {
-                    Text("Difficulty")
-                    Spacer()
-                    DifficultyEditView(recipe: $viewModel.recipe)
-                }
-                
                 HStack {
                     Picker("Course", selection: $viewModel.recipe.courseId) {
                         Text("(none)")
@@ -174,7 +159,25 @@ struct RecipeDetailEditMobileView: View {
                             .frame(maxWidth: 400, alignment: .trailing)
                     }
                 }
+            }
+            Section("Ratings & Status") {
+                Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
+                Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                 
+                HStack {
+                    Text("Rating")
+                    Spacer()
+                    RatingEditView(recipe: $viewModel.recipe)
+                }
+                
+                HStack {
+                    Text("Difficulty")
+                    Spacer()
+                    DifficultyEditView(recipe: $viewModel.recipe)
+                }
+                
+            }
+            Section("Introduction") {
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                     .lineLimit(5...10)
             }
