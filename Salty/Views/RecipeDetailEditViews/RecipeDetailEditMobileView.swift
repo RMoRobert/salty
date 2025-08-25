@@ -160,7 +160,7 @@ struct RecipeDetailEditMobileView: View {
                     }
                 }
             }
-            Section("Ratings & Status") {
+            Section {
                 Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                 
@@ -177,7 +177,7 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
             }
-            Section("Introduction") {
+            Section {
                 TextField("Introduction", text: $viewModel.recipe.introduction, axis: .vertical)
                     .lineLimit(5...10)
             }
