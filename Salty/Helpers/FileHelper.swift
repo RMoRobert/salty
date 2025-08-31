@@ -24,9 +24,47 @@ extension FileManager {
         .appendingPathComponent(folderName, isDirectory: true)
         .appendingPathExtension(folderBundleExt)
     
-    // MARK: - Custom Location Access (Multiple Bookmarks)
+    // MARK: - Custom Location Access (Single Parent Bookmark)
     
-    static var customParentDirectory: URL? {
+    static var customImagesDirectory: URL? {
+        guard let parentLocation = customSaltyLibraryDirectory else {
+            return nil
+        }
+        
+        let imagesPath = parentLocation
+            .appendingPathComponent(saltyImageFolderName, isDirectory: true)
+        
+        // Verify the images directory exists and is accessible
+        if parentLocation.startAccessingSecurityScopedResource() {
+            defer { parentLocation.stopAccessingSecurityScopedResource() }
+            
+            do {
+                let parentContents = try FileManager.default.contentsOfDirectory(
+                    at: parentLocation,
+                    includingPropertiesForKeys: [.nameKey, .isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                )
+                
+                let imagesExists = parentContents.contains { $0.lastPathComponent == saltyImageFolderName }
+                
+                if imagesExists {
+                    return imagesPath
+                } else {
+                    print("Images directory '\(saltyImageFolderName)' not found in parent directory")
+                    return nil
+                }
+            } catch {
+                print("Error checking images directory: \(error)")
+                return nil
+            }
+        } else {
+            print("Cannot access parent directory to verify images directory")
+            return nil
+        }
+    }
+    
+    // Legacy support - will be removed
+    static var customSaltyLibraryDirectory: URL? {
         guard let bookmarkData = UserDefaults.standard.data(forKey: "databaseParentLocation") else {
             return nil
         }
@@ -36,49 +74,14 @@ extension FileManager {
             return nil
         }
         if wasStale {
-            refreshBookmark(for: "databaseParentLocation", at: parentLocation)
+            let _ = refreshBookmark(for: "databaseParentLocation", at: parentLocation)
         }
         return parentLocation
     }
     
-    static var customDatabaseBundleDirectory: URL? {
-        guard let bookmarkData = UserDefaults.standard.data(forKey: "databaseBundleLocation") else {
-            return nil
-        }
-        var wasStale = false
-        guard let bundleLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
-            print("Unable to resolve databaseBundleLocation")
-            return nil
-        }
-        if wasStale {
-            refreshBookmark(for: "databaseBundleLocation", at: bundleLocation)
-        }
-        return bundleLocation
-    }
-    
-    static var customImagesDirectory: URL? {
-        guard let bookmarkData = UserDefaults.standard.data(forKey: "imagesLocation") else {
-            return nil
-        }
-        var wasStale = false
-        guard let imagesLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
-            print("Unable to resolve imagesLocation")
-            return nil
-        }
-        if wasStale {
-            refreshBookmark(for: "imagesLocation", at: imagesLocation)
-        }
-        return imagesLocation
-    }
-    
-    // Legacy support - will be removed
-    static var customSaltyLibraryDirectory: URL? {
-        return customParentDirectory
-    }
-    
-    static let saltyLibraryDirectory = customParentDirectory ?? defaultSaltyLibraryDirectory
+    static let saltyLibraryDirectory = customSaltyLibraryDirectory ?? defaultSaltyLibraryDirectory
 
-    static var defaultSaltyLibraryFullPath: URL {
+    static var defaultDatabaseBundleFullPath: URL {
         let libDir = defaultSaltyLibraryDirectory
         try? FileManager.default.createDirectory(at: libDir, withIntermediateDirectories: true)
         return libDir
@@ -98,32 +101,59 @@ extension FileManager {
         }
     }
 
-    static var customSaltyLibraryFullPath: URL? {
-        // Use the specific database bundle bookmark for direct access
-        if let bundleLocation = customDatabaseBundleDirectory {
-            let didStart = bundleLocation.startAccessingSecurityScopedResource()
-            defer { if didStart { bundleLocation.stopAccessingSecurityScopedResource() } }
+    static var customDatabaseBundleFullPath: URL? {
+        // Derive the bundle path from the parent directory
+        guard let parentLocation = customSaltyLibraryDirectory else {
+            return nil
+        }
+        
+        let bundlePath = parentLocation
+            .appendingPathComponent(folderName, isDirectory: true)
+            .appendingPathExtension(folderBundleExt)
+        
+        let fullLocation = bundlePath
+            .appendingPathComponent(dbFileName, isDirectory: false)
+            .appendingPathExtension(dbFileExt)
+        
+        // Verify the bundle directory exists and database file is accessible
+        if parentLocation.startAccessingSecurityScopedResource() {
+            defer { parentLocation.stopAccessingSecurityScopedResource() }
             
-            let fullLocation = bundleLocation
-                .appendingPathComponent(dbFileName, isDirectory: false)
-                .appendingPathExtension(dbFileExt)
-            
-            let fileExists = FileManager.default.fileExists(atPath: fullLocation.path)
-            if fileExists {
-                print("Custom database file found at: \(fullLocation.path)")
-                return fullLocation
-            } else {
-                print("Custom database file not found in bundle location")
+            do {
+                let parentContents = try FileManager.default.contentsOfDirectory(
+                    at: parentLocation,
+                    includingPropertiesForKeys: [.nameKey, .isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                )
+                
+                let expectedBundleName = "\(folderName).\(folderBundleExt)"
+                let bundleExists = parentContents.contains { $0.lastPathComponent == expectedBundleName }
+                
+                if bundleExists {
+                    let fileExists = FileManager.default.fileExists(atPath: fullLocation.path)
+                    if fileExists {
+                        print("Custom database file found at: \(fullLocation.path)")
+                        return fullLocation
+                    } else {
+                        print("Custom database file not found in bundle location")
+                    }
+                } else {
+                    print("Bundle directory '\(expectedBundleName)' not found in parent directory")
+                }
+            } catch {
+                print("Error checking bundle directory: \(error)")
             }
+        } else {
+            print("Cannot access parent directory to verify bundle directory")
         }
         
         // Fallback to default location
         print("Reverting to default database location")
-        return defaultSaltyLibraryFullPath
+        return defaultDatabaseBundleFullPath
     }
     
     static var saltyLibraryFullPath: URL {
-        let path = customSaltyLibraryFullPath ?? defaultSaltyLibraryFullPath
+        let path = customDatabaseBundleFullPath ?? defaultDatabaseBundleFullPath
         print("Opening database at path: \(path)")
         return path
     }
@@ -131,7 +161,7 @@ extension FileManager {
     /// Returns the appropriate backup directory URL based on whether a custom location is set
     static var backupDirectory: URL {
         // If user has a custom database location, put backups in that same location
-        if let customLocation = customParentDirectory {
+        if let customLocation = customSaltyLibraryDirectory {
             return customLocation.appendingPathComponent(backupFolderName, isDirectory: true)
         } else {
             // Otherwise, put backups in the default "Salty Recipe Library" folder
@@ -154,43 +184,26 @@ extension FileManager {
         }
     }
     
-    /// Saves multiple bookmarks for different components of the database location
+    /// Saves bookmark for the parent directory only
     static func saveCustomLocationBookmarks(parentDirectory: URL) throws {
-        // Create the expected directory structure
-        let bundleDirectory = parentDirectory
-            .appendingPathComponent(folderName, isDirectory: true)
-            .appendingPathExtension(folderBundleExt)
-        
-        let imagesDirectory = parentDirectory
-            .appendingPathComponent(saltyImageFolderName, isDirectory: true)
-        
-        // Save bookmarks for each component
+        // Save only the parent directory bookmark
         let parentBookmark = try parentDirectory.bookmarkData(options: [])
-        let bundleBookmark = try bundleDirectory.bookmarkData(options: [])
-        let imagesBookmark = try imagesDirectory.bookmarkData(options: [])
-        
         UserDefaults.standard.set(parentBookmark, forKey: "databaseParentLocation")
-        UserDefaults.standard.set(bundleBookmark, forKey: "databaseBundleLocation")
-        UserDefaults.standard.set(imagesBookmark, forKey: "imagesLocation")
         
-        print("Saved bookmarks for parent: \(parentDirectory.path)")
-        print("Saved bookmarks for bundle: \(bundleDirectory.path)")
-        print("Saved bookmarks for images: \(imagesDirectory.path)")
+        print("Saved bookmark for parent directory: \(parentDirectory.path)")
     }
     
-    /// Clears all custom location bookmarks
+    /// Clears the custom location bookmark
     static func clearCustomLocationBookmarks() {
         UserDefaults.standard.removeObject(forKey: "databaseParentLocation")
-        UserDefaults.standard.removeObject(forKey: "databaseBundleLocation")
-        UserDefaults.standard.removeObject(forKey: "imagesLocation")
-        print("Cleared all custom location bookmarks")
+        print("Cleared custom location bookmark")
     }
     
     // MARK: - Security-Scoped Resource Management
     
     /// Checks if the custom database location is accessible and refreshes the bookmark if needed
     static func validateAndRefreshCustomDatabaseAccess() -> Bool {
-        guard let customLocation = customParentDirectory else {
+        guard let customLocation = customSaltyLibraryDirectory else {
             return false
         }
         
@@ -216,24 +229,13 @@ extension FileManager {
         }
     }
     
-    /// Attempts to refresh a stale bookmark for the custom database location
+    /// Attempts to refresh the parent bookmark for the custom database location
     static func refreshCustomDatabaseBookmark() -> Bool {
-        // Try to refresh all bookmarks
-        var success = true
-        
-        if let parentLocation = customParentDirectory {
-            success = success && refreshBookmark(for: "databaseParentLocation", at: parentLocation)
+        // Only refresh the parent bookmark since others are derived
+        if let parentLocation = customSaltyLibraryDirectory {
+            return refreshBookmark(for: "databaseParentLocation", at: parentLocation)
         }
-        
-        if let bundleLocation = customDatabaseBundleDirectory {
-            success = success && refreshBookmark(for: "databaseBundleLocation", at: bundleLocation)
-        }
-        
-        if let imagesLocation = customImagesDirectory {
-            success = success && refreshBookmark(for: "imagesLocation", at: imagesLocation)
-        }
-        
-        return success
+        return false
     }
     
     /// Validates that the database file exists and is accessible
@@ -241,7 +243,7 @@ extension FileManager {
         let databasePath = saltyLibraryFullPath
         
         // For custom locations, ensure we have proper access
-        if customParentDirectory != nil {
+        if customSaltyLibraryDirectory != nil {
             guard validateAndRefreshCustomDatabaseAccess() else {
                 print("Failed to validate custom database access")
                 return false
@@ -253,7 +255,7 @@ extension FileManager {
             print("Database file does not exist at: \(databasePath.path)")
             
             // Additional diagnostics for iOS/iCloud issues
-            if customParentDirectory != nil {
+            if customSaltyLibraryDirectory != nil {
                 print("This appears to be a custom location. Checking directory contents...")
                 do {
                     let directoryPath = databasePath.deletingLastPathComponent()
@@ -288,56 +290,57 @@ extension FileManager {
         var diagnostics: [String: Any] = [:]
         
         // Check if using custom location
-        let isCustomLocation = customParentDirectory != nil
+        let isCustomLocation = customSaltyLibraryDirectory != nil
         diagnostics["isCustomLocation"] = isCustomLocation
         
         if isCustomLocation {
-            diagnostics["customLocationPath"] = customParentDirectory?.path ?? "Unknown"
-            diagnostics["bundleLocationPath"] = customDatabaseBundleDirectory?.path ?? "Unknown"
+            diagnostics["customLocationPath"] = customSaltyLibraryDirectory?.path ?? "Unknown"
+            diagnostics["bundleLocationPath"] = customDatabaseBundleFullPath?.path ?? "Unknown"
             diagnostics["imagesLocationPath"] = customImagesDirectory?.path ?? "Unknown"
             
-            // Check bookmark status for all bookmarks
-            let bookmarkKeys = ["databaseParentLocation", "databaseBundleLocation", "imagesLocation"]
-            for key in bookmarkKeys {
-                if let bookmarkData = UserDefaults.standard.data(forKey: key) {
-                    var wasStale = false
-                    if let resolvedURL = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) {
-                        diagnostics["\(key)_resolved"] = true
-                        diagnostics["\(key)_wasStale"] = wasStale
-                        diagnostics["\(key)_path"] = resolvedURL.path
+            // Check parent bookmark status
+            if let bookmarkData = UserDefaults.standard.data(forKey: "databaseParentLocation") {
+                var wasStale = false
+                if let resolvedURL = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) {
+                    diagnostics["databaseParentLocation_resolved"] = true
+                    diagnostics["databaseParentLocation_wasStale"] = wasStale
+                    diagnostics["databaseParentLocation_path"] = resolvedURL.path
+                    
+                    // Test access to parent directory
+                    if resolvedURL.startAccessingSecurityScopedResource() {
+                        defer { resolvedURL.stopAccessingSecurityScopedResource() }
                         
-                        // Test access to each resolved URL
-                        if resolvedURL.startAccessingSecurityScopedResource() {
-                            defer { resolvedURL.stopAccessingSecurityScopedResource() }
-                            
-                            do {
-                                let contents = try FileManager.default.contentsOfDirectory(
-                                    at: resolvedURL,
-                                    includingPropertiesForKeys: [.nameKey],
-                                    options: [.skipsHiddenFiles]
-                                )
-                                diagnostics["\(key)_accessible"] = true
-                                diagnostics["\(key)_contents"] = contents.map { $0.lastPathComponent }
-                            } catch {
-                                diagnostics["\(key)_accessible"] = false
-                                diagnostics["\(key)_accessError"] = error.localizedDescription
-                            }
-                        } else {
-                            diagnostics["\(key)_accessible"] = false
-                            diagnostics["\(key)_accessError"] = "Failed to start accessing security-scoped resource"
+                        do {
+                            let contents = try FileManager.default.contentsOfDirectory(
+                                at: resolvedURL,
+                                includingPropertiesForKeys: [.nameKey],
+                                options: [.skipsHiddenFiles]
+                            )
+                            diagnostics["databaseParentLocation_accessible"] = true
+                            diagnostics["databaseParentLocation_contents"] = contents.map { $0.lastPathComponent }
+                        } catch {
+                            diagnostics["databaseParentLocation_accessible"] = false
+                            diagnostics["databaseParentLocation_accessError"] = error.localizedDescription
                         }
                     } else {
-                        diagnostics["\(key)_resolved"] = false
-                        diagnostics["\(key)_resolveError"] = "Unable to resolve bookmark data"
+                        diagnostics["databaseParentLocation_accessible"] = false
+                        diagnostics["databaseParentLocation_accessError"] = "Failed to start accessing security-scoped resource"
                     }
                 } else {
-                    diagnostics["\(key)_exists"] = false
+                    diagnostics["databaseParentLocation_resolved"] = false
+                    diagnostics["databaseParentLocation_resolveError"] = "Unable to resolve bookmark data"
                 }
+            } else {
+                diagnostics["databaseParentLocation_exists"] = false
             }
             
             // Test the actual database path that would be used
-            if let bundleLocation = customDatabaseBundleDirectory {
-                let databasePath = bundleLocation
+            if let parentLocation = customSaltyLibraryDirectory {
+                let bundlePath = parentLocation
+                    .appendingPathComponent(folderName, isDirectory: true)
+                    .appendingPathExtension(folderBundleExt)
+                
+                let databasePath = bundlePath
                     .appendingPathComponent(dbFileName, isDirectory: false)
                     .appendingPathExtension(dbFileExt)
                 
@@ -345,8 +348,8 @@ extension FileManager {
                 diagnostics["expectedDatabaseExists"] = FileManager.default.fileExists(atPath: databasePath.path)
                 
                 // Test if we can access the database file
-                if bundleLocation.startAccessingSecurityScopedResource() {
-                    defer { bundleLocation.stopAccessingSecurityScopedResource() }
+                if parentLocation.startAccessingSecurityScopedResource() {
+                    defer { parentLocation.stopAccessingSecurityScopedResource() }
                     
                     if FileManager.default.fileExists(atPath: databasePath.path) {
                         do {

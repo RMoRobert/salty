@@ -61,7 +61,7 @@ struct DatabaseSettingsView: View {
                     Text("Database Location")
                         .font(.headline)
                     
-                    if FileManager.customParentDirectory != nil {
+                    if FileManager.customSaltyLibraryDirectory != nil {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Custom Location")
                                 .font(.subheadline)
@@ -71,7 +71,7 @@ struct DatabaseSettingsView: View {
                                 Text("Parent Directory:")
                                     .font(.caption)
                                     .fontWeight(.medium)
-                                Text(FileManager.customParentDirectory?.path ?? "Unknown")
+                                Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .padding(6)
@@ -83,7 +83,7 @@ struct DatabaseSettingsView: View {
                                 Text("Database Bundle:")
                                     .font(.caption)
                                     .fontWeight(.medium)
-                                Text(FileManager.customDatabaseBundleDirectory?.path ?? "Unknown")
+                                Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .padding(6)
@@ -114,7 +114,7 @@ struct DatabaseSettingsView: View {
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             
-                            Text(FileManager.defaultSaltyLibraryFullPath.path)
+                            Text(FileManager.defaultDatabaseBundleFullPath.path)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .padding(8)
