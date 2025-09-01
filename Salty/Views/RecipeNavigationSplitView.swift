@@ -240,28 +240,27 @@ struct RecipeNavigationSplitView: View {
                     Toggle(isOn: $viewModel.isFavoritesFilterActive) {
                         Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease.circle")
                     }
-                   // .buttonStyle(.button)
-                    Menu(content: {
-                        Button("Create Recipe from Web…") {
-                            #if os(iOS)
-                            showingCreateFromWebSheet.toggle()
-                            #else
-                            openWindow(id: "create-recipe-from-web-window")
-                            #endif
-                        }
-                        Button("Create Recipe from Image…") {
-                            showingCreateFromImageSheet.toggle()
-                        }
-                        Button("Import Recipes from File…") {
-                            showingImportFromFileSheet.toggle()
-                        }
-                        Divider()
-                        Button("Open Database…") {
-                            showingOpenDBSheet.toggle()
-                        }
-                    }, label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                    })
+//                    Menu(content: {
+//                        Button("Create Recipe from Web…") {
+//                            #if os(iOS)
+//                            showingCreateFromWebSheet.toggle()
+//                            #else
+//                            openWindow(id: "create-recipe-from-web-window")
+//                            #endif
+//                        }
+//                        Button("Create Recipe from Image…") {
+//                            showingCreateFromImageSheet.toggle()
+//                        }
+//                        Button("Import Recipes from File…") {
+//                            showingImportFromFileSheet.toggle()
+//                        }
+//                        Divider()
+//                        Button("Open Database…") {
+//                            showingOpenDBSheet.toggle()
+//                        }
+//                    }, label: {
+//                        Label("More", systemImage: "ellipsis.circle")
+//                    })
                 }
                 #endif
             }

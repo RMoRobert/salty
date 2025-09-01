@@ -17,7 +17,7 @@
 			</array>
 		</dict>
 	</array>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<key>LSSupportsOpeningDocumentsInPlace-iphoneos</key>
 	<false/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
