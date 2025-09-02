@@ -102,12 +102,12 @@ struct CreateRecipeFromImageView: View {
                         showingImagePicker = true
                     }
                     .buttonStyle(.bordered)
-#else
-                    Button("Choose File") {
+#endif
+                    Button("From File") {
                         showingFilePicker = true
                     }
                     .buttonStyle(.bordered)
-#endif
+
                 }
                 .padding(.horizontal)
                 
@@ -221,7 +221,7 @@ struct CreateRecipeFromImageView: View {
             message: {
                 Text("For best results:\n\n• Remove excess text like page numbers.\n\n• Provide titles like \"Directions\" or \"Ingredients\" on their own line before the relevant sections to improve detection. Number or label direction steps if possible. (Other helpful labels include \"yield,\" \"servings,\" and \"introduction.\")\n\n• For certain recipes, it may be easier to use the built-in \"Scan Text\" feature on iPhone/iPad in any text field or the \"Edit as Text (Bulk Edit)\" feature for directions or ingredients.")
             })
-        #else
+        #endif
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.image],
@@ -239,15 +239,21 @@ struct CreateRecipeFromImageView: View {
         .sheet(isPresented: $showingRecipeEditor) {
             if let recipe = parsedRecipe {
                 NavigationStack {
+                    #if os(macOS)
                     RecipeDetailEditDesktopView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
                         // Close the sheet after saving
                         showingRecipeEditor = false
                     })
                     .frame(minWidth: 625, minHeight: 650)
+                    #else
+                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
+                        // Close the sheet after saving
+                        showingRecipeEditor = false
+                    })
+                    #endif
                 }
             }
         }
-        #endif
     }
     
     private func createRecipeFromExtractedText() {
@@ -256,7 +262,7 @@ struct CreateRecipeFromImageView: View {
         showingRecipeEditor = true
     }
     
-    #if os(macOS)
+    //if os(macOS)
     private func loadImageFromSecureURL(_ url: URL) {
         // Start accessing the security-scoped resource
         let accessing = url.startAccessingSecurityScopedResource()
@@ -289,7 +295,7 @@ struct CreateRecipeFromImageView: View {
             return nil
         }
     }
-    #endif
+    //endif
 }
 
 #if os(iOS)

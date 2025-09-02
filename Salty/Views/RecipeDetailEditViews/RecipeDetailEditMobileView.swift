@@ -34,7 +34,7 @@ struct RecipeDetailEditMobileView: View {
         }
 #if !os(macOS)
         .environment(\.editMode, .constant(.active))
-        .navigationTitle("Edit Recipe")
+        .navigationTitle(viewModel.isNewRecipe ? "New Recipe" : "Edit Recipe")
         .navigationBarTitleDisplayMode(.inline)
 #endif
         .toolbar {
