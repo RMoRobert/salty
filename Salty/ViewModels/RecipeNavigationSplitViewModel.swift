@@ -251,7 +251,8 @@ class RecipeNavigationSplitViewModel {
                 
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601
-                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                // This can be useful for testing:
+                //encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 let jsonData = try encoder.encode(exportRecipes)
                 
                 await MainActor.run {
