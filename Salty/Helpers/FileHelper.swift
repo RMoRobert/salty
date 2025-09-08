@@ -81,7 +81,7 @@ extension FileManager {
     
     static let saltyLibraryDirectory = customSaltyLibraryDirectory ?? defaultSaltyLibraryDirectory
 
-    static var defaultDatabaseBundleFullPath: URL {
+    static var defaultDatabaseFileFullPath: URL {
         let libDir = defaultSaltyLibraryDirectory
         try? FileManager.default.createDirectory(at: libDir, withIntermediateDirectories: true)
         return libDir
@@ -101,7 +101,7 @@ extension FileManager {
         }
     }
 
-    static var customDatabaseBundleFullPath: URL? {
+    static var customDatabaseFileFullPath: URL? {
         // Derive the bundle path from the parent directory
         guard let parentLocation = customSaltyLibraryDirectory else {
             return nil
@@ -149,11 +149,11 @@ extension FileManager {
         
         // Fallback to default location
         print("Reverting to default database location")
-        return defaultDatabaseBundleFullPath
+        return defaultDatabaseFileFullPath
     }
     
     static var saltyLibraryFullPath: URL {
-        let path = customDatabaseBundleFullPath ?? defaultDatabaseBundleFullPath
+        let path = customDatabaseFileFullPath ?? defaultDatabaseFileFullPath
         print("Opening database at path: \(path)")
         return path
     }
@@ -295,7 +295,7 @@ extension FileManager {
         
         if isCustomLocation {
             diagnostics["customLocationPath"] = customSaltyLibraryDirectory?.path ?? "Unknown"
-            diagnostics["bundleLocationPath"] = customDatabaseBundleFullPath?.path ?? "Unknown"
+            diagnostics["bundleLocationPath"] = customDatabaseFileFullPath?.path ?? "Unknown"
             diagnostics["imagesLocationPath"] = customImagesDirectory?.path ?? "Unknown"
             
             // Check parent bookmark status

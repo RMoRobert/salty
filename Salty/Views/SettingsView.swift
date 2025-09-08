@@ -114,7 +114,7 @@ struct DatabaseSettingsView: View {
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             
-                            Text(FileManager.defaultDatabaseBundleFullPath.path)
+                            Text(FileManager.defaultDatabaseFileFullPath.path)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .padding(8)

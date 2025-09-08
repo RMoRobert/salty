@@ -224,6 +224,7 @@ struct CreateRecipeFromImageView: View {
         #endif
         .fileImporter(
             isPresented: $showingFilePicker,
+            // TODO: Also allow PDF, either convert to image or read text from PDF directly
             allowedContentTypes: [.image],
             allowsMultipleSelection: false
         ) { result in
