@@ -128,16 +128,18 @@ public final class DatabaseBackupManager {
         
         // Handle security-scoped resources for custom database locations
         var didStartAccessing = false
-        if FileManager.customSaltyLibraryDirectory != nil {
-            didStartAccessing = saltyLibraryDirectory.startAccessingSecurityScopedResource()
+        var parentDirectory: URL?
+        if let customLocation = FileManager.customSaltyLibraryDirectory {
+            parentDirectory = customLocation
+            didStartAccessing = customLocation.startAccessingSecurityScopedResource()
             if !didStartAccessing {
                 logger.error("Failed to start accessing security-scoped resource for backup")
                 throw NSError(domain: "DatabaseBackup", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access custom database location"])
             }
         }
         defer {
-            if didStartAccessing {
-                saltyLibraryDirectory.stopAccessingSecurityScopedResource()
+            if didStartAccessing, let parent = parentDirectory {
+                parent.stopAccessingSecurityScopedResource()
             }
         }
         

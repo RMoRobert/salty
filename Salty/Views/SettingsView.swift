@@ -95,7 +95,7 @@ struct DatabaseSettingsView: View {
                                 Text("Images Directory:")
                                     .font(.caption)
                                     .fontWeight(.medium)
-                                Text(FileManager.customImagesDirectory?.path ?? "Unknown")
+                                Text(FileManager.saltyImageFolderUrl.path)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .padding(6)

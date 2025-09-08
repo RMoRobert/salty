@@ -26,42 +26,6 @@ extension FileManager {
     
     // MARK: - Custom Location Access (Single Parent Bookmark)
     
-    static var customImagesDirectory: URL? {
-        guard let parentLocation = customSaltyLibraryDirectory else {
-            return nil
-        }
-        
-        let imagesPath = parentLocation
-            .appendingPathComponent(saltyImageFolderName, isDirectory: true)
-        
-        // Verify the images directory exists and is accessible
-        if parentLocation.startAccessingSecurityScopedResource() {
-            defer { parentLocation.stopAccessingSecurityScopedResource() }
-            
-            do {
-                let parentContents = try FileManager.default.contentsOfDirectory(
-                    at: parentLocation,
-                    includingPropertiesForKeys: [.nameKey, .isDirectoryKey],
-                    options: [.skipsHiddenFiles]
-                )
-                
-                let imagesExists = parentContents.contains { $0.lastPathComponent == saltyImageFolderName }
-                
-                if imagesExists {
-                    return imagesPath
-                } else {
-                    print("Images directory '\(saltyImageFolderName)' not found in parent directory")
-                    return nil
-                }
-            } catch {
-                print("Error checking images directory: \(error)")
-                return nil
-            }
-        } else {
-            print("Cannot access parent directory to verify images directory")
-            return nil
-        }
-    }
     
     // Legacy support - will be removed
     static var customSaltyLibraryDirectory: URL? {
@@ -79,7 +43,17 @@ extension FileManager {
         return parentLocation
     }
     
-    static let saltyLibraryDirectory = customSaltyLibraryDirectory ?? defaultSaltyLibraryDirectory
+    static let saltyLibraryDirectory: URL = {
+        // If user has a custom database location, construct the bundle path
+        if let customLocation = customSaltyLibraryDirectory {
+            return customLocation
+                .appendingPathComponent(folderName, isDirectory: true)
+                .appendingPathExtension(folderBundleExt)
+        } else {
+            // Otherwise, use the default library directory
+            return defaultSaltyLibraryDirectory
+        }
+    }()
 
     static var defaultDatabaseFileFullPath: URL {
         let libDir = defaultSaltyLibraryDirectory
@@ -92,13 +66,8 @@ extension FileManager {
     static let saltyImageFolderName = "recipeImages"
     
     static var saltyImageFolderUrl: URL {
-        // Use specific images bookmark if available, otherwise fall back to default structure
-        if let customImages = customImagesDirectory {
-            return customImages
-        } else {
-            return saltyLibraryDirectory
-                .appendingPathComponent(saltyImageFolderName, isDirectory: true)
-        }
+        return saltyLibraryDirectory
+            .appendingPathComponent(saltyImageFolderName, isDirectory: true)
     }
 
     static var customDatabaseFileFullPath: URL? {
@@ -160,15 +129,10 @@ extension FileManager {
     
     /// Returns the appropriate backup directory URL based on whether a custom location is set
     static var backupDirectory: URL {
-        // If user has a custom database location, put backups in that same location
-        if let customLocation = customSaltyLibraryDirectory {
-            return customLocation.appendingPathComponent(backupFolderName, isDirectory: true)
-        } else {
-            // Otherwise, put backups in the default "Salty Recipe Library" folder
-            let defaultLocation = defaultSaltyLibraryDirectory.deletingLastPathComponent()
-            return defaultLocation.appendingPathComponent(backupFolderName, isDirectory: true)
-        }
+        // Put backups in the parent directory of the library directory
+        return saltyLibraryDirectory.deletingLastPathComponent().appendingPathComponent(backupFolderName, isDirectory: true)
     }
+    
     
     // MARK: - Bookmark Management
     
@@ -296,7 +260,7 @@ extension FileManager {
         if isCustomLocation {
             diagnostics["customLocationPath"] = customSaltyLibraryDirectory?.path ?? "Unknown"
             diagnostics["bundleLocationPath"] = customDatabaseFileFullPath?.path ?? "Unknown"
-            diagnostics["imagesLocationPath"] = customImagesDirectory?.path ?? "Unknown"
+            diagnostics["imagesLocationPath"] = saltyImageFolderUrl.path
             
             // Check parent bookmark status
             if let bookmarkData = UserDefaults.standard.data(forKey: "databaseParentLocation") {

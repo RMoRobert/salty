@@ -97,11 +97,22 @@ struct RecipeNavigationSplitView: View {
                                     viewModel.showingEditSheet = true
                                 }
                                 Button("Export…") {
-                                    viewModel.exportRecipe(recipe.id)
+                                    // Export all selected recipes with prompt via same technique as menu item; or single recipe directly
+                                    if viewModel.selectedRecipeIDs.count > 1 {
+                                        viewModel.exportSelectedRecipes()
+                                    }
+                                    else {
+                                        viewModel.exportRecipe(recipe.id)
+                                    }
                                 }
                                 Button(role: .destructive, action: {
-                                    withAnimation {
-                                        viewModel.deleteRecipe(id: recipe.id)
+                                    // Delete all selected recipes with prompt via same technique as menu item; or single recipe directly
+                                    if viewModel.selectedRecipeIDs.count > 1 {
+                                        showingDeleteConfirmation = true
+                                    } else {
+                                        withAnimation {
+                                            viewModel.deleteRecipe(id: recipe.id)
+                                        }
                                     }
                                 }) {
                                     Text("Delete")
