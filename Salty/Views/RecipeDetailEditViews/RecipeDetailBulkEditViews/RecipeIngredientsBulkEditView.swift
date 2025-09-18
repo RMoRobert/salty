@@ -46,6 +46,7 @@ struct RecipeIngredientsBulkEditView: View {
                     }
                     .padding([.trailing])
                     .controlSize(.small)
+                    .buttonStyle(.plain)
                     .labelStyle(.iconOnly)
                     .alert("How to Use Editor", isPresented: $showingHelp) {
                         Button("OK", role: .cancel) {}

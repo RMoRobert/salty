@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct CreateRecipeFromWebView: View {
+struct CreateRecipeFromWebViewTEST: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = CreateRecipeFromWebViewModel()
     @State private var webView: WebViewCoordinator?
@@ -44,19 +44,100 @@ struct CreateRecipeFromWebView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                #if os(macOS)
-                Button("Save Recipe") {
-                    if viewModel.hasRecipeData {
-                        viewModel.saveRecipe()
-                        dismiss()
+            #if os(macOS)
+            // Navigation buttons
+            ToolbarItem(placement: .navigation) {
+                Button(action: { webView?.goBack() }) {
+                    Label("Back", systemImage: "chevron.left")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .disabled(!viewModel.canGoBack)
+            }
+            
+            ToolbarItem(placement: .navigation) {
+                Button(action: { webView?.goForward() }) {
+                    Label("Forward", systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .disabled(!viewModel.canGoForward)
+            }
+            
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    viewModel.currentURL = ""
+                }) {
+                    Label("Home", systemImage: "house")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    if viewModel.isLoading {
+                        webView?.stopLoading()
                     } else {
-                        viewModel.showingSaveAlert = true
+                        webView?.reload()
+                    }
+                }) {
+                    if viewModel.isLoading {
+                        Label("Stop", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    } else {
+                        Label("Reload", systemImage: "arrow.clockwise")
+                            .labelStyle(.iconOnly)
                     }
                 }
-                .modifier(ProminentToolbarButtonModifier())
-                #endif
+                .buttonStyle(.plain)
             }
+            
+            // URL bar
+            ToolbarItem(placement: .principal) {
+                TextField("Enter URL", text: .constant(viewModel.currentURL.isEmpty ? "about:home" : viewModel.currentURL))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 200, idealWidth: 400, maxWidth: 600)
+                    .disabled(true) // Read-only for now
+            }
+            
+            // Import button
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action: {
+                    // Auto import functionality
+                    guard let webView = webView else { return }
+                    webView.getPageHTML { html in
+                        guard let html = html else { return }
+                        DispatchQueue.main.async {
+                            let importer = SchemaOrgRecipeJSONLDImporter()
+                            let recipes = importer.parseRecipes(from: html)
+                            if let firstRecipe = recipes.first {
+                                self.viewModel.populateFromScannedRecipe(firstRecipe)
+                            } else {
+                                self.viewModel.showingNoRecipeDataAlert = true
+                            }
+                        }
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Auto Import")
+                    }
+                }
+                .help("Auto Import: Scan for content and generate recipe")
+                .modifier(ProminentToolbarButtonModifier())
+                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                // TODO: Rewrite to make this possible if needed
+//                if #available(macOS 26, *) {
+//                    .sharedBackgroundVisibility(.hidden)
+//                }
+            }
+            
+            // Save button
+            saveToolbarItem
+            #else
+            // iOS toolbar items can go here
+            #endif
         }
         #if os(macOS)
         .onKeyPress(.init("1"), phases: .down) { keyPress in
@@ -133,6 +214,24 @@ struct CreateRecipeFromWebView: View {
         }
     }
     
+    // MARK: - Toolbar Item Groups
+    #if os(macOS)
+    private var saveToolbarItem: some ToolbarContent {
+        ToolbarItemGroup(placement: .confirmationAction) {
+            Button("Save Recipe") {
+                if viewModel.hasRecipeData {
+                    viewModel.saveRecipe()
+                    dismiss()
+                } else {
+                    viewModel.showingSaveAlert = true
+                }
+            }
+            .modifier(ProminentToolbarButtonModifier())
+        }
+    }
+    #endif
+    
+    
     #if os(macOS)
     private func handleKeyPress(_ key: String) -> KeyPress.Result {
         let fieldMap: [String: RecipeField] = [
@@ -175,7 +274,7 @@ struct CreateRecipeFromWebView: View {
 }
 
 // MARK: - Recipe Web Browser View
-struct RecipeWebBrowserView: View {
+struct RecipeWebBrowserViewTEST: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     @Binding var webView: WebViewCoordinator?
     @State private var urlText: String = ""
@@ -184,15 +283,16 @@ struct RecipeWebBrowserView: View {
     
     var onClose: (() -> Void)?
     
-    #if !os(macOS)
-    let toolbarNavButtonsPlacement = ToolbarItemPlacement.topBarLeading
-    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.topBarTrailing
-    #else
-    let toolbarNavButtonsPlacement = ToolbarItemPlacement.principal
-    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.automatic
-    #endif
+//    #if !os(macOS)
+//    let toolbarNavButtonsPlacement = ToolbarItemPlacement.topBarLeading
+//    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.topBarTrailing
+//    #else
+//    let toolbarNavButtonsPlacement = ToolbarItemPlacement.principal
+//    //let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.automatic
+//    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.primaryAction
+//    #endif
     
-    var body: some View {
+    var body: some View { 
         // Web View
         WebViewRepresentable(
             content: viewModel.currentURL.isEmpty ? .htmlResource("createRecipeFromWebLandingPage") : .url(viewModel.currentURL),
@@ -219,22 +319,39 @@ struct RecipeWebBrowserView: View {
                     }
             }
         )
-                .toolbar {
-            ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
+        .toolbar {
+            #if !os(macOS)
+            navigationToolbarItems
+            urlBarToolbarItem
+            progressToolbarItem
+            importToolbarItem
+            closeToolbarItem
+            #endif
+        }
+    }
+    
+    // MARK: - Toolbar Item Groups
+    private var navigationToolbarItems: some ToolbarContent {
+        Group {
+            ToolbarItem(placement: .navigation) {
                 Button(action: { webView?.goBack() }) {
                     Label("Back", systemImage: "chevron.left")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.plain)
                 .disabled(!viewModel.canGoBack)
-                
+            }
+            
+            ToolbarItem(placement: .navigation) {
                 Button(action: { webView?.goForward() }) {
                     Label("Forward", systemImage: "chevron.right")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.plain)
                 .disabled(!viewModel.canGoForward)
-                
+            }
+            
+            ToolbarItem(placement: .navigation) {
                 Button(action: {
                     goHome()
                 }) {
@@ -242,7 +359,9 @@ struct RecipeWebBrowserView: View {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.plain)
-                
+            }
+            
+            ToolbarItem(placement: .navigation) {
                 Button(action: {
                     if viewModel.isLoading {
                         webView?.stopLoading()
@@ -260,60 +379,68 @@ struct RecipeWebBrowserView: View {
                 }
                 .buttonStyle(.plain)
             }
-            
-            ToolbarItemGroup(placement: .principal) {
-                TextField("Enter URL", text: $urlText)
+        }
+    }
+    
+    private var urlBarToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            TextField("Enter URL", text: $urlText)
 #if !os(macOS)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
+                .keyboardType(.URL)
+                .autocapitalization(.none)
 #endif
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
-                    .onSubmit {
-                        navigateToURL()
-                    }
-                    .onAppear {
-                        urlText = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
-                    }
-                    .onChange(of: viewModel.currentURL) { _, newURL in
-                        urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
-                    }
-                    .focused($isAddressFieldFocused)
-                    .truncationMode(.middle)
-            }
-            
-            ToolbarItemGroup(placement: .status) {
-                // Progress spinner
-                ProgressView()
-                    .controlSize(.small)
-                    .opacity(viewModel.isLoading ? 1.0 : 0.0)
-            }
-            
-            ToolbarItemGroup(placement: toolbarImportAndCloseButtonsPlacement) {
-                Button(action: {
-                    scanWebpageForRecipeData()
-                }) {
-                    if isCompactScreen {
-                        Label("Auto Import", systemImage: "square.and.arrow.down")
-                            .labelStyle(.iconOnly)
-                    } else {
-                        Label("Auto Import", systemImage: "square.and.arrow.down")
-                            .labelStyle(.titleAndIcon)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
+                .onSubmit {
+                    navigateToURL()
+                }
+                .onAppear {
+                    urlText = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
+                }
+                .onChange(of: viewModel.currentURL) { _, newURL in
+                    urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
+                }
+                .focused($isAddressFieldFocused)
+                .truncationMode(.middle)
+        }
+    }
+    
+    private var progressToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .status) {
+            // Progress spinner
+            ProgressView()
+                .controlSize(.small)
+                .opacity(viewModel.isLoading ? 1.0 : 0.0)
+        }
+    }
+    
+    private var importToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .confirmationAction) {
+            Button(action: {
+                scanWebpageForRecipeData()
+            }) {
+                HStack {
+                    Image(systemName: "square.and.arrow.down")
+                    if !isCompactScreen {
+                        Text("Auto Import")
                     }
                 }
-                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
-                .modifier(ProminentToolbarButtonModifier())
-                
-#if os(iOS)
-                Button(action: {
-                    onClose?()
-                }) {
-                    Label("Close", systemImage: "xmark.circle.fill")
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.tertiary)
-#endif
             }
+            .help("Auto Import: Scan for content and generate recipe")
+            .modifier(ProminentToolbarButtonModifier())
+            .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+        }
+    }
+    
+    private var closeToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button(action: {
+                onClose?()
+            }) {
+                Label("Close", systemImage: "xmark.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.tertiary)
         }
     }
     
@@ -366,11 +493,12 @@ struct RecipeWebBrowserView: View {
             }
         }
     }
+    
 }
 
 #if os(macOS)
 // MARK: - Recipe Web Import Edit View (macOS only)
-struct RecipeWebImportEditView: View {
+struct RecipeWebImportEditViewTEST: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     
     var body: some View {
@@ -625,17 +753,15 @@ struct RecipeWebImportEditView: View {
             return String(format: "%.1f", value)
         }
     }
-    
-    
 }
 #endif
 
-struct ProminentToolbarButtonModifier: ViewModifier {
+
+struct ProminentToolbarButtonModifierTEST: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             content
-                .buttonStyle(.glassProminent)
-                .tint(.accentColor)
+                content.buttonStyle(.borderedProminent)
         }
         else {
             content.buttonStyle(.borderedProminent)
@@ -643,7 +769,6 @@ struct ProminentToolbarButtonModifier: ViewModifier {
     }
 }
 
-
 #Preview {
-    CreateRecipeFromWebView()
+    CreateRecipeFromWebViewTEST()
 }

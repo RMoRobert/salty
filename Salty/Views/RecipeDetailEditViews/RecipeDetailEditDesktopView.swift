@@ -154,14 +154,14 @@ struct RecipeDetailEditDesktopView: View {
                             Text("Rating:")
                                 .frame(width: 80, alignment: .leading)
                             RatingEditView(recipe: $viewModel.recipe)
-                                .frame(maxWidth: 250)
+                                .frame(maxWidth: 250, alignment: .leading)
                         }
                         Spacer()
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Difficulty:")
                                 .frame(width: 80, alignment: .leading)
                             DifficultyEditView(recipe: $viewModel.recipe)
-                                .frame(maxWidth: 250)
+                                .frame(maxWidth: 250, alignment: .leading)
                         }
                     }
                 }
