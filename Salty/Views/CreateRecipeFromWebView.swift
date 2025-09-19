@@ -18,7 +18,7 @@ struct CreateRecipeFromWebView: View {
             // macOS: Use HSplitView with browser and editor side by side
             HSplitView {
                 // Left side - Web Browser
-                RecipeWebBrowserView(viewModel: viewModel, webView: $webView)
+                RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onSave: { dismiss() })
                     .frame(minWidth: 400, idealWidth: 600)
                 
                 // Right side - Recipe Editor
@@ -27,7 +27,7 @@ struct CreateRecipeFromWebView: View {
             }
             #else
             // iOS/iPadOS: Use simplified layout with browser and direct editor
-            RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onClose: { dismiss() })
+            RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onClose: { dismiss() }, onSave: { dismiss() })
                 .sheet(isPresented: $viewModel.showingExtractedDataSheet) {
                     NavigationStack {
                         RecipeDetailEditMobileView(recipe: viewModel.recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
@@ -43,21 +43,6 @@ struct CreateRecipeFromWebView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                #if os(macOS)
-                Button("Save Recipe") {
-                    if viewModel.hasRecipeData {
-                        viewModel.saveRecipe()
-                        dismiss()
-                    } else {
-                        viewModel.showingSaveAlert = true
-                    }
-                }
-                .modifier(ProminentToolbarButtonModifier())
-                #endif
-            }
-        }
         #if os(macOS)
         .onKeyPress(.init("1"), phases: .down) { keyPress in
             if keyPress.modifiers.contains(.command) {
@@ -133,6 +118,7 @@ struct CreateRecipeFromWebView: View {
         }
     }
     
+    
     #if os(macOS)
     private func handleKeyPress(_ key: String) -> KeyPress.Result {
         let fieldMap: [String: RecipeField] = [
@@ -183,6 +169,7 @@ struct RecipeWebBrowserView: View {
     @State private var isCompactScreen: Bool = false
     
     var onClose: (() -> Void)?
+    var onSave: (() -> Void)?
     
     #if !os(macOS)
     let toolbarNavButtonsPlacement = ToolbarItemPlacement.topBarLeading
@@ -219,101 +206,132 @@ struct RecipeWebBrowserView: View {
                     }
             }
         )
-                .toolbar {
+        .toolbar {
             ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
-                Button(action: { webView?.goBack() }) {
-                    Label("Back", systemImage: "chevron.left")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.plain)
-                .disabled(!viewModel.canGoBack)
-                
-                Button(action: { webView?.goForward() }) {
-                    Label("Forward", systemImage: "chevron.right")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.plain)
-                .disabled(!viewModel.canGoForward)
-                
-                Button(action: {
-                    goHome()
-                }) {
-                    Label("Home", systemImage: "house")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.plain)
-                
-                Button(action: {
-                    if viewModel.isLoading {
-                        webView?.stopLoading()
-                    } else {
-                        webView?.reload()
-                    }
-                }) {
-                    if viewModel.isLoading {
-                        Label("Stop", systemImage: "xmark")
-                            .labelStyle(.iconOnly)
-                    } else {
-                        Label("Reload", systemImage: "arrow.clockwise")
-                            .labelStyle(.iconOnly)
-                    }
-                }
-                .buttonStyle(.plain)
+                navigationButtons
             }
-            
             ToolbarItemGroup(placement: .principal) {
-                TextField("Enter URL", text: $urlText)
-#if !os(macOS)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
-#endif
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
-                    .onSubmit {
-                        navigateToURL()
-                    }
-                    .onAppear {
-                        urlText = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
-                    }
-                    .onChange(of: viewModel.currentURL) { _, newURL in
-                        urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
-                    }
-                    .focused($isAddressFieldFocused)
-                    .truncationMode(.middle)
+                urlTextField
             }
-            
             ToolbarItemGroup(placement: .status) {
-                // Progress spinner
-                ProgressView()
-                    .controlSize(.small)
-                    .opacity(viewModel.isLoading ? 1.0 : 0.0)
+                progressIndicator
             }
             
             ToolbarItemGroup(placement: toolbarImportAndCloseButtonsPlacement) {
-                Button(action: {
-                    scanWebpageForRecipeData()
-                }) {
-                    if isCompactScreen {
-                        Label("Auto Import", systemImage: "square.and.arrow.down")
-                            .labelStyle(.iconOnly)
-                    } else {
-                        Label("Auto Import", systemImage: "square.and.arrow.down")
-                            .labelStyle(.titleAndIcon)
-                    }
-                }
-                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
-                .modifier(ProminentToolbarButtonModifier())
-                
-#if os(iOS)
-                Button(action: {
-                    onClose?()
-                }) {
-                    Label("Close", systemImage: "xmark.circle.fill")
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.tertiary)
-#endif
+                importAndCloseButtons
             }
+        }
+    }
+    
+    // MARK: - Toolbar Items
+    private var navigationButtons: some View {
+        Group {
+            Button(action: { webView?.goBack() }) {
+                Label("Back", systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.canGoBack)
+            
+            Button(action: { webView?.goForward() }) {
+                Label("Forward", systemImage: "chevron.right")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.canGoForward)
+            
+            Button(action: {
+                goHome()
+            }) {
+                Label("Home", systemImage: "house")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.plain)
+            
+            Button(action: {
+                if viewModel.isLoading {
+                    webView?.stopLoading()
+                } else {
+                    webView?.reload()
+                }
+            }) {
+                if viewModel.isLoading {
+                    Label("Stop", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                } else {
+                    Label("Reload", systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+    
+    private var urlTextField: some View {
+        TextField("Enter URL", text: $urlText)
+#if !os(macOS)
+            .keyboardType(.URL)
+            .autocapitalization(.none)
+#endif
+            .textFieldStyle(.roundedBorder)
+            .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
+            .onSubmit {
+                navigateToURL()
+            }
+            .onAppear {
+                urlText = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
+            }
+            .onChange(of: viewModel.currentURL) { _, newURL in
+                urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
+            }
+            .focused($isAddressFieldFocused)
+            .truncationMode(.middle)
+    }
+    
+    private var progressIndicator: some View {
+        ProgressView()
+            .controlSize(.small)
+            .opacity(viewModel.isLoading ? 1.0 : 0.0)
+    }
+    
+    private var importAndCloseButtons: some View {
+        Group {
+            Button(action: {
+                scanWebpageForRecipeData()
+            }) {
+                if isCompactScreen {
+                    Label("Auto Import", systemImage: "square.and.arrow.down")
+                        .labelStyle(.iconOnly)
+                } else {
+                    Label("Auto Import", systemImage: "square.and.arrow.down")
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+            
+#if os(macOS)
+            Button("Save Recipe") {
+                if viewModel.hasRecipeData {
+                    viewModel.saveRecipe()
+                    onSave?()
+                } else {
+                    viewModel.showingSaveAlert = true
+                }
+            }
+            .disabled(!viewModel.hasRecipeData)
+#endif
+            
+#if os(iOS)
+            Button(action: {
+                onClose?()
+            }) {
+                Label("Close", systemImage: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .foregroundStyle(.foreground)
+            .backgroundStyle(.tertiary)
+#endif
         }
     }
     
@@ -632,17 +650,27 @@ struct RecipeWebImportEditView: View {
 
 struct ProminentToolbarButtonModifier: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, iOS 26.0, *) {
             content
-                .buttonStyle(.glassProminent)
-                .tint(.accentColor)
+                //.buttonStyle(.borderedProminent)
+                //.tint(.accentColor.opacity(0.9))
         }
         else {
-            content.buttonStyle(.borderedProminent)
+            content
+                .buttonStyle(.borderedProminent)
         }
     }
 }
 
+struct DisabledButtonStyleModifier: ViewModifier {
+    let isDisabled: Bool
+    
+    func body(content: Content) -> some View {
+        content
+//            .foregroundColor(isDisabled ? .secondary : .primary)
+//            .opacity(isDisabled ? 0.7 : 1.0)
+    }
+}
 
 #Preview {
     CreateRecipeFromWebView()

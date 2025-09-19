@@ -9,7 +9,9 @@ import SwiftUI
 
 struct MainView: View {
     var body: some View {
-        RecipeNavigationSplitView(viewModel: RecipeNavigationSplitViewModel())
+        let viewModel = RecipeNavigationSplitViewModel()
+        let _ = viewModel.isNewLaunch = true
+        RecipeNavigationSplitView(viewModel: viewModel)
     }
 }
 

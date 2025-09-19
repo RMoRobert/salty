@@ -22,6 +22,20 @@ extension Notification.Name {
 @Observable
 @MainActor
 class RecipeNavigationSplitViewModel {
+    var isNewLaunch = false // true if first launch of app, view should use to show reasonable default instead of blank-looking page on mobile
+    
+    init() {
+        // Check if this is a new launch by looking for existing recipes
+        // We'll set this properly after the database is loaded
+    }
+    
+    /// Call this method after the database is loaded to set up the initial state
+    func setupInitialState() {
+        // Set default selection to "All Recipes" if currently nothing selected
+        if selectedSidebarItemId == nil {
+            selectedSidebarItemId = allRecipesID
+        }
+    }
     // MARK: - Constants
     let allRecipesID: String = "0"
     private let logger = Logger(subsystem: "Salty", category: "Database")

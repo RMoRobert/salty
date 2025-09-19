@@ -16,8 +16,6 @@ struct RecipeNavigationSplitView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var isEditMode = false
     
-
-    
     //@State private var showEditRecipeView = false
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingEditLibTagsSheet = false
@@ -186,7 +184,7 @@ struct RecipeNavigationSplitView: View {
                     
                     Menu(content: {
                         Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                            Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease.circle")
+                            Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease")
                         }
                         Divider()
                         Button(action: {
@@ -224,7 +222,7 @@ struct RecipeNavigationSplitView: View {
                         }
                         #endif
                     }, label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis")
                     })
                 }
                 #else
@@ -249,7 +247,7 @@ struct RecipeNavigationSplitView: View {
                         Label("New Recipe", systemImage: "plus")
                     }
                     Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                        Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease.circle")
+                        Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease")
                     }
 //                    Menu(content: {
 //                        Button("Create Recipe from Web…") {
@@ -270,7 +268,7 @@ struct RecipeNavigationSplitView: View {
 //                            showingOpenDBSheet.toggle()
 //                        }
 //                    }, label: {
-//                        Label("More", systemImage: "ellipsis.circle")
+//                        Label("More", systemImage: "ellipsis")
 //                    })
                 }
                 #endif
@@ -451,6 +449,15 @@ struct RecipeNavigationSplitView: View {
         }
         .onChange(of: isAnySheetShown) { _, _ in
             notifySheetStateChanged()
+        }
+        .onAppear {
+            // Set up initial state after the view appears
+            viewModel.setupInitialState()
+            
+            // For new launches on iPad/iPhone, show both sidebar and content
+            if viewModel.isNewLaunch {
+                columnVisibility = .all
+            }
         }
     }
 }
