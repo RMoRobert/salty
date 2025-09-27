@@ -22,11 +22,41 @@ class LibraryCategoriesEditViewModel: ObservableObject {
     @Published var editingCategoryName = ""
     @Published var editingCategoryIndex: Int? = nil
     @Published var scrollToNewItem: Bool = false
+    @Published var searchText: String = ""
     
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
     var categories: [Category]
     
     // MARK: - List View Methods
+    
+    func updateQuery() async {
+        do {
+            if searchText.trim() == "" {
+                try await $categories.load(
+                    #sql(
+                    """
+                        SELECT \(Category.columns) FROM \(Category.self)
+                        ORDER BY \(Category.name) COLLATE NOCASE
+                    """,
+                    as: Category.self)
+                )
+            }
+            else {
+                let searchPattern = "%\(searchText)%"
+                try await $categories.load(
+                    #sql(
+                    """
+                        SELECT \(Category.columns) FROM \(Category.self)
+                        WHERE \(Category.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                        ORDER BY \(Category.name) COLLATE NOCASE
+                    """,
+                    as: Category.self)
+                )
+            }
+        } catch {
+          // Handle error...
+        }
+    }
     
     func deleteCategory(at index: Int) {
         guard index < categories.count else { return }

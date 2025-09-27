@@ -53,15 +53,7 @@ struct LibraryTagsEditView: View {
                     }
                 }
                 #else
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        viewModel.showNewTagAlert()
-                    } label: {
-                        Label("New", systemImage: "plus")
-                    }
-                    .labelStyle(.titleAndIcon)
-                }
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .automatic) {
                     Button(role: .destructive) {
                         viewModel.deleteSelectedTags()
                     } label: {
@@ -69,13 +61,21 @@ struct LibraryTagsEditView: View {
                     }
                     .disabled(!viewModel.canDelete)
                 }
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .automatic) {
                     Button {
                         viewModel.showEditAlert()
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
                     .disabled(!viewModel.canEdit)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        viewModel.showNewTagAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
                 }
                 #endif
             }
@@ -142,6 +142,10 @@ struct LibraryTagsEditView: View {
                     }
                     viewModel.scrollToNewItem = false
                 }
+            }
+            .searchable(text: $viewModel.searchText)
+            .task(id: viewModel.searchText) {
+                await viewModel.updateQuery()
             }
         }
     }

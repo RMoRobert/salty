@@ -24,12 +24,42 @@ class LibraryTagsEditViewModel {
     var editingTagName = ""
     var editingTagIndex: Int? = nil
     var scrollToNewItem: Bool = false
+    var searchText: String = ""
     
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var tags: [Tag]
     
     // MARK: - List View Methods
+    
+    func updateQuery() async {
+        do {
+            if searchText.trim() == "" {
+                try await $tags.load(
+                    #sql(
+                    """
+                        SELECT \(Tag.columns) FROM \(Tag.self)
+                        ORDER BY \(Tag.name) COLLATE NOCASE
+                    """,
+                    as: Tag.self)
+                )
+            }
+            else {
+                let searchPattern = "%\(searchText)%"
+                try await $tags.load(
+                    #sql(
+                    """
+                        SELECT \(Tag.columns) FROM \(Tag.self)
+                        WHERE \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                        ORDER BY \(Tag.name) COLLATE NOCASE
+                    """,
+                    as: Tag.self)
+                )
+            }
+        } catch {
+          // Handle error...
+        }
+    }
     
     func deleteTag(at index: Int) {
         guard index < tags.count else { return }

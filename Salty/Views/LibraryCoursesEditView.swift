@@ -53,15 +53,7 @@ struct LibraryCoursesEditView: View {
                     }
                 }
                 #else
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        viewModel.showNewCourseAlert()
-                    } label: {
-                        Label("New", systemImage: "plus")
-                    }
-                    .labelStyle(.titleAndIcon)
-                }
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .automatic) {
                     Button(role: .destructive) {
                         viewModel.deleteSelectedCourses()
                     } label: {
@@ -69,13 +61,21 @@ struct LibraryCoursesEditView: View {
                     }
                     .disabled(!viewModel.canDelete)
                 }
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .automatic) {
                     Button {
                         viewModel.showEditAlert()
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
                     .disabled(!viewModel.canEdit)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        viewModel.showNewCourseAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
                 }
                 #endif
             }

@@ -53,15 +53,7 @@ struct LibraryCategoriesEditView: View {
                     }
                 }
                 #else
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        viewModel.showNewCategoryAlert()
-                    } label: {
-                        Label("New", systemImage: "plus")
-                    }
-                    .labelStyle(.titleAndIcon)
-                }
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .automatic) {
                     Button(role: .destructive) {
                         viewModel.deleteSelectedCategories()
                     } label: {
@@ -70,7 +62,7 @@ struct LibraryCategoriesEditView: View {
                     //.labelStyle(.titleAndIcon)
                     .disabled(!viewModel.canDelete)
                 }
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .automatic) {
                     Button {
                         viewModel.showEditAlert()
                     } label: {
@@ -78,6 +70,14 @@ struct LibraryCategoriesEditView: View {
                     }
                     //.labelStyle(.titleAndIcon)
                     .disabled(!viewModel.canEdit)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        viewModel.showNewCategoryAlert()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
                 }
                 #endif
             }
@@ -144,6 +144,10 @@ struct LibraryCategoriesEditView: View {
                     }
                     viewModel.scrollToNewItem = false
                 }
+            }
+            .searchable(text: $viewModel.searchText)
+            .task(id: viewModel.searchText) {
+                await viewModel.updateQuery()
             }
         }
     }
