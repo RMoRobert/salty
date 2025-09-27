@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SharingGRDB
+import SQLiteData
 import UniformTypeIdentifiers
 
 extension UTType {
@@ -120,7 +120,7 @@ extension SaltyRecipeExport {
         if let courseId = recipe.courseId {
             courseName = try database.read { db in
                 try Course
-                    .filter(Course.Columns.id == courseId)
+                    .where { $0.id == courseId }
                     .fetchOne(db)?.name
             }
         }
@@ -128,12 +128,12 @@ extension SaltyRecipeExport {
         // Fetch category names
         let categoryNames = try database.read { db in
             let recipeCategoryIds = try RecipeCategory
-                .filter(RecipeCategory.Columns.recipeId == recipe.id)
+                .where { $0.recipeId == recipe.id }
                 .fetchAll(db)
                 .map { $0.categoryId }
             
             return try Category
-                .filter(recipeCategoryIds.contains(Category.Columns.id))
+                .where { recipeCategoryIds.contains($0.id) }
                 .fetchAll(db)
                 .map { $0.name }
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -142,12 +142,12 @@ extension SaltyRecipeExport {
         // Fetch tag names
         let tagNames = try database.read { db in
             let recipeTagIds = try RecipeTag
-                .filter(RecipeTag.Columns.recipeId == recipe.id)
+                .where { $0.recipeId == recipe.id }
                 .fetchAll(db)
                 .map { $0.tagId }
             
             return try Tag
-                .filter(recipeTagIds.contains(Tag.Columns.id))
+                .where { recipeTagIds.contains($0.id) }
                 .fetchAll(db)
                 .map { $0.name }
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }

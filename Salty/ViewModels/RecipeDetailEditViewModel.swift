@@ -7,7 +7,7 @@
 
 import Foundation
 import OSLog
-import SharingGRDB
+import SQLiteData
 
 @Observable
 @MainActor
@@ -116,12 +116,10 @@ class RecipeDetailEditViewModel {
             try database.write { db in
                 if isNewRecipe {
                     // Insert new recipe
-                    try recipe.insert(db)
-                    logger.info("New recipe inserted successfully: \(self.recipe.id)")
+                    try Recipe.insert(recipe).execute(db)
                 } else {
                     // Update existing recipe
-                    try recipe.update(db)
-                    logger.info("Recipe updated successfully: \(self.recipe.id)")
+                    try Recipe.update(recipe).execute(db)
                 }
             }
             
@@ -149,7 +147,7 @@ class RecipeDetailEditViewModel {
             // Check if tag already exists
             let existingTag = try database.read { db in
                 try Tag
-                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
                     .fetchOne(db)
             }
             
@@ -160,14 +158,14 @@ class RecipeDetailEditViewModel {
                 // Create new tag
                 tagToUse = Tag(id: UUID().uuidString, name: trimmedName)
                 try database.write { db in
-                    try tagToUse.insert(db)
+                    try Tag.insert{ tagToUse }.execute(db)
                 }
             }
             
             // Check if recipe already has this tag
             let existingRecipeTag = try database.read { db in
                 try RecipeTag
-                    .filter(RecipeTag.Columns.recipeId == recipe.id && RecipeTag.Columns.tagId == tagToUse.id)
+                    .where { $0.recipeId == recipe.id && $0.tagId == tagToUse.id }
                     .fetchOne(db)
             }
             
@@ -175,9 +173,8 @@ class RecipeDetailEditViewModel {
                 // Add tag to recipe
                 let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagToUse.id)
                 try database.write { db in
-                    try recipeTag.insert(db)
+                    try RecipeTag.insert{ recipeTag }.execute(db)
                 }
-                logger.info("Tag '\(trimmedName)' added to recipe")
             }
         } catch {
             logger.error("Error adding tag: \(error)")
@@ -189,7 +186,7 @@ class RecipeDetailEditViewModel {
             // Find the tag
             let tag = try database.read { db in
                 try Tag
-                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [tagName])
+                    .where { $0.name.collate(.nocase) == tagName.collate(.nocase) }
                     .fetchOne(db)
             }
             
@@ -201,8 +198,9 @@ class RecipeDetailEditViewModel {
             // Remove the recipe-tag association
             let _ = try database.write { db in
                 try RecipeTag
-                    .filter(RecipeTag.Columns.recipeId == recipe.id && RecipeTag.Columns.tagId == tag.id)
-                    .deleteAll(db)
+                    .where { $0.recipeId == recipe.id && $0.tagId == tag.id }
+                    .delete()
+                    .execute(db)
             }
             
             logger.info("Tag '\(tagName)' removed from recipe")
@@ -218,7 +216,9 @@ class RecipeDetailEditViewModel {
     private func refreshRecipeFromDatabase() {
         do {
             if let refreshedRecipe = try database.read({ db in
-                try Recipe.fetchOne(db, key: recipe.id)
+                try Recipe
+                    .where { $0.id == recipe.id }
+                    .fetchOne(db)
             }) {
                 recipe = refreshedRecipe
                 originalRecipe = refreshedRecipe

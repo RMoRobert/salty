@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 @MainActor
 class LibraryCategoriesEditViewModel: ObservableObject {
@@ -36,11 +36,12 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             try database.write { db in
                 // Remove from recipe associations first
                 try RecipeCategory
-                    .filter(Column("categoryId") == categoryToDelete.id)
-                    .deleteAll(db)
+                    .where { $0.categoryId == categoryToDelete.id }
+                    .delete()
+                    .execute(db)
                 
                 // Then delete the category itself
-                try categoryToDelete.delete(db)
+                try Category.delete(categoryToDelete).execute(db)
             }
             
             // Update selection indices after deletion
@@ -88,7 +89,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             // Check if a category with this name already exists (case-insensitive)
             let existingCategory = try database.read { db in
                 try Category
-                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
                     .fetchOne(db)
             }
             
@@ -101,7 +102,9 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             // Create the new category
             let newCategory = Category(id: UUID().uuidString, name: trimmedName)
             try database.write { db in
-                try newCategory.insert(db)
+                try Category.insert {
+                    newCategory
+                }.execute(db)
             }
             
             // Select the new category and scroll to it
@@ -122,7 +125,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             // Check if a category with this name already exists (case-insensitive)
             let existingCategory = try database.read { db in
                 try Category
-                    .filter(sql: "LOWER(name) = LOWER(?) AND id != ?", arguments: [trimmedName, categories[index].id])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) && $0.id != categories[index].id }
                     .fetchOne(db)
             }
             
@@ -136,7 +139,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             var updatedCategory = categories[index]
             updatedCategory.name = trimmedName
             try database.write { db in
-                try updatedCategory.update(db)
+                try Category.update(updatedCategory).execute(db)
             }
             
             editingCategoryIndex = nil

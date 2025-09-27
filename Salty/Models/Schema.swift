@@ -5,7 +5,8 @@
 //  Created by Robert on 6/6/25.
 //
 
-import SharingGRDB
+import SQLiteData
+import GRDB
 import OSLog
 import Foundation
 
@@ -20,7 +21,7 @@ private let logger = Logger(subsystem: "Salty", category: "Database")
 // Record Types
 
 @Table("recipe")
-struct Recipe: Codable, Hashable, Identifiable, Equatable  {
+struct Recipe: Codable, Hashable, Identifiable, Equatable, TableRecord  {
     var id: String
     var name: String = ""
     var createdDate: Date = Date()
@@ -64,44 +65,44 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable  {
 }
 
 
-
-extension Recipe: FetchableRecord, PersistableRecord, DatabaseValueConvertible {
-    enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-        static let createdDate = Column(CodingKeys.createdDate)
-        static let lastModifedDate = Column(CodingKeys.lastModifiedDate)
-        static let lastPrepared = Column(CodingKeys.lastPrepared)
-        static let source = Column(CodingKeys.source)
-        static let sourceDetails = Column(CodingKeys.sourceDetails)
-        static let introduction = Column(CodingKeys.introduction)
-        static let difficulty = Column(CodingKeys.difficulty)
-        static let rating = Column(CodingKeys.rating)
-        static let imageFilename = Column(CodingKeys.imageFilename)
-        static let imageThumbnailData = Column(CodingKeys.imageThumbnailData)
-        static let isFavorite = Column(CodingKeys.isFavorite)
-        static let wantToMake = Column(CodingKeys.wantToMake)
-        static let yield = Column(CodingKeys.yield)
-        static let servings = Column(CodingKeys.servings)
-        static let courseId = Column(CodingKeys.courseId)
-        static let directions = JSONColumn(CodingKeys.directions)
-        static let ingredients = JSONColumn(CodingKeys.ingredients)
-        static let notes  = JSONColumn(CodingKeys.notes)
-        static let preparationTimes = JSONColumn(CodingKeys.preparationTimes)
-        static let nutrition = JSONColumn(CodingKeys.nutrition)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.id, Columns.name, Columns.createdDate, Columns.lastModifedDate,
-         Columns.source, Columns.sourceDetails, Columns.introduction,
-         Columns.difficulty, Columns.rating, Columns.imageFilename,
-         Columns.imageThumbnailData, Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
-         Columns.yield, Columns.servings, Columns.courseId,
-         Database.json(Columns.directions), Database.json(Columns.ingredients),
-         Database.json(Columns.notes), Database.json(Columns.preparationTimes),
-         Database.json(Columns.nutrition)]
-    }
-}
+//
+//extension Recipe {
+//    enum Columns {
+//        static let id = Column(CodingKeys.id)
+//        static let name = Column(CodingKeys.name)
+//        static let createdDate = Column(CodingKeys.createdDate)
+//        static let lastModifedDate = Column(CodingKeys.lastModifiedDate)
+//        static let lastPrepared = Column(CodingKeys.lastPrepared)
+//        static let source = Column(CodingKeys.source)
+//        static let sourceDetails = Column(CodingKeys.sourceDetails)
+//        static let introduction = Column(CodingKeys.introduction)
+//        static let difficulty = Column(CodingKeys.difficulty)
+//        static let rating = Column(CodingKeys.rating)
+//        static let imageFilename = Column(CodingKeys.imageFilename)
+//        static let imageThumbnailData = Column(CodingKeys.imageThumbnailData)
+//        static let isFavorite = Column(CodingKeys.isFavorite)
+//        static let wantToMake = Column(CodingKeys.wantToMake)
+//        static let yield = Column(CodingKeys.yield)
+//        static let servings = Column(CodingKeys.servings)
+//        static let courseId = Column(CodingKeys.courseId)
+//        static let directions = JSONColumn(CodingKeys.directions)
+//        static let ingredients = JSONColumn(CodingKeys.ingredients)
+//        static let notes  = JSONColumn(CodingKeys.notes)
+//        static let preparationTimes = JSONColumn(CodingKeys.preparationTimes)
+//        static let nutrition = JSONColumn(CodingKeys.nutrition)
+//    }
+//    
+//    static var databaseSelection: [any SQLSelectable] {
+//        [Columns.id, Columns.name, Columns.createdDate, Columns.lastModifedDate,
+//         Columns.source, Columns.sourceDetails, Columns.introduction,
+//         Columns.difficulty, Columns.rating, Columns.imageFilename,
+//         Columns.imageThumbnailData, Columns.lastPrepared, Columns.isFavorite, Columns.wantToMake,
+//         Columns.yield, Columns.servings, Columns.courseId,
+//         Database.json(Columns.directions), Database.json(Columns.ingredients),
+//         Database.json(Columns.notes), Database.json(Columns.preparationTimes),
+//         Database.json(Columns.nutrition)]
+//    }
+//}
 
 // MARK: - Recipe Image Extensions
 
@@ -173,17 +174,17 @@ struct Course: Codable, Identifiable, Equatable, Hashable {
     var id: String
     var name: String
 }
-
-extension Course: FetchableRecord, PersistableRecord {
-    enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.id, Columns.name]
-    }
-}
+//
+//extension Course: FetchableRecord, PersistableRecord {
+//    enum Columns {
+//        static let id = Column(CodingKeys.id)
+//        static let name = Column(CodingKeys.name)
+//    }
+//    
+//    static var databaseSelection: [any SQLSelectable] {
+//        [Columns.id, Columns.name]
+//    }
+//}
 
 struct Direction: Codable, Hashable, Equatable, Identifiable  {
     var id: String
@@ -232,38 +233,38 @@ struct Category: Hashable, Identifiable, Codable, Equatable {
     var name: String
 }
 
-extension Category: FetchableRecord, PersistableRecord  {
-    enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-        
-        static let recipes = hasMany(Recipe.self)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.id, Columns.name]
-    }
-}
+//extension Category: FetchableRecord, PersistableRecord  {
+//    enum Columns {
+//        static let id = Column(CodingKeys.id)
+//        static let name = Column(CodingKeys.name)
+//        
+//        static let recipes = hasMany(Recipe.self)
+//    }
+//    
+//    static var databaseSelection: [any SQLSelectable] {
+//        [Columns.id, Columns.name]
+//    }
+//}
 
 @Table("tag")
-struct Tag: Hashable, Identifiable, Codable, Equatable {
+struct Tag: Hashable, Identifiable, Codable, Equatable, TableRecord {
     var id: String
     var name: String
 }
 
-extension Tag: FetchableRecord, PersistableRecord  {
-    enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-        
-        static let recipes = hasMany(Recipe.self)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.id, Columns.name]
-    }
-}
-
+//extension Tag: FetchableRecord, PersistableRecord  {
+//    enum Columns {
+//        static let id = Column(CodingKeys.id)
+//        static let name = Column(CodingKeys.name)
+//        
+//        static let recipes = hasMany(Recipe.self)
+//    }
+//    
+//    static var databaseSelection: [any SQLSelectable] {
+//        [Columns.id, Columns.name]
+//    }
+//}
+//
 
 enum Difficulty: Int, Codable, CaseIterable, QueryBindable {
     case notSet = 0,  easy, somewhatEasy, medium, slightlyDifficult, difficult
@@ -519,7 +520,7 @@ func appDatabase() throws -> any DatabaseWriter {
         ]
         for categoryName in defaultCategories {
             let category = Category(id: UUID().uuidString, name: categoryName)
-            try category.insert(db)
+            try Category.insert(category).execute(db)
         }
         
         // Add default course names to database
@@ -529,12 +530,12 @@ func appDatabase() throws -> any DatabaseWriter {
         ]
         for courseName in defaultCourses {
             let course = Course(id: UUID().uuidString, name: courseName)
-            try course.insert(db)
+            try Course.insert(course).execute(db)
         }
         
         // Add one shopping list (freeform with example format) to database
         let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
-        try shoppingList.insert(db)
+        try ShoppingList.insert(shoppingList).execute(db)
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):

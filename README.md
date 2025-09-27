@@ -7,7 +7,7 @@ Give my history with MacGourmet and my desire to import as much recipe data as p
 
 ## Technical Details 
 
-Salty is written in Swift, making primary use of SwiftUI for the interface and GRDB (via SharingGRDB) for persistence, ultimately making use of SQLite.
+Salty is written in Swift, making primary use of SwiftUI for the interface and GRDB (via SQLiteData) for persistence, ultimately making use of SQLite.
 
 ### Building and Targets
 

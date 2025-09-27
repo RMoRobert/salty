@@ -6,7 +6,7 @@
 
 import Foundation
 import OSLog
-import SharingGRDB
+import SQLiteData
 
 @Observable
 @MainActor
@@ -83,7 +83,7 @@ class CreateRecipeFromWebViewModel {
         
         do {
             try database.write { db in
-                try recipe.insert(db)
+                try Recipe.insert(recipe).execute(db)
             }
             logger.info("Recipe saved successfully: \(self.recipe.id)")
         } catch {

@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 struct LibraryCoursesEditView: View {
     @StateObject private var viewModel = LibraryCoursesEditViewModel()

@@ -7,15 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D402E0692E7F253600B020D5 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = D402E0682E7F253600B020D5 /* SQLiteData */; };
+		D402E06B2E7F253600B020D5 /* SQLiteDataTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D402E06A2E7F253600B020D5 /* SQLiteDataTestSupport */; };
 		D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78962DFF646A0067A88D /* SwiftHtml */; };
 		D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */ = {isa = PBXBuildFile; productRef = D45D789B2DFF7B8A0067A88D /* Flow */; };
 		D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78A02DFF7E950067A88D /* WebViewKit */; };
 		D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = D47AF4B62E25D3E30001E4D4 /* SwiftSoup */; };
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
-		D47F90112DF3600C00A64304 /* SharingGRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D47F90102DF3600C00A64304 /* SharingGRDB */; };
-		D47F90132DF3600C00A64304 /* SharingGRDBCore in Frameworks */ = {isa = PBXBuildFile; productRef = D47F90122DF3600C00A64304 /* SharingGRDBCore */; };
-		D47F90152DF3600C00A64304 /* StructuredQueriesGRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D47F90142DF3600C00A64304 /* StructuredQueriesGRDB */; };
-		D47F90172DF3600C00A64304 /* StructuredQueriesGRDBCore in Frameworks */ = {isa = PBXBuildFile; productRef = D47F90162DF3600C00A64304 /* StructuredQueriesGRDBCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,13 +86,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */,
-				D47F90172DF3600C00A64304 /* StructuredQueriesGRDBCore in Frameworks */,
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
-				D47F90152DF3600C00A64304 /* StructuredQueriesGRDB in Frameworks */,
+				D402E0692E7F253600B020D5 /* SQLiteData in Frameworks */,
 				D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */,
 				D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */,
-				D47F90112DF3600C00A64304 /* SharingGRDB in Frameworks */,
-				D47F90132DF3600C00A64304 /* SharingGRDBCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +97,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D402E06B2E7F253600B020D5 /* SQLiteDataTestSupport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,14 +161,11 @@
 			);
 			name = Salty;
 			packageProductDependencies = (
-				D47F90102DF3600C00A64304 /* SharingGRDB */,
-				D47F90122DF3600C00A64304 /* SharingGRDBCore */,
-				D47F90142DF3600C00A64304 /* StructuredQueriesGRDB */,
-				D47F90162DF3600C00A64304 /* StructuredQueriesGRDBCore */,
 				D45D78962DFF646A0067A88D /* SwiftHtml */,
 				D45D789B2DFF7B8A0067A88D /* Flow */,
 				D45D78A02DFF7E950067A88D /* WebViewKit */,
 				D47AF4B62E25D3E30001E4D4 /* SwiftSoup */,
+				D402E0682E7F253600B020D5 /* SQLiteData */,
 			);
 			productName = Salty;
 			productReference = D47F8FDF2DF35EB300A64304 /* Salty.app */;
@@ -196,6 +189,7 @@
 			);
 			name = SaltyTests;
 			packageProductDependencies = (
+				D402E06A2E7F253600B020D5 /* SQLiteDataTestSupport */,
 			);
 			productName = SaltyTests;
 			productReference = D47F8FED2DF35EB400A64304 /* SaltyTests.xctest */;
@@ -257,11 +251,11 @@
 			mainGroup = D47F8FD62DF35EB300A64304;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */,
 				D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */,
 				D45D789A2DFF7B8A0067A88D /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */,
 				D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */,
 				D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
+				D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D47F8FE02DF35EB300A64304 /* Products */;
@@ -459,8 +453,9 @@
 		D47F90022DF35EB400A64304 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = SaltyGlassIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -480,6 +475,7 @@
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = SaltyGlassIcon;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -507,8 +503,9 @@
 		D47F90032DF35EB400A64304 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = SaltyGlassIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -528,6 +525,7 @@
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = SaltyGlassIcon;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -688,6 +686,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/sqlite-data/";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 		D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/BinaryBirds/swift-html";
@@ -720,17 +726,19 @@
 				minimumVersion = 2.9.5;
 			};
 		};
-		D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pointfreeco/sharing-grdb";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.4.1;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D402E0682E7F253600B020D5 /* SQLiteData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */;
+			productName = SQLiteData;
+		};
+		D402E06A2E7F253600B020D5 /* SQLiteDataTestSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */;
+			productName = SQLiteDataTestSupport;
+		};
 		D45D78962DFF646A0067A88D /* SwiftHtml */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */;
@@ -750,26 +758,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
 			productName = SwiftSoup;
-		};
-		D47F90102DF3600C00A64304 /* SharingGRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = SharingGRDB;
-		};
-		D47F90122DF3600C00A64304 /* SharingGRDBCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = SharingGRDBCore;
-		};
-		D47F90142DF3600C00A64304 /* StructuredQueriesGRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = StructuredQueriesGRDB;
-		};
-		D47F90162DF3600C00A64304 /* StructuredQueriesGRDBCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D47F900F2DF3600C00A64304 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = StructuredQueriesGRDBCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

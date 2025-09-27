@@ -5,7 +5,7 @@
 //  Created by Robert on 6/6/25.
 //
 
-import SharingGRDB
+import SQLiteData
 import SwiftUI
 
 @main

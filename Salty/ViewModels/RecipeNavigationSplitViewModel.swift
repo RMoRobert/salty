@@ -7,7 +7,7 @@
 
 import Foundation
 import OSLog
-import SharingGRDB
+import SQLiteData
 
 // MARK: - Notification Names
 
@@ -45,7 +45,7 @@ class RecipeNavigationSplitViewModel {
     @Dependency(\.defaultDatabase)
     private var database
     
-    // MARK: - Data (using SharingGRDB property wrappers)
+    // MARK: - Data (using SQLiteData property wrappers)
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE"))
     var recipes: [Recipe]
@@ -85,7 +85,7 @@ class RecipeNavigationSplitViewModel {
             do {
                 let recipeIds = try database.read { db in
                     try RecipeCategory
-                        .filter(Column("categoryId") == category.id)
+                        .where { $0.categoryId == category.id }
                         .fetchAll(db)
                         .map { $0.recipeId }
                 }
@@ -147,8 +147,6 @@ class RecipeNavigationSplitViewModel {
         draftRecipe = newRecipe
         recipeToEditID = newRecipe.id
         showingEditSheet = true
-        
-        logger.info("New recipe draft created: \(newRecipe.id)")
     }
     
     func deleteSelectedRecipes() {
@@ -156,8 +154,9 @@ class RecipeNavigationSplitViewModel {
         do {
             let _ = try database.write { db in
                 try Recipe
-                    .filter(selectedRecipeIDs.contains(Column("id")))
-                    .deleteAll(db)
+                    .where { selectedRecipeIDs.contains($0.id) }
+                    .delete()
+                    .execute(db)
             }
             selectedRecipeIDs.removeAll()
         } catch {
@@ -170,8 +169,9 @@ class RecipeNavigationSplitViewModel {
         do {
             let _ = try database.write { db in
                 try Recipe
-                    .filter(Column("id") == id)
-                    .deleteAll(db)
+                    .where { $0.id == id }
+                    .delete()
+                    .execute(db)
             }
         } catch {
             logger.error("Error deleting recipe \(id): \(error)")
@@ -209,8 +209,6 @@ class RecipeNavigationSplitViewModel {
         
         // Clear the draft since it's now persisted
         draftRecipe = nil
-        
-        logger.info("New recipe saved and selected: \(recipeId)")
     }
     
     // MARK: - Export Methods

@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 /// View-only star rating for recipes (0-5 stars)
 

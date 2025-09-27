@@ -5,7 +5,7 @@
 //  Created by Robert on 7/3/23.
 //
 
-import SharingGRDB
+import SQLiteData
 import SwiftUI
 
 struct DifficultyView: View {

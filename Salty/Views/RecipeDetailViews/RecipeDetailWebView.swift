@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 import WebViewKit
 
 struct RecipeDetailWebView: View {

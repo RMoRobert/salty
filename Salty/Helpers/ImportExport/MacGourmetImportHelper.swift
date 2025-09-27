@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SharingGRDB
+import SQLiteData
 import OSLog
 
 struct MacGourmetImportHelper: RecipeFileImporterProtocol {
@@ -33,13 +33,15 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                         var recipe = mgRecipe.convertToRecipe(imageData: &imgData, categories: &categories)
                         
                         // Save the recipe
-                        try recipe.insert(db)
+                        try Recipe.insert {
+                            recipe
+                        }.execute(db)
                         
                         // Save image if present (this needs to happen after recipe is saved)
                         if let imgData = imgData {
                             recipe.setImage(imgData)
                             // Update the recipe in database with image info
-                            try recipe.update(db)
+                            try Recipe.update(recipe).execute(db)
                         }
                         
                         // Save categories if present
@@ -49,23 +51,28 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                             
                             for categoryName in uniqueCategories {
                                 // Find existing category or create new one
-                                var category = try Category.filter(Column("name") == categoryName).fetchOne(db)
+                                var category = try Category.where { $0.name == categoryName }.fetchOne(db)
+                                
                                 if category == nil {
                                     category = Category(id: UUID().uuidString, name: categoryName)
-                                    try category!.insert(db)
+                                    try Category.insert {
+                                        category!
+                                    }.execute(db)
                                 }
                                 
                                 guard let category = category else { continue }
                                 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeCategory
-                                    .filter(Column("recipeId") == recipe.id && Column("categoryId") == category.id)
+                                    .where { $0.recipeId == recipe.id && $0.categoryId == category.id }
                                     .fetchOne(db)
                                 
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
                                     let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: category.id)
-                                    try recipeCategory.insert(db)
+                                    try RecipeCategory.insert {
+                                        recipeCategory
+                                    }.execute(db)
                                 }
                             }
                         }
@@ -73,15 +80,15 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                         // Set course if present
                         if let courseName = mgRecipe.courseName, !courseName.isEmpty, courseName != "--" {
                             // Check for existing course or create new one
-                            var course = try Course.filter(Column("name") == courseName).fetchOne(db)
+                            var course = try Course.where { $0.name == courseName }.fetchOne(db)
                             if course == nil {
                                 course = Course(id: UUID().uuidString, name: courseName)
-                                try course!.insert(db)
+                                try Course.insert { course! }.execute(db)
                             }
                             // Set the recipe's courseId if found or inserted
                             if let course = course {
                                 recipe.courseId = course.id
-                                try recipe.update(db)
+                                try Recipe.update(recipe).execute(db)
                             }
                         }
                     }

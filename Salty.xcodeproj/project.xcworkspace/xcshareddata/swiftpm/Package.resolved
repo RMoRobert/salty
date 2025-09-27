@@ -1,5 +1,5 @@
 {
-  "originHash" : "6a22b292791448a73c4fb2fb2c7ae814b93b370fdf9d69897d185e1863c4a164",
+  "originHash" : "b5be45bc356e2fa69ba759b0737831b37d905f96e596f488adfb67565d2e26b8",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -20,12 +20,12 @@
       }
     },
     {
-      "identity" : "sharing-grdb",
+      "identity" : "sqlite-data",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pointfreeco/sharing-grdb",
+      "location" : "https://github.com/pointfreeco/sqlite-data/",
       "state" : {
-        "revision" : "b8bbdc5762d6ae30fb1e45a780e134ae1953d284",
-        "version" : "0.8.0"
+        "revision" : "7d1ffa5e20e34eb5f857a0765081a6ef6408d268",
+        "version" : "1.0.0"
       }
     },
     {
@@ -70,7 +70,7 @@
       "location" : "https://github.com/pointfreeco/swift-dependencies",
       "state" : {
         "revision" : "a10f9feeb214bc72b5337b6ef6d5a029360db4cc",
-        "version" : "1.9.5"
+        "version" : "1.10.0"
       }
     },
     {

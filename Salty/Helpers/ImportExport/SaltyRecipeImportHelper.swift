@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SharingGRDB
+import SQLiteData
 import OSLog
 
 struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
@@ -44,13 +44,13 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                         var recipe = saltyRecipe.convertToRecipe()
                         
                         // Save the recipe
-                        try recipe.insert(db)
+                        try Recipe.insert{ recipe }.execute(db)
                         
                         // Save image if present (this needs to happen after recipe is saved)
                         if let imageData = saltyRecipe.imageData {
                             recipe.setImage(imageData)
                             // Update the recipe in database with image info
-                            try recipe.update(db)
+                            try Recipe.update(recipe).execute(db)
                         }
                         
                         // Save categories if present
@@ -60,23 +60,27 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             
                             for categoryName in uniqueCategories {
                                 // Find existing category or create new one
-                                var category = try Category.filter(Column("name") == categoryName).fetchOne(db)
+                                var category = try Category.where { $0.name == categoryName }.fetchOne(db)
                                 if category == nil {
                                     category = Category(id: UUID().uuidString, name: categoryName)
-                                    try category!.insert(db)
+                                    try Category.insert {
+                                        category!
+                                    }.execute(db)
                                 }
                                 
                                 guard let category = category else { continue }
                                 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeCategory
-                                    .filter(Column("recipeId") == recipe.id && Column("categoryId") == category.id)
+                                    .where { $0.recipeId == recipe.id && $0.categoryId == category.id }
                                     .fetchOne(db)
                                 
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
                                     let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: category.id)
-                                    try recipeCategory.insert(db)
+                                    try RecipeCategory.insert {
+                                        recipeCategory
+                                    }.execute(db)
                                 }
                             }
                         }
@@ -88,23 +92,23 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             
                             for tagName in uniqueTags {
                                 // Find existing tag or create new one
-                                var tag = try Tag.filter(Column("name") == tagName).fetchOne(db)
+                                var tag = try Tag.where { $0.name == tagName }.fetchOne(db)
                                 if tag == nil {
                                     tag = Tag(id: UUID().uuidString, name: tagName)
-                                    try tag!.insert(db)
+                                    try Tag.insert{ tag! }.execute(db)
                                 }
                                 
                                 guard let tag = tag else { continue }
                                 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeTag
-                                    .filter(Column("recipeId") == recipe.id && Column("tagId") == tag.id)
+                                    .where { $0.recipeId == recipe.id && $0.tagId == tag.id }
                                     .fetchOne(db)
                                 
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
                                     let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tag.id)
-                                    try recipeTag.insert(db)
+                                    try RecipeTag.insert{ recipeTag }.execute(db)
                                 }
                             }
                         }
@@ -112,15 +116,15 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                         // Set course if present
                         if let courseName = saltyRecipe.course, !courseName.isEmpty {
                             // Check for existing course or create new one
-                            var course = try Course.filter(Column("name") == courseName).fetchOne(db)
+                            var course = try Course.where { $0.name == courseName }.fetchOne(db)
                             if course == nil {
                                 course = Course(id: UUID().uuidString, name: courseName)
-                                try course!.insert(db)
+                                try Course.insert{ course! }.execute(db)
                             }
                             // Set the recipe's courseId if found or inserted
                             if let course = course {
                                 recipe.courseId = course.id
-                                try recipe.update(db)
+                                try Recipe.update(recipe).execute(db)
                             }
                         }
                     }

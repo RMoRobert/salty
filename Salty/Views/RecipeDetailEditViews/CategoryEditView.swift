@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 //struct CategoryEditView: View {
 //    @Binding var recipe: Recipe
@@ -117,7 +117,7 @@ struct CategoryEditView: View {
         do {
             let selectedIDs = try database.read { db in
                 try RecipeCategory
-                    .filter(Column("recipeId") == recipe.id)
+                    .where { $0.recipeId == recipe.id }
                     .fetchAll(db)
                     .map { $0.categoryId }
             }
@@ -136,15 +136,16 @@ struct CategoryEditView: View {
                 let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
                 for categoryId in categoriesToRemove {
                     try RecipeCategory
-                        .filter(Column("recipeId") == recipe.id && Column("categoryId") == categoryId)
-                        .deleteAll(db)
+                        .where { $0.recipeId == recipe.id && $0.categoryId == categoryId }
+                        .delete()
+                        .execute(db)
                 }
                 
                 // Add newly selected categories
                 let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
                 for categoryId in categoriesToAdd {
                     let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
-                    try recipeCategory.insert(db)
+                    try RecipeCategory.insert(recipeCategory).execute(db)
                 }
             }
         } catch {
@@ -160,7 +161,7 @@ struct CategoryEditView: View {
             // Check if a category with this name already exists (case-insensitive)
             let existingCategory = try database.read { db in
                 try Category
-                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
                     .fetchOne(db)
             }
             
@@ -173,10 +174,12 @@ struct CategoryEditView: View {
             // Create the new category
             let newCategory = Category(id: UUID().uuidString, name: trimmedName)
             try database.write { db in
-                try newCategory.insert(db)
+                try Category.insert {
+                    newCategory
+                }.execute(db)
             }
             
-            // Add to selected categories (but don't save to database yet)
+            // Add to selected categories (but don't save to database yet)?
             selectedCategoryIDs.insert(newCategory.id)
             newCategoryName = ""
         } catch {

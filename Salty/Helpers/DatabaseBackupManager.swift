@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SharingGRDB
+import SQLiteData
 import OSLog
 
 public final class DatabaseBackupManager {

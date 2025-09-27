@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 @MainActor
 class LibraryCoursesEditViewModel: ObservableObject {
@@ -35,12 +35,18 @@ class LibraryCoursesEditViewModel: ObservableObject {
         do {
             try database.write { db in
                 // Update recipes that reference this course to have no course
-                try Recipe
-                    .filter(Column("courseId") == courseToDelete.id)
-                    .updateAll(db, Column("courseId").set(to: nil))
+                // TODO: Is this needed or will DB take care of with cascade? 
+                let recipesToUpdate = try Recipe
+                    .where { $0.courseId == courseToDelete.id }
+                    .fetchAll(db)
+                
+                for var recipe in recipesToUpdate {
+                    recipe.courseId = nil
+                    try Recipe.update(recipe).execute(db)
+                }
                 
                 // Then delete the course itself
-                try courseToDelete.delete(db)
+                try Course.delete(courseToDelete).execute(db)
             }
             
             // Update selection indices after deletion
@@ -85,10 +91,10 @@ class LibraryCoursesEditViewModel: ObservableObject {
         guard !trimmedName.isEmpty else { return }
         
         do {
-            // Check if a course with this name already exists (case-insensitive)
+            // Check if a course .cowith this name already exists (case-insensitive)
             let existingCourse = try database.read { db in
                 try Course
-                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
                     .fetchOne(db)
             }
             
@@ -101,7 +107,9 @@ class LibraryCoursesEditViewModel: ObservableObject {
             // Create the new course
             let newCourse = Course(id: UUID().uuidString, name: trimmedName)
             try database.write { db in
-                try newCourse.insert(db)
+                try Course.insert {
+                    newCourse
+                }.execute(db)
             }
             
             // Select the new course and scroll to it
@@ -122,7 +130,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
             // Check if a course with this name already exists (case-insensitive)
             let existingCourse = try database.read { db in
                 try Course
-                    .filter(sql: "LOWER(name) = LOWER(?) AND id != ?", arguments: [trimmedName, courses[index].id])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) && $0.id != courses[index].id }
                     .fetchOne(db)
             }
             
@@ -136,7 +144,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
             var updatedCourse = courses[index]
             updatedCourse.name = trimmedName
             try database.write { db in
-                try updatedCourse.update(db)
+                try Course.update(updatedCourse).execute(db)
             }
             
             editingCourseIndex = nil

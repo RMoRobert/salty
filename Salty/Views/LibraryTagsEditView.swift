@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 struct LibraryTagsEditView: View {
     @Bindable private var viewModel = LibraryTagsEditViewModel()

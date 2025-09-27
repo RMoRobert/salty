@@ -7,7 +7,7 @@
 
 import Foundation
 import OSLog
-import SharingGRDB
+import SQLiteData
 
 @Observable
 @MainActor
@@ -64,7 +64,7 @@ class RecipeDetailViewModel {
         do {
             let recipeCategoryIds = try database.read { db in
                 try RecipeCategory
-                    .filter(RecipeCategory.Columns.recipeId == recipe.id)
+                    .where { $0.recipeId == recipe.id }
                     .fetchAll(db)
                     .map { $0.categoryId }
             }

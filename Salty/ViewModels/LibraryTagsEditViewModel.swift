@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 @MainActor
 @Observable
@@ -38,7 +38,7 @@ class LibraryTagsEditViewModel {
         do {
             try database.write { db in
                 // Delete the tag (RecipeTag associations will be automatically removed due to cascade)
-                try tagToDelete.delete(db)
+                try Tag.delete(tagToDelete).execute(db)
             }
             
             // Update selection indices after deletion
@@ -86,7 +86,7 @@ class LibraryTagsEditViewModel {
             // Check if a tag with this name already exists (case-insensitive)
             let existingTag = try database.read { db in
                 try Tag
-                    .filter(sql: "LOWER(name) = LOWER(?)", arguments: [trimmedName])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
                     .fetchOne(db)
             }
             
@@ -99,7 +99,7 @@ class LibraryTagsEditViewModel {
             // Create the new tag
             let newTag = Tag(id: UUID().uuidString, name: trimmedName)
             try database.write { db in
-                try newTag.insert(db)
+                try Tag.insert(newTag).execute(db)
             }
             
                          // Select the new tag and scroll to it
@@ -120,7 +120,7 @@ class LibraryTagsEditViewModel {
             // Check if a tag with this name already exists (case-insensitive)
             let existingTag = try database.read { db in
                 try Tag
-                    .filter(sql: "LOWER(name) = LOWER(?) AND id != ?", arguments: [trimmedName, tags[index].id])
+                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) && $0.id != tags[index].id }
                     .fetchOne(db)
             }
             
@@ -134,7 +134,7 @@ class LibraryTagsEditViewModel {
             var updatedTag = tags[index]
             updatedTag.name = trimmedName
             try database.write { db in
-                try updatedTag.update(db)
+                try Tag.update(updatedTag).execute(db)
             }
             
             editingTagIndex = nil

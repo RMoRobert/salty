@@ -7,7 +7,7 @@
 
 import OSLog
 import Foundation
-import SharingGRDB
+import SQLiteData
 
 #if os(iOS)
 import UIKit

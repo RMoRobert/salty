@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 
 struct RecipeImageView: View {
     @State var recipe: Recipe

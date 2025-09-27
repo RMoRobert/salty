@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 import UniformTypeIdentifiers
 
 struct ImportRecipesFromFileView: View {
