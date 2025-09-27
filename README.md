@@ -11,7 +11,7 @@ Salty is written in Swift, making primary use of SwiftUI for the interface and G
 
 ### Building and Targets
 
-Saltly is typically built using the latest XCode on the latest macOS (excluding betas), currently XCode 16.4 on macOS Sequoia (15.x). We have tested only on macOS 15 and iOS 18; compatibility with older versions is not a priority at this moment (but we will aim for forwards-compatibility).
+Saltly is typically built using the latest XCode on the latest or nearly latest macOS (excluding betas), currently XCode 26 on macOS Sequoia (15) or Tahoe (26). We have tested only on macOS 15 and 26 and iOS 18 and 26; compatibility with older versions is unlikely at the moment (but I will aim for forwards-compatibility).
 
 # License
 
