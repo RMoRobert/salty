@@ -150,14 +150,30 @@ class RecipeNavigationSplitViewModel {
     }
     
     func deleteSelectedRecipes() {
-        // TODO: Delete images or schedule cleanup methods to remove image
         do {
+            // First, get the image filenames from selected recipes before deleting them
+            let imageFilenames = try database.read { db in
+                try Recipe
+                    .select { $0.imageFilename }
+                    .where { selectedRecipeIDs.contains($0.id) }
+                    .fetchAll(db)
+            }
+            
+            // Delete image files from filesystem
+            for imageFilename in imageFilenames {
+                if let filename = imageFilename {
+                    RecipeImageManager.shared.deleteImage(filename: filename)
+                }
+            }
+            
+            // Now delete the recipes from the database
             let _ = try database.write { db in
                 try Recipe
                     .where { selectedRecipeIDs.contains($0.id) }
                     .delete()
                     .execute(db)
             }
+            
             selectedRecipeIDs.removeAll()
         } catch {
             logger.error("Error deleting recipes: \(error)")
@@ -165,8 +181,23 @@ class RecipeNavigationSplitViewModel {
     }
     
     func deleteRecipe(id: String) {
-        // TODO: Delete images or schedule cleanup methods to remove image
         do {
+            // First, get the image filename from the recipe before deleting it
+            let imageFilenames = try database.read { db in
+                try Recipe
+                    .select { $0.imageFilename }
+                    .where { $0.id == id }
+                    .fetchAll(db)
+            }
+            
+            // Delete image file from filesystem if it exists
+            for imageFilename in imageFilenames {
+                if let filename = imageFilename {
+                    RecipeImageManager.shared.deleteImage(filename: filename)
+                }
+            }
+            
+            // Now delete the recipe from the database
             let _ = try database.write { db in
                 try Recipe
                     .where { $0.id == id }
