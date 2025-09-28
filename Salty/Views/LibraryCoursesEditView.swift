@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import SQLiteData
 
 struct LibraryCoursesEditView: View {
     @StateObject private var viewModel = LibraryCoursesEditViewModel()

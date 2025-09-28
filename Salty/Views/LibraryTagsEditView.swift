@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import SQLiteData
 
 struct LibraryTagsEditView: View {
     @Bindable private var viewModel = LibraryTagsEditViewModel()

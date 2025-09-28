@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import SQLiteData
 
 
 struct RatingEditView: View {

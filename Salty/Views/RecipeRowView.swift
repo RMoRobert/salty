@@ -6,8 +6,6 @@
 //
 
 import SwiftUI
-import SQLiteData
-
 
 func createXPImage(_ value: Data) -> Image {
 #if canImport(UIKit)
