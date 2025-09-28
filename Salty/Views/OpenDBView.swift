@@ -76,7 +76,7 @@ struct OpenDBView: View {
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                     Button("Revert to Default Location") {
-                        UserDefaults.standard.removeObject(forKey: "databaseLocation")
+                        UserDefaults.standard.removeObject(forKey: FileManager.userDefaultsDatabaseParentLocationKey)
                         showingSuccessAlert = true
                     }
                     #if os(macOS)

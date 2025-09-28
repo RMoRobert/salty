@@ -13,6 +13,11 @@ extension FileManager {
     static let dbFileName = "saltyRecipeDB"
     static let dbFileExt = "sqlite"
     static let backupFolderName = "Backup"
+    #if DEBUG
+    static let userDefaultsDatabaseParentLocationKey = "databaseParentLocation-DEV"
+    #else
+    static let userDefaultsDatabaseParentLocationKey = "databaseParentLocation"
+    #endif
     
     static let userDocumentsDirectory = {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -29,16 +34,16 @@ extension FileManager {
     
     // Legacy support - will be removed
     static var customSaltyLibraryDirectory: URL? {
-        guard let bookmarkData = UserDefaults.standard.data(forKey: "databaseParentLocation") else {
+        guard let bookmarkData = UserDefaults.standard.data(forKey: userDefaultsDatabaseParentLocationKey) else {
             return nil
         }
         var wasStale = false
         guard let parentLocation = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) else {
-            print("Unable to resolve databaseParentLocation")
+            print("Unable to resolve \(userDefaultsDatabaseParentLocationKey)")
             return nil
         }
         if wasStale {
-            let _ = refreshBookmark(for: "databaseParentLocation", at: parentLocation)
+            let _ = refreshBookmark(for: userDefaultsDatabaseParentLocationKey, at: parentLocation)
         }
         return parentLocation
     }
@@ -148,18 +153,17 @@ extension FileManager {
         }
     }
     
-    /// Saves bookmark for the parent directory only
+    /// Saves bookmark for the parent directory only (have tried saving bundle directory and image directory separately to see if helps with iOS issues but has not so far)
     static func saveCustomLocationBookmarks(parentDirectory: URL) throws {
-        // Save only the parent directory bookmark
+        // Save the parent directory bookmark
         let parentBookmark = try parentDirectory.bookmarkData(options: [])
-        UserDefaults.standard.set(parentBookmark, forKey: "databaseParentLocation")
-        
+        UserDefaults.standard.set(parentBookmark, forKey: userDefaultsDatabaseParentLocationKey)
         print("Saved bookmark for parent directory: \(parentDirectory.path)")
     }
     
     /// Clears the custom location bookmark
     static func clearCustomLocationBookmarks() {
-        UserDefaults.standard.removeObject(forKey: "databaseParentLocation")
+        UserDefaults.standard.removeObject(forKey: userDefaultsDatabaseParentLocationKey)
         print("Cleared custom location bookmark")
     }
     
@@ -197,7 +201,7 @@ extension FileManager {
     static func refreshCustomDatabaseBookmark() -> Bool {
         // Only refresh the parent bookmark since others are derived
         if let parentLocation = customSaltyLibraryDirectory {
-            return refreshBookmark(for: "databaseParentLocation", at: parentLocation)
+            return refreshBookmark(for: userDefaultsDatabaseParentLocationKey, at: parentLocation)
         }
         return false
     }
@@ -263,12 +267,12 @@ extension FileManager {
             diagnostics["imagesLocationPath"] = saltyImageFolderUrl.path
             
             // Check parent bookmark status
-            if let bookmarkData = UserDefaults.standard.data(forKey: "databaseParentLocation") {
+            if let bookmarkData = UserDefaults.standard.data(forKey: userDefaultsDatabaseParentLocationKey) {
                 var wasStale = false
                 if let resolvedURL = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &wasStale) {
-                    diagnostics["databaseParentLocation_resolved"] = true
-                    diagnostics["databaseParentLocation_wasStale"] = wasStale
-                    diagnostics["databaseParentLocation_path"] = resolvedURL.path
+                    diagnostics["\(userDefaultsDatabaseParentLocationKey)_resolved"] = true
+                    diagnostics["\(userDefaultsDatabaseParentLocationKey)_wasStale"] = wasStale
+                    diagnostics["\(userDefaultsDatabaseParentLocationKey)_path"] = resolvedURL.path
                     
                     // Test access to parent directory
                     if resolvedURL.startAccessingSecurityScopedResource() {
@@ -280,22 +284,22 @@ extension FileManager {
                                 includingPropertiesForKeys: [.nameKey],
                                 options: [.skipsHiddenFiles]
                             )
-                            diagnostics["databaseParentLocation_accessible"] = true
-                            diagnostics["databaseParentLocation_contents"] = contents.map { $0.lastPathComponent }
+                            diagnostics["\(userDefaultsDatabaseParentLocationKey)_accessible"] = true
+                            diagnostics["\(userDefaultsDatabaseParentLocationKey)contents"] = contents.map { $0.lastPathComponent }
                         } catch {
-                            diagnostics["databaseParentLocation_accessible"] = false
-                            diagnostics["databaseParentLocation_accessError"] = error.localizedDescription
+                            diagnostics["\(userDefaultsDatabaseParentLocationKey)_accessible"] = false
+                            diagnostics["\(userDefaultsDatabaseParentLocationKey)_accessError"] = error.localizedDescription
                         }
                     } else {
-                        diagnostics["databaseParentLocation_accessible"] = false
-                        diagnostics["databaseParentLocation_accessError"] = "Failed to start accessing security-scoped resource"
+                        diagnostics["\(userDefaultsDatabaseParentLocationKey)_accessible"] = false
+                        diagnostics["\(userDefaultsDatabaseParentLocationKey)_accessError"] = "Failed to start accessing security-scoped resource"
                     }
                 } else {
-                    diagnostics["databaseParentLocation_resolved"] = false
-                    diagnostics["databaseParentLocation_resolveError"] = "Unable to resolve bookmark data"
+                    diagnostics["\(userDefaultsDatabaseParentLocationKey)_resolved"] = false
+                    diagnostics["\(userDefaultsDatabaseParentLocationKey)_resolveError"] = "Unable to resolve bookmark data"
                 }
             } else {
-                diagnostics["databaseParentLocation_exists"] = false
+                diagnostics["\(userDefaultsDatabaseParentLocationKey)_exists"] = false
             }
             
             // Test the actual database path that would be used
@@ -388,7 +392,7 @@ extension FileManager {
         var guidance = "Custom location configured. "
         
         // Check if bookmarks are resolving
-        let parentResolved = diagnostics["databaseParentLocation_resolved"] as? Bool ?? false
+        let parentResolved = diagnostics["\(userDefaultsDatabaseParentLocationKey)_resolved"] as? Bool ?? false
         let bundleResolved = diagnostics["databaseBundleLocation_resolved"] as? Bool ?? false
         let imagesResolved = diagnostics["imagesLocation_resolved"] as? Bool ?? false
         
