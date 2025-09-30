@@ -17,8 +17,12 @@
 			</array>
 		</dict>
 	</array>
-	<key>LSSupportsOpeningDocumentsInPlace-iphoneos</key>
-	<false/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<string>$(CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS)</string>
+	<key>CFBundleExecutable</key>
+	<string></string>
+	<key>CFBundleIdentifier</key>
+	<string></string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
