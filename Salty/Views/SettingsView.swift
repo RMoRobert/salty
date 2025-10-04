@@ -26,7 +26,7 @@ struct SettingsView: View {
         }
         #if os(macOS)
         .scenePadding()
-        .frame(maxWidth: 450, minHeight: 200)
+        .frame(maxWidth: 450, minHeight: 400)
         #endif
         .onAppear {
             diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
@@ -230,14 +230,16 @@ struct AdvancedSettingsView: View {
                     .font(.headline)
                 
                 Button("Clean Up Orphaned Images") {
-                    print("TO DO!")
-                    //RecipeImageManager.shared.cleanupOrphanedImages()
+                    Task {
+                        await RecipeImageManager.shared.cleanupOrphanedImages()
+                    }
                 }
                 .buttonStyle(.bordered)
                 
-                Text("COMING SOON: This will remove all images stored alongside your recipe library database that are not referenced in the database. It should be safe, but we suggest having a backup before running (as you should periodically regardless).")
+                Text("This will remove all images stored alongside your recipe library database that are not referenced in the database. It should be safe, but we suggest having a backup before running (as you should periodically regardless).")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding()

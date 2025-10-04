@@ -23,6 +23,8 @@ class RecipeImageManager {
     private let logger = Logger(subsystem: "Salty", category: "App")
     private let imagesDirectory: URL
     
+    @Dependency(\.defaultDatabase) private var database
+    
     private init() {
         self.imagesDirectory = FileManager.saltyImageFolderUrl
         // Create images directory if it doesn't exist
@@ -36,50 +38,48 @@ class RecipeImageManager {
     
     /// Compares image files in the images directory with database references and deletes orphaned files
     /// This function should be called periodically to clean up unused image files
-    func cleanupOrphanedImages() /*async*/ {
+    func cleanupOrphanedImages() async {
         do {
-            // Ensure the images directory exists before attempting cleanup
-            try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true, attributes: nil)
+            // Check if the images directory exists before attempting cleanup
+            guard FileManager.default.fileExists(atPath: imagesDirectory.path) else {
+                logger.info("Images directory does not exist, skipping cleanup")
+                return
+            }
             
             // Get all image filenames from the database
-            let referencedFilenames =
-                Recipe.select {
-                        ($0.imageFilename)
-                    }
-                    .where {
-                        ($0.imageFilename != nil)
-                    }
-
+            let referencedFilenames = try await database.read { db in
+                try String.fetchAll(db, sql: "SELECT imageFilename FROM recipe WHERE imageFilename IS NOT NULL")
+            }
+            
             // Get all files in the images directory
             let fileManager = FileManager.default
             let imageFiles = try fileManager.contentsOfDirectory(at: imagesDirectory, includingPropertiesForKeys: nil)
                 .filter { $0.isFileURL }
                 .map { $0.lastPathComponent }
             
-            // TODO: Finish this!
+            // Find orphaned files (files that exist on disk but are not referenced in the database)
+            let orphanedFiles = imageFiles.filter { filename in
+                !referencedFilenames.contains(filename)
+            }
             
-//            let orphanedFiles = imageFiles.filter { filename in
-//                !referencedFilenames.contains(filename)
-//            }
-//            
-//            // Delete orphaned files
-//            var deletedCount = 0
-//            for filename in orphanedFiles {
-//                do {
-//                    let fileURL = imagesDirectory.appending(component: filename)
-//                    try fileManager.removeItem(at: fileURL)
-//                    deletedCount += 1
-//                    logger.info("Deleted orphaned image file: \(filename)")
-//                } catch {
-//                    logger.error("Failed to delete orphaned image file \(filename): \(error)")
-//                }
-//            }
-//            
-//            if deletedCount > 0 {
-//                logger.info("Cleanup completed: deleted \(deletedCount) orphaned image files")
-//            } else {
-//                logger.info("Cleanup completed: no orphaned image files found")
-//            }
+            // Delete orphaned files
+            var deletedCount = 0
+            for filename in orphanedFiles {
+                do {
+                    let fileURL = imagesDirectory.appending(component: filename)
+                    try fileManager.removeItem(at: fileURL)
+                    deletedCount += 1
+                    logger.info("Deleted orphaned image file: \(filename)")
+                } catch {
+                    logger.error("Failed to delete orphaned image file \(filename): \(error)")
+                }
+            }
+            
+            if deletedCount > 0 {
+                logger.info("Cleanup completed: deleted \(deletedCount) orphaned image files")
+            } else {
+                logger.info("Cleanup completed: no orphaned image files found")
+            }
             
         } catch {
             logger.error("Error during image cleanup: \(error)")
