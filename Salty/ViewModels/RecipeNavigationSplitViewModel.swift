@@ -14,7 +14,6 @@ import SQLiteData
 extension Notification.Name {
     static let exportSelectedRecipes = Notification.Name("exportSelectedRecipes")
     static let showImportFromFileSheet = Notification.Name("showImportFromFileSheet")
-    static let showOpenDatabaseSheet = Notification.Name("showOpenDatabaseSheet")
     static let showCreateFromWebSheet = Notification.Name("showCreateFromWebSheet")
     static let sheetStateChanged = Notification.Name("sheetStateChanged")
 }
@@ -158,7 +157,7 @@ class RecipeNavigationSplitViewModel {
                     .where { selectedRecipeIDs.contains($0.id) }
                     .fetchAll(db)
             }
-            
+             
             // Delete image files from filesystem
             for imageFilename in imageFilenames {
                 if let filename = imageFilename {

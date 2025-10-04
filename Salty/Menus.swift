@@ -37,11 +37,6 @@ struct Menus: Commands {
        ToolbarCommands()
        SidebarCommands()
        CommandGroup(after: .newItem) {
-           Button("Open Database…") {
-               NotificationCenter.default.post(name: .showOpenDatabaseSheet, object: nil)
-           }
-           .disabled(sheetTracker.isAnySheetShown)
-           Divider()
            Button("Create Recipe from Web…") {
                #if os(iOS)
                NotificationCenter.default.post(name: .showCreateFromWebSheet, object: nil)

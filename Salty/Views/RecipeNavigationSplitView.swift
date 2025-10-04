@@ -20,7 +20,6 @@ struct RecipeNavigationSplitView: View {
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingEditLibTagsSheet = false
     @State private var showingEditLibCoursesSheet = false
-    @State private var showingOpenDBSheet = false
     @State private var showingImportFromFileSheet = false
     @State private var showingCreateFromImageSheet = false
     @State private var showingCreateFromWebSheet = false
@@ -31,7 +30,6 @@ struct RecipeNavigationSplitView: View {
         showingEditLibCategoriesSheet ||
         showingEditLibTagsSheet ||
         showingEditLibCoursesSheet ||
-        showingOpenDBSheet ||
         showingImportFromFileSheet ||
         showingCreateFromImageSheet ||
         showingCreateFromWebSheet ||
@@ -212,9 +210,7 @@ struct RecipeNavigationSplitView: View {
                         Button("Create Recipe from Web…") {
                             showingCreateFromWebSheet.toggle()
                         }
-                        Button("Open Database…") {
-                            showingOpenDBSheet.toggle()
-                        }
+
                         #if !os(macOS)
                         Divider()
                         Button("Settings…") {
@@ -382,12 +378,6 @@ struct RecipeNavigationSplitView: View {
                 viewModel.recipeToEditID = nil
             }
         }
-        .sheet(isPresented: $showingOpenDBSheet) {
-            OpenDBView()
-            #if os(macOS)
-            .frame(minWidth: 400, minHeight: 500)
-            #endif
-        }
         .sheet(isPresented: $showingCreateFromImageSheet) {
             CreateRecipeFromImageView()
             #if os(macOS)
@@ -440,9 +430,6 @@ struct RecipeNavigationSplitView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
             showingImportFromFileSheet = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showOpenDatabaseSheet)) { _ in
-            showingOpenDBSheet = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .showCreateFromWebSheet)) { _ in
             showingCreateFromWebSheet = true

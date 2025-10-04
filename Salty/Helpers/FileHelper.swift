@@ -397,7 +397,7 @@ extension FileManager {
         let imagesResolved = diagnostics["imagesLocation_resolved"] as? Bool ?? false
         
         if !parentResolved || !bundleResolved || !imagesResolved {
-            guidance += "Some bookmarks are not resolving properly. Try resetting to default and re-selecting the location. "
+            guidance += "Some file/folder location \"bookmarks\" are not resolving properly. Try re-selecting the location if custom or resetting to the default location. "
         }
         
         // Check if expected database is accessible

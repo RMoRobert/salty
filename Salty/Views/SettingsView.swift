@@ -37,71 +37,58 @@ struct SettingsView: View {
 struct DatabaseSettingsView: View {
     @Binding var diagnosticsInfo: [String: Any]
     @State private var showingResetConfirmation = false
+    @State private var showingOpenDatabaseSheet = false
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Troubleshooting Guidance Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Status & Guidance")
-                        .font(.headline)
-                    
-                    Text(FileManager.getDatabaseTroubleshootingGuidance())
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(8)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)
-                }
-                
-                Divider()
-                
+               
                 // Database Location Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Database Location")
                         .font(.headline)
+                        
+                    Button("Select Custom Database Location…") {
+                        showingOpenDatabaseSheet = true
+                    }
+                    .buttonStyle(.bordered)
                     
                     if FileManager.customSaltyLibraryDirectory != nil {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Custom Location")
+                            Text("Custom Library Location:")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Parent Directory:")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(6)
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(4)
-                            }
+                            Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
+                                .font(.caption)
+                                //.foregroundColor(.secondary)
+                                .padding(6)
+                                //.background(Color.gray.opacity(0.1))
+                                .cornerRadius(4)
                             
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Database Bundle:")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(6)
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(4)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Images Directory:")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                Text(FileManager.saltyImageFolderUrl.path)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(6)
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(4)
-                            }
+//                            VStack(alignment: .leading, spacing: 4) {
+//                                Text("Database Bundle:")
+//                                    .font(.caption)
+//                                    .fontWeight(.medium)
+//                                Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
+//                                    .padding(6)
+//                                    .background(Color.gray.opacity(0.1))
+//                                    .cornerRadius(4)
+//                            }
+//                            
+//                            VStack(alignment: .leading, spacing: 4) {
+//                                Text("Images Directory:")
+//                                    .font(.caption)
+//                                    .fontWeight(.medium)
+//                                Text(FileManager.saltyImageFolderUrl.path)
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
+//                                    .padding(6)
+//                                    .background(Color.gray.opacity(0.1))
+//                                    .cornerRadius(4)
+//                            }
                             
                             Button("Reset to Default Location", role: .destructive) {
                                 showingResetConfirmation = true
@@ -140,6 +127,14 @@ struct DatabaseSettingsView: View {
                         .buttonStyle(.bordered)
                     }
                     
+                    // Troubleshooting Guidance
+                    Text(FileManager.getDatabaseTroubleshootingGuidance())
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(6)                    
+                    
                     LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
                             DiagnosticRow(key: key, value: diagnosticsInfo[key])
@@ -156,6 +151,12 @@ struct DatabaseSettingsView: View {
             }
         } message: {
             Text("This will reset your database location to the default location. You'll need to restart the app for changes to take effect.")
+        }
+        .sheet(isPresented: $showingOpenDatabaseSheet) {
+            OpenDBView()
+            #if os(macOS)
+            .frame(minWidth: 400, minHeight: 500)
+            #endif
         }
     }
     
