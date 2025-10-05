@@ -26,7 +26,7 @@ struct SettingsView: View {
         }
         #if os(macOS)
         .scenePadding()
-        .frame(maxWidth: 450, minHeight: 400)
+        .frame(maxWidth: 450, minHeight: 350)
         #endif
         .onAppear {
             diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
@@ -194,7 +194,7 @@ struct AdvancedSettingsView: View {
                 Text("Database Backups")
                     .font(.headline)
                 
-                Text("Salty automatically creates and stores up to a few recent backups of your recipe library.")
+                Text("Salty automatically creates and stores up to a three recent backups of your recipe library.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(3)

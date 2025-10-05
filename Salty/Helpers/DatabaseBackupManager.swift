@@ -16,6 +16,9 @@ public final class DatabaseBackupManager {
     // MARK: - Constants
     private static let backupFileExtension = "zip"
     private static let backupRecencyThreshold: TimeInterval = 36 * 60 * 60 // 36 hours
+    // Keep additional backups farthe apart:
+    private static let backupRecencyThresholdFirstToSecond: TimeInterval = 120 * 60 * 6 * 2 // 120 hours (5 days)
+    private static let backupRecencyThresholdSecondToThird: TimeInterval = backupRecencyThresholdFirstToSecond * 4 // 20 days
     private static let maxBackupsToKeep = 3
     
     // MARK: - Backup Directory
@@ -174,14 +177,46 @@ public final class DatabaseBackupManager {
                     let date2 = try file2.resourceValues(forKeys: [.creationDateKey]).creationDate ?? Date.distantPast
                     return date1 > date2
                 }
-            
-            // Remove old backups if we have more than the maximum
-            if backupFiles.count > Self.maxBackupsToKeep {
-                let filesToDelete = Array(backupFiles.dropFirst(Self.maxBackupsToKeep))
-                for fileURL in filesToDelete {
-                    try FileManager.default.removeItem(at: fileURL)
-                    logger.info("Deleted old backup: \(fileURL.lastPathComponent)")
+
+            // Nothing to do if 0 or 1 backups
+            guard backupFiles.count > 1 else { return }
+
+            // Build a list of (url, date) for convenience
+            let backupsWithDates: [(url: URL, date: Date)] = try backupFiles.map { url in
+                let date = try url.resourceValues(forKeys: [.creationDateKey]).creationDate ?? Date.distantPast
+                return (url, date)
+            }
+
+            var keepSet = Set<URL>()
+
+            // Always keep the most recent backup
+            let mostRecent = backupsWithDates[0]
+            keepSet.insert(mostRecent.url)
+
+            // Find the second backup at least backupRecencyThresholdFirstToSecond older than the first
+            var secondKept: (url: URL, date: Date)? = nil
+            for candidate in backupsWithDates.dropFirst() {
+                if mostRecent.date.timeIntervalSince(candidate.date) >= Self.backupRecencyThresholdFirstToSecond {
+                    keepSet.insert(candidate.url)
+                    secondKept = candidate
+                    break
                 }
+            }
+
+            // Find the third backup at least backupRecencyThresholdSecondToThird older than the second (if any)
+            if let second = secondKept {
+                for candidate in backupsWithDates.drop(while: { $0.url != second.url }).dropFirst() {
+                    if second.date.timeIntervalSince(candidate.date) >= Self.backupRecencyThresholdSecondToThird {
+                        keepSet.insert(candidate.url)
+                        break
+                    }
+                }
+            }
+
+            // Delete any backups not in the keep set
+            for backup in backupsWithDates where !keepSet.contains(backup.url) {
+                try FileManager.default.removeItem(at: backup.url)
+                logger.info("Deleted old backup: \(backup.url.lastPathComponent)")
             }
         } catch {
             logger.error("Error cleaning up old backups: \(error)")

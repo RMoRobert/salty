@@ -122,3 +122,12 @@ struct SaltyApp: App {
         }
     }
 }
+
+func isLiquidGlassAvailable() -> Bool {
+    if #available(iOS 26.0, macOS 26.0, *) {
+        return true
+    }
+    else {
+        return false
+    }
+}

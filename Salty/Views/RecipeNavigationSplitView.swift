@@ -182,7 +182,7 @@ struct RecipeNavigationSplitView: View {
                     
                     Menu(content: {
                         Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                            Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease")
+                            Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
                         }
                         Divider()
                         Button(action: {
@@ -218,7 +218,7 @@ struct RecipeNavigationSplitView: View {
                         }
                         #endif
                     }, label: {
-                        Label("More", systemImage: "ellipsis")
+                        Label("More", systemImage: isLiquidGlassAvailable() ? "ellipsis" : "ellipsis.circle")
                     })
                 }
                 #else
@@ -243,7 +243,7 @@ struct RecipeNavigationSplitView: View {
                         Label("New Recipe", systemImage: "plus")
                     }
                     Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                        Label("Filter (Favorites Only)", systemImage: "line.3.horizontal.decrease")
+                        Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
                     }
 //                    Menu(content: {
 //                        Button("Create Recipe from Web…") {
