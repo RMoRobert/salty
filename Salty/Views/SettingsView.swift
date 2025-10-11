@@ -42,75 +42,68 @@ struct DatabaseSettingsView: View {
 
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-               
-                // Database Location Section
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Database Location")
-                        .font(.headline)
-                        
-                    Button("Select Custom Database Location…") {
-                        showingOpenDatabaseSheet = true
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom):")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
-                            .font(.caption)
-                            //.foregroundColor(.secondary)
-                            .padding(6)
-                            //.background(Color.gray.opacity(0.1))
-                            .cornerRadius(4)
-                        
-                        Button("Reset to Default Location", role: .destructive) {
-                            showingResetConfirmation = true
-                        }
-                        #if os(macOS)
-                        .buttonStyle(.link)
-                        #else
-                        #endif
-                        //.buttonStyle(.bordered)
-                    }
-
+        Form {
+            Section {
+                Button("Select Custom Database Location…") {
+                    showingOpenDatabaseSheet = true
                 }
+                #if os(macOS)
+                .padding(.bottom, 6)
+                #endif
                 
-                Divider()
+                Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom):")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
                 
-                // Diagnostics Section
+                Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
+                    .font(.caption)
+                    .padding(6)
+                    .cornerRadius(4)
+                
+                Button("Reset to Default Location", role: .destructive) {
+                    showingResetConfirmation = true
+                }
+                #if os(macOS)
+                .buttonStyle(.link)
+                #endif
+            } header: {
+                Text("Database Location")
+                    #if os(macOS)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .padding(.top, 8)
+                    #endif
+            }
+            
+            Section {
                 DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        
-                        Text(FileManager.getDatabaseTroubleshootingGuidance())
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(8)
-//                            .background(Color.secondary.opacity(0.1))
-//                            .cornerRadius(6)
-                        
-                        LazyVStack(alignment: .leading, spacing: 8) {
-                            ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
-                                DiagnosticRow(key: key, value: diagnosticsInfo[key])
-                            }
+                    Text(FileManager.getDatabaseTroubleshootingGuidance())
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                    
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
+                            DiagnosticRow(key: key, value: diagnosticsInfo[key])
                         }
-                        
-                        
-                        HStack {
-                            Button("Refresh") {
-                                diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
-                            }
+                    }
+                    
+                    HStack {
+                        Button("Refresh") {
+                            diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
                         }
                     }
                 } label: {
-                    Text("Database Diagnostics")
-                        .font(.headline)
+                    Text("Show Diagnostics")
                 }
+            } header: {
+                Text("Database Diagnostics")
+                    #if os(macOS)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .padding(.top, 8)
+                    #endif
             }
-            .padding()
         }
         .alert("Reset Database Location", isPresented: $showingResetConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -143,7 +136,7 @@ struct GeneralSettingsView: View {
     
     var body: some View {
         Form {
-// TODO: Consider adding this back some day
+// TODO: Consider addin g this back some day
 //            Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
             Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
         }
@@ -157,12 +150,8 @@ struct AdvancedSettingsView: View {
     @State private var showingDeleteConfirmation = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Backup Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Database Backups")
-                    .font(.headline)
-                
+        Form {
+            Section {
                 Text("Salty automatically creates and stores up to a three recent backups of your recipe library.")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -179,23 +168,26 @@ struct AdvancedSettingsView: View {
                     }
                 }
                 #if os(macOS)
-                    Button("Open Backup Folder") {
-                        NSWorkspace.shared.open(backupManager.getBackupDirectory())
-                    }
-                    .controlSize(.small)
+                Button("Open Backup Folder") {
+                    NSWorkspace.shared.open(backupManager.getBackupDirectory())
+                }
+                .controlSize(.small)
                 #endif
                 if !backupMessage.isEmpty {
                     Text(backupMessage)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-            
-            Spacer()
-            Divider()
-            Spacer()
-                Text("Image Cleanup")
+            } header: {
+                Text("Database Backups")
+                    #if os(macOS)
                     .font(.headline)
-                
+                    .fontWeight(.bold)
+                    .padding(.top, 8)
+                    #endif
+            }
+            
+            Section {
                 Button("Clean Up Orphaned Images") {
                     Task {
                         await RecipeImageManager.shared.cleanupOrphanedImages()
@@ -207,9 +199,15 @@ struct AdvancedSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Image Cleanup")
+                    #if os(macOS)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .padding(.top, 8)
+                    #endif
             }
         }
-        .padding()
         .alert("Delete All Backups", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete All", role: .destructive) {
