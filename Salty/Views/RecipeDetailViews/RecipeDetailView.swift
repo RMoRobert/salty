@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import SQLiteData
 import Flow
 
 struct RecipeDetailView: View {
@@ -38,7 +37,10 @@ struct RecipeDetailView: View {
                     .padding()
                 }
                 .fontDesign(.rounded)
-                .background(Color.recipeDetailPageBackgroundColorful)
+                .background(LinearGradient(
+                    colors: [Color.recipeDetailPageBackgroundA, Color.recipeDetailPageBackgroundB],
+                    startPoint: .top, endPoint: .bottom
+                ))
                 .foregroundStyle(Color.recipeDetailBoxForeground)
                 .textSelection(.enabled)
                 .sheet(isPresented: $viewModel.showingFullImage) {
@@ -352,7 +354,7 @@ private struct TagsSection: View {
                         Label(tag.name, systemImage: "tag")
                             .padding(.vertical, 4)
                             .padding(.horizontal, 6)
-                            .background(Color.recipeDetailPageBackgroundColorful.opacity(0.66), in: Capsule())
+                            .background(Color.recipeDetailPageBackgroundA.opacity(0.66), in: Capsule())
                     }
                 }
             }
@@ -386,7 +388,7 @@ private struct CapsuleBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
-            .background(Color.recipeDetailPageBackgroundColorful.opacity(0.66))
+            .background(Color.recipeDetailPageBackgroundA.opacity(0.66))
             .clipShape(Capsule())
             .padding(EdgeInsets(top: 1, leading: 4, bottom: 10, trailing: 6))
     }
@@ -400,7 +402,7 @@ private struct RecipeSectionBoxModifier: ViewModifier {
             .background(Color.recipeDetailBoxBackground)
             .foregroundStyle(Color.recipeDetailBoxForeground)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: Color.recipeDetailBoxShadow.opacity(0.7), radius: 4, x:1, y:1)
+            .shadow(color: Color.recipeDetailBoxShadow.opacity(0.7), radius: 3, x:1, y:1)
             .padding(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
     }
 }

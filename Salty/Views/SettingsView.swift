@@ -38,6 +38,8 @@ struct DatabaseSettingsView: View {
     @Binding var diagnosticsInfo: [String: Any]
     @State private var showingResetConfirmation = false
     @State private var showingOpenDatabaseSheet = false
+    @State private var isDiagnosticsExpanded = false
+
     
     var body: some View {
         ScrollView {
@@ -53,93 +55,59 @@ struct DatabaseSettingsView: View {
                     }
                     .buttonStyle(.bordered)
                     
-                    if FileManager.customSaltyLibraryDirectory != nil {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Custom Library Location:")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            
-                            Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
-                                .font(.caption)
-                                //.foregroundColor(.secondary)
-                                .padding(6)
-                                //.background(Color.gray.opacity(0.1))
-                                .cornerRadius(4)
-                            
-//                            VStack(alignment: .leading, spacing: 4) {
-//                                Text("Database Bundle:")
-//                                    .font(.caption)
-//                                    .fontWeight(.medium)
-//                                Text(FileManager.customSaltyLibraryDirectory?.path ?? "Unknown")
-//                                    .font(.caption)
-//                                    .foregroundColor(.secondary)
-//                                    .padding(6)
-//                                    .background(Color.gray.opacity(0.1))
-//                                    .cornerRadius(4)
-//                            }
-//                            
-//                            VStack(alignment: .leading, spacing: 4) {
-//                                Text("Images Directory:")
-//                                    .font(.caption)
-//                                    .fontWeight(.medium)
-//                                Text(FileManager.saltyImageFolderUrl.path)
-//                                    .font(.caption)
-//                                    .foregroundColor(.secondary)
-//                                    .padding(6)
-//                                    .background(Color.gray.opacity(0.1))
-//                                    .cornerRadius(4)
-//                            }
-                            
-                            Button("Reset to Default Location", role: .destructive) {
-                                showingResetConfirmation = true
-                            }
-                            .buttonStyle(.bordered)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom)")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
+                            .font(.caption)
+                            //.foregroundColor(.secondary)
+                            .padding(6)
+                            //.background(Color.gray.opacity(0.1))
+                            .cornerRadius(4)
+                        
+                        Button("Reset to Default Location", role: .destructive) {
+                            showingResetConfirmation = true
                         }
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Default Location")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            
-                            Text(FileManager.defaultDatabaseFileFullPath.path)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(8)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(6)
-                        }
+                        #if os(macOS)
+                        .buttonStyle(.link)
+                        #else
+                        #endif
+                        //.buttonStyle(.bordered)
                     }
+
                 }
                 
                 Divider()
                 
                 // Diagnostics Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Database Diagnostics")
-                            .font(.headline)
+                DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
+                    VStack(alignment: .leading, spacing: 12) {
                         
-                        Spacer()
+                        Text(FileManager.getDatabaseTroubleshootingGuidance())
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(8)
+//                            .background(Color.secondary.opacity(0.1))
+//                            .cornerRadius(6)
                         
-                        Button("Refresh") {
-                            diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
+                        LazyVStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
+                                DiagnosticRow(key: key, value: diagnosticsInfo[key])
+                            }
                         }
-                        .buttonStyle(.bordered)
-                    }
-                    
-                    // Troubleshooting Guidance
-                    Text(FileManager.getDatabaseTroubleshootingGuidance())
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(8)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)                    
-                    
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
-                            DiagnosticRow(key: key, value: diagnosticsInfo[key])
+                        
+                        
+                        HStack {
+                            Button("Refresh") {
+                                diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
+                            }
                         }
                     }
+                } label: {
+                    Text("Database Diagnostics")
+                        .font(.headline)
                 }
             }
             .padding()
@@ -175,7 +143,8 @@ struct GeneralSettingsView: View {
     
     var body: some View {
         Form {
-            Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
+// TODO: Consider adding this back some day
+//            Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
             Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
         }
     }
