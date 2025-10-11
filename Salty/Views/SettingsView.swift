@@ -56,7 +56,7 @@ struct DatabaseSettingsView: View {
                     .buttonStyle(.bordered)
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom)")
+                        Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom):")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
@@ -189,12 +189,10 @@ struct AdvancedSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-            }
             
+            Spacer()
             Divider()
-            
-            // Image Cleanup Section
-            VStack(alignment: .leading, spacing: 8) {
+            Spacer()
                 Text("Image Cleanup")
                     .font(.headline)
                 
@@ -218,7 +216,7 @@ struct AdvancedSettingsView: View {
                 deleteAllBackups()
             }
         } message: {
-            Text("This will permanently delete all backup files. This action cannot be undone.")
+            Text("This will permanently delete all database backup files. This action cannot be undone.")
         }
     }
     
@@ -233,8 +231,8 @@ struct AdvancedSettingsView: View {
             isCreatingBackup = false
             backupMessage = "Backup created successfully!"
             
-            // Clear the message after a few seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            // Clear the message after a couple seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 backupMessage = ""
             }
         }
@@ -248,8 +246,8 @@ struct AdvancedSettingsView: View {
             }
             backupMessage = "All backups deleted successfully"
             
-            // Clear the message after a few seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            // Clear the message after a couple seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 backupMessage = ""
             }
         } catch {
