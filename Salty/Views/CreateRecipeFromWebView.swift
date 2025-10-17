@@ -167,6 +167,8 @@ struct RecipeWebBrowserView: View {
     @State private var urlText: String = ""
     @FocusState private var isAddressFieldFocused: Bool
     @State private var isCompactScreen: Bool = false
+    @State private var showingURLInputAlert: Bool = false
+    @State private var tempURLText: String = ""
     
     var onClose: (() -> Void)?
     var onSave: (() -> Void)?
@@ -178,6 +180,7 @@ struct RecipeWebBrowserView: View {
     let toolbarNavButtonsPlacement = ToolbarItemPlacement.principal
     let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.automatic
     #endif
+    
     
     var body: some View {
         // Web View
@@ -210,16 +213,38 @@ struct RecipeWebBrowserView: View {
             ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
                 navigationButtons
             }
-            ToolbarItemGroup(placement: .principal) {
-                urlTextField
-            }
-            ToolbarItemGroup(placement: .status) {
-                progressIndicator
+            
+            // URL field placement - show as text field on larger screens, in menu on compact screens
+            if !isCompactScreen {
+                ToolbarItemGroup(placement: .principal) {
+                    urlTextField
+                }
             }
             
+            if !isLiquidGlassAvailable() || viewModel.isLoading {
+                ToolbarItemGroup(placement: .status) {
+                    progressIndicator
+                }
+            }
+            
+            // Import/close buttons placement
             ToolbarItemGroup(placement: toolbarImportAndCloseButtonsPlacement) {
                 importAndCloseButtons
             }
+        }
+        .alert("Enter URL", isPresented: $showingURLInputAlert) {
+            TextField("Enter URL", text: $tempURLText)
+            #if !os(macOS)
+                .keyboardType(.URL)
+                .autocapitalization(.none)
+            #endif
+            Button("Cancel", role: .cancel) { }
+            Button("Open") {
+                navigateToURLFromAlert()
+            }
+            .disabled(tempURLText.isEmpty)
+        } message: {
+            Text("Enter the URL to navigate to:")
         }
     }
     
@@ -296,42 +321,64 @@ struct RecipeWebBrowserView: View {
     
     private var importAndCloseButtons: some View {
         Group {
-            Button(action: {
-                scanWebpageForRecipeData()
-            }) {
-                if isCompactScreen {
+            if isCompactScreen {
+                // On compact screens, show Auto Import button and menu with URL/Close options
+                Button(action: {
+                    scanWebpageForRecipeData()
+                }) {
                     Label("Auto Import", systemImage: "square.and.arrow.down")
                         .labelStyle(.iconOnly)
-                } else {
+                }
+                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                
+                Menu {
+                    Button("Enter URL...") {
+                        tempURLText = urlText
+                        showingURLInputAlert = true
+                    }
+                    
+                    Button(action: {
+                        onClose?()
+                    }) {
+                        Label("Close", systemImage: "xmark")
+                    }
+                } label: {
+                    Image(systemName: isLiquidGlassAvailable() ? "ellipsis" : "ellipsis.circle")
+                }
+            } else {
+                // On larger screens, show individual buttons
+                Button(action: {
+                    scanWebpageForRecipeData()
+                }) {
                     Label("Auto Import", systemImage: "square.and.arrow.down")
                         .labelStyle(.titleAndIcon)
                 }
-            }
-            .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
-            
+                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                
 #if os(macOS)
-            Button("Save Recipe") {
-                if viewModel.hasRecipeData {
-                    viewModel.saveRecipe()
-                    onSave?()
-                } else {
-                    viewModel.showingSaveAlert = true
+                Button("Save Recipe") {
+                    if viewModel.hasRecipeData {
+                        viewModel.saveRecipe()
+                        onSave?()
+                    } else {
+                        viewModel.showingSaveAlert = true
+                    }
                 }
-            }
-            .disabled(!viewModel.hasRecipeData)
+                .disabled(!viewModel.hasRecipeData)
 #endif
-            
+                
 #if os(iOS)
-            Button(action: {
-                onClose?()
-            }) {
-                Label("Close", systemImage: "xmark")
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .foregroundStyle(.foreground)
-            .backgroundStyle(.tertiary)
+                Button(action: {
+                    onClose?()
+                }) {
+                    Label("Close", systemImage: "xmark")
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.foreground)
+                .backgroundStyle(.tertiary)
 #endif
+            }
         }
     }
     
@@ -346,6 +393,22 @@ struct RecipeWebBrowserView: View {
         let currentDisplayURL = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
         if urlText != currentDisplayURL && !viewModel.isLoading {
             viewModel.navigateToURL(urlText)
+        }
+    }
+    
+    private func navigateToURLFromAlert() {
+        // Handle special "about:home" URL
+        if tempURLText == "about:home" {
+            goHome()
+            showingURLInputAlert = false
+            return
+        }
+        
+        // Navigate to the URL from the alert
+        if !tempURLText.isEmpty && !viewModel.isLoading {
+            viewModel.navigateToURL(tempURLText)
+            urlText = tempURLText
+            showingURLInputAlert = false
         }
     }
     
@@ -623,7 +686,7 @@ struct RecipeWebImportEditView: View {
         }
         .background(Color(.controlBackgroundColor))
         .sheet(isPresented: $viewModel.showingCategoriesSheet) {
-            CategoryEditView(recipe: $viewModel.recipe)
+            CategoryEditView(recipe: $viewModel.recipe, selectedCategoryIDs: $viewModel.selectedCategoryIDs)
         }
         .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
             PreparationTimesEditView(recipe: $viewModel.recipe)

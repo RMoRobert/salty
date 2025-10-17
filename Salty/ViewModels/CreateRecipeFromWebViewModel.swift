@@ -30,6 +30,9 @@ class CreateRecipeFromWebViewModel {
     var ingredientsText: String = ""
     var directionsText: String = ""
     
+    // MARK: - Category State
+    var selectedCategoryIDs: Set<String> = []
+    
     // MARK: - Web Browser State
     var currentURL: String = ""
     var canGoBack = false
@@ -83,9 +86,20 @@ class CreateRecipeFromWebViewModel {
         
         do {
             try database.write { db in
-                try Recipe.insert(recipe).execute(db)
+                // First, save the recipe
+                try Recipe.insert { recipe }.execute(db)
+                
+                // Then, save the category relationships
+                for categoryId in selectedCategoryIDs {
+                    let recipeCategory = RecipeCategory(
+                        id: UUID().uuidString,
+                        recipeId: recipe.id,
+                        categoryId: categoryId
+                    )
+                    try RecipeCategory.insert { recipeCategory }.execute(db)
+                }
             }
-            logger.info("Recipe saved successfully: \(self.recipe.id)")
+            logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
         } catch {
             logger.error("Error saving recipe: \(error)")
         }

@@ -90,7 +90,7 @@ struct RecipeDetailEditMobileView: View {
         }
         .sheet(isPresented: $viewModel.showingEditCategoriesSheet) {
             NavigationStack {
-                CategoryEditView(recipe: $viewModel.recipe)
+                CategoryEditView(recipe: $viewModel.recipe, selectedCategoryIDs: $viewModel.selectedCategoryIDs)
                     .navigationTitle("Select Categories")
 #if !os(macOS)
                     .navigationBarTitleDisplayMode(.inline)

@@ -19,13 +19,13 @@ import SQLiteData
 struct CategoryEditView: View {
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
+    @Binding var selectedCategoryIDs: Set<String>
     @Environment(\.dismiss) private var dismiss
     
     //@FetchAll(Category.order(by: \.name)) private var categories
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE")) var categories: [Category]
     
     @State private var showingEditLibraryCategoriesSheet = false
-    @State private var selectedCategoryIDs: Set<String> = []
     @State private var originalSelectedCategoryIDs: Set<String> = []
     @State private var showingNewCategoryAlert = false
     @State private var newCategoryName = ""
@@ -131,22 +131,36 @@ struct CategoryEditView: View {
     
     private func saveChanges() {
         do {
-            try database.write { db in
-                // Remove categories that are no longer selected
-                let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
-                for categoryId in categoriesToRemove {
-                    try RecipeCategory
-                        .where { $0.recipeId == recipe.id && $0.categoryId == categoryId }
-                        .delete()
-                        .execute(db)
+            // First check if the recipe exists in the database
+            let recipeExists = try database.read { db in
+                try Recipe
+                    .where { $0.id == recipe.id }
+                    .fetchOne(db) != nil
+            }
+            
+            // Only save category relationships if the recipe exists
+            if recipeExists {
+                try database.write { db in
+                    // Remove categories that are no longer selected
+                    let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
+                    for categoryId in categoriesToRemove {
+                        try RecipeCategory
+                            .where { $0.recipeId == recipe.id && $0.categoryId == categoryId }
+                            .delete()
+                            .execute(db)
+                    }
+                    
+                    // Add newly selected categories
+                    let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
+                    for categoryId in categoriesToAdd {
+                        let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
+                        try RecipeCategory.insert(recipeCategory).execute(db)
+                    }
                 }
-                
-                // Add newly selected categories
-                let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
-                for categoryId in categoriesToAdd {
-                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
-                    try RecipeCategory.insert(recipeCategory).execute(db)
-                }
+            } else {
+                // If recipe doesn't exist yet, the selectedCategoryIDs binding will be updated
+                // and the categories will be saved when the recipe is saved
+                print("Recipe not yet saved to database, category selections stored in binding")
             }
         } catch {
             print("Error saving category changes: \(error)")
@@ -179,7 +193,7 @@ struct CategoryEditView: View {
                 }.execute(db)
             }
             
-            // Add to selected categories (but don't save to database yet)?
+            // Add to selected categories
             selectedCategoryIDs.insert(newCategory.id)
             newCategoryName = ""
         } catch {
@@ -235,5 +249,6 @@ struct CategoryEditView: View {
 
 #Preview {
     @Previewable @State var recipe = SampleData.sampleRecipes[0]
-    CategoryEditView(recipe: $recipe)
+    @Previewable @State var selectedCategoryIDs = Set<String>()
+    CategoryEditView(recipe: $recipe, selectedCategoryIDs: $selectedCategoryIDs)
 }

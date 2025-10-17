@@ -144,7 +144,7 @@ struct RecipeDetailEditDesktopView: View {
                             viewModel.showingEditCategoriesSheet.toggle()
                         }
                         .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
-                            CategoryEditView(recipe: $viewModel.recipe)
+                            CategoryEditView(recipe: $viewModel.recipe, selectedCategoryIDs: $viewModel.selectedCategoryIDs)
                         }
                     }
                 }

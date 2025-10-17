@@ -43,6 +43,9 @@ class RecipeDetailEditViewModel {
     var isNewRecipe: Bool
     var onNewRecipeSaved: ((String) -> Void)?
     
+    // MARK: - Category State
+    var selectedCategoryIDs: Set<String> = []
+    
     // Caches for tags and categories
     private var recipeTags: [Tag] = []
     private var recipeCategories: [Category] = []
@@ -120,6 +123,25 @@ class RecipeDetailEditViewModel {
                 } else {
                     // Update existing recipe
                     try Recipe.update(recipe).execute(db)
+                }
+                
+                // Handle category relationships
+                if !selectedCategoryIDs.isEmpty {
+                    // Remove existing category relationships
+                    try RecipeCategory
+                        .where { $0.recipeId == recipe.id }
+                        .delete()
+                        .execute(db)
+                    
+                    // Add new category relationships
+                    for categoryId in selectedCategoryIDs {
+                        let recipeCategory = RecipeCategory(
+                            id: UUID().uuidString,
+                            recipeId: recipe.id,
+                            categoryId: categoryId
+                        )
+                        try RecipeCategory.insert(recipeCategory).execute(db)
+                    }
                 }
             }
             
