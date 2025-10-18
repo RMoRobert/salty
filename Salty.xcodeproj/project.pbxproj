@@ -533,7 +533,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = Salty;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used for capturing optional recipe photos or to import recipes via document scan or camera photo";
