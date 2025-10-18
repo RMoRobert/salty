@@ -326,7 +326,7 @@ struct RecipeNavigationSplitView: View {
                     offeredSampleImport = true
                 }
             } message: {
-                Text("Welcome to Salty! Would you like to import some sample recipes to get started? (Select \"No\" to start with an empty recipe library.)")
+                Text("Would you like to import some sample recipes to get started? (Skip to start with empty recipe library.)")
             }
             #if os(macOS)
             .onDeleteCommand {
