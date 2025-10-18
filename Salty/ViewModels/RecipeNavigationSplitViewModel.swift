@@ -311,6 +311,22 @@ class RecipeNavigationSplitViewModel {
             }
         }
     }
+    
+    /// Imports sample recipes from the app Resources directory
+    func importSampleRecipes() async {
+        let x =  Bundle.main.url(forResource: "DemoRecipes", withExtension: "saltyRecipe")
+        let y = Bundle.main.bundlePath
+        let s = x?.description ?? "no url"
+        logger.info("path = \(y)")
+        logger.info("\(s)")
+        if let demoImportUrl = Bundle.main.url(forResource: "DemoRecipes", withExtension: "saltyRecipe") {
+             await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: demoImportUrl)
+            logger.info("Successfully imported sample recipes")
+        }
+        else {
+            logger.info("Failed to locate sample recipe data")
+        }
+    }
 }
 
 // MARK: - Preview ViewModel

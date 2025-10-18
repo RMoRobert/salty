@@ -516,11 +516,12 @@ func appDatabase() throws -> any DatabaseWriter {
         
         // Add default category names to database
         let defaultCategories = [
-            "Breakfast", "Quick", "Vegetarian", "Soup", "Pasta", "Holiday", "Beverage"
+            "Breads", "Breakfast", "Soups", "Pasta", "Holiday"
+            //, "Quick", "Vegetarian",  "Beverage"   // <- considered and could do; skipping as demo recieps have nothing for these categories
         ]
         for categoryName in defaultCategories {
             let category = Category(id: UUID().uuidString, name: categoryName)
-            try Category.insert(category).execute(db)
+            try Category.insert { category }.execute(db)
         }
         
         // Add default course names to database
@@ -530,12 +531,12 @@ func appDatabase() throws -> any DatabaseWriter {
         ]
         for courseName in defaultCourses {
             let course = Course(id: UUID().uuidString, name: courseName)
-            try Course.insert(course).execute(db)
+            try Course.insert { course }.execute(db)
         }
         
         // Add one shopping list (freeform with example format) to database
         let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
-        try ShoppingList.insert(shoppingList).execute(db)
+        try ShoppingList.insert { shoppingList }.execute(db)
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):

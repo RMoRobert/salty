@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    @AppStorage("offeredSampleImport") private var offeredSampleImport = false
+    // To force for testing:
+    //@State private var offeredSampleImport = false
     @Environment(\.openWindow) private var openWindow
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
@@ -25,6 +28,7 @@ struct RecipeNavigationSplitView: View {
     @State private var showingCreateFromWebSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingSettingsSheet = false
+    @State private var showingFirstLaunchAlert = false
     
     private var isAnySheetShown: Bool {
         showingEditLibCategoriesSheet ||
@@ -42,6 +46,15 @@ struct RecipeNavigationSplitView: View {
             object: nil,
             userInfo: ["isShown": isAnySheetShown]
         )
+    }
+    
+    private func importSampleRecipes() {
+        Task {
+            await viewModel.importSampleRecipes()
+            await MainActor.run {
+                offeredSampleImport = true
+            }
+        }
     }
     
     var body: some View {
@@ -305,6 +318,16 @@ struct RecipeNavigationSplitView: View {
             } message: {
                 Text(viewModel.exportErrorMessage)
             }
+            .alert("Welcome to Salty!", isPresented: $showingFirstLaunchAlert) {
+                Button("Import Sample Recipes") {
+                    importSampleRecipes()
+                }
+                Button("Skip", role: .cancel) {
+                    offeredSampleImport = true
+                }
+            } message: {
+                Text("Welcome to Salty! Would you like to import some sample recipes to get started? (Select \"No\" to start with an empty recipe library.)")
+            }
             #if os(macOS)
             .onDeleteCommand {
                 if !viewModel.selectedRecipeIDs.isEmpty {
@@ -445,6 +468,14 @@ struct RecipeNavigationSplitView: View {
             if viewModel.isNewLaunch {
                 columnVisibility = .all
             }
+            
+            // Check for first launch and show sample import alert if needed
+            if !offeredSampleImport {
+                showingFirstLaunchAlert = true
+            }
+            
+            // Set to true after successful view load
+            offeredSampleImport = true
         }
     }
 }
