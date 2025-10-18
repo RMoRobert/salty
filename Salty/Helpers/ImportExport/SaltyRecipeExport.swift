@@ -10,8 +10,8 @@ import SQLiteData
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let saltyRecipe = UTType(exportedAs: "com.pavisoft.salty.recipe")
-    static let saltyRecipeLibrary = UTType(exportedAs: "com.pavisoft.salty.recipeLibrary")
+    static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe")
+    static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
 }
 
 // MARK: - Export-Optimized Structs
