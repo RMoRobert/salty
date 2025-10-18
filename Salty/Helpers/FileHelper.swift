@@ -13,6 +13,9 @@ extension FileManager {
     static let dbFileName = "saltyRecipeDB"
     static let dbFileExt = "sqlite"
     static let backupFolderName = "Backup"
+    // Extra sure to ues different database locations by default for prod and dev; probably not as
+    // necessary any more since debug builds have different bundle IDs, but may still be helpful.
+    // (This is mostly for Xcode builds; does NOT include TestFlight, which is similar to prod.)
     #if DEBUG
     static let userDefaultsDatabaseParentLocationKey = "databaseParentLocation-DEV"
     #else
