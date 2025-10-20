@@ -20,7 +20,19 @@ func createXPImage(_ value: Data) -> Image {
 }
 
 struct RecipeRowView: View {
+    @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
     let recipe: Recipe
+    private var hasBottomRowData: Bool {
+        recipe.rating != .notSet
+    }
+    private var favoriteHeartView: ModifiedContent<some View, AccessibilityAttachmentModifier> {
+        Image(systemName: recipe.isFavorite ? "heart.fill" : "heart.slash")
+            .font(.caption)
+            .foregroundColor(.red)
+            .modifier(IconShadowModifier())
+            .opacity(recipe.isFavorite ? 100 : 0)
+            .accessibilityHint(recipe.isFavorite ? "Is Favorite" : "Not Favorite")
+    }
     
     var body: some View {
         HStack {
@@ -28,16 +40,16 @@ struct RecipeRowView: View {
                 createXPImage(thumbnailData)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 64, maxHeight: 64)
+                    .frame(width: listViewStyle == .smallIcons ? 32 : 64, height: listViewStyle == .smallIcons ? 32 : 64)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
                     .shadow(radius: 2)
                     .padding(4)
             } else {
                 // Show default recipe image when no thumbnail data
                 Image(systemName: "list.bullet.rectangle")
-                    .font(.system(size: 32, weight: .light))
+                    .font(.system(size: listViewStyle == .smallIcons ? 24 : 32, weight: .light))
                     .foregroundColor(.gray.opacity(0.4))
-                    .frame(width: 64, height: 64)
+                    .frame(width: listViewStyle == .smallIcons ? 32 : 64, height: listViewStyle == .smallIcons ? 32 : 64)
                     .background(
                         RoundedRectangle(cornerRadius: 5)
                             .fill(.gray.opacity((0.06)))
@@ -46,52 +58,67 @@ struct RecipeRowView: View {
                     .padding(4)
             }
             VStack(alignment: .leading) {
-                Spacer()
+                if listViewStyle == .summary {
+                    Spacer()
+                }
                 VStack(alignment: .leading) {
                     Text(recipe.name)
                         .fontWeight(.semibold)
                         .multilineTextAlignment(.leading)
                         .lineLimit(1)
-                    Text(recipe.summary)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer()
-                HStack {
-                    if (recipe.rating != .notSet) {
-                        HStack(alignment: .bottom, spacing: 0) {
-                            ForEach(1..<6) { starNum in
-                                Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
-                                    .foregroundColor(.secondary)
-                                    .font(.caption2)
-                                    .modifier(IconShadowModifier())
-                                    .accessibilityHidden(true)
-                            }
-                        }
-                        .accessibilityHint("Rating: \(recipe.rating.rawValue) stars")
+                    if listViewStyle == .summary || (!hasBottomRowData && !recipe.isFavorite) {
+                        Text(recipe.summary)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
                     }
-                    else {
-                        HStack(alignment: .bottom, spacing: 0) {
-                            ForEach(1..<6) { starNum in
-                                Image(systemName: "circle.dotted")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .accessibilityHidden(true)
-                            }
+                    else if !hasBottomRowData && recipe.isFavorite {
+                        HStack {
+                            Text(recipe.summary)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            Spacer()
+                            favoriteHeartView
                         }
-                        .hidden()
-                        .accessibilityHint("Recipe not rated")
                         
                     }
-                    Spacer()
-                    Image(systemName: recipe.isFavorite ? "heart.fill" : "heart.slash")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .modifier(IconShadowModifier())
-                        .opacity(recipe.isFavorite ? 100 : 0)
-                        .accessibilityHint(recipe.isFavorite ? "Is Favorite" : "Not Favorite")
                 }
-                Spacer()
+                if listViewStyle == .summary {
+                    Spacer()
+                }
+                if (listViewStyle == .summary || hasBottomRowData) {
+                    HStack {
+                        if (recipe.rating != .notSet) {
+                            HStack(alignment: .bottom, spacing: 0) {
+                                ForEach(1..<6) { starNum in
+                                    Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
+                                        .foregroundColor(.secondary)
+                                        .font(.caption2)
+                                        .modifier(IconShadowModifier())
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                            .accessibilityHint("Rating: \(recipe.rating.rawValue) stars")
+                        }
+                        else {
+                            HStack(alignment: .bottom, spacing: 0) {
+                                ForEach(1..<6) { starNum in
+                                    Image(systemName: "circle.dotted")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                            .hidden()
+                            .accessibilityHint("Recipe not rated")
+                            
+                        }
+                        Spacer()
+                        favoriteHeartView
+                    }
+                }
+                if listViewStyle == .summary {
+                    Spacer()
+                }
             }
         }
     }

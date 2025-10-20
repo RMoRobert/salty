@@ -34,6 +34,10 @@ struct SettingsView: View {
     }
 }
 
+enum RecipeListViewStyle: String, Codable {
+    case summary, smallIcons
+}
+
 struct DatabaseSettingsView: View {
     @Binding var diagnosticsInfo: [String: Any]
     @State private var showingResetConfirmation = false
@@ -133,11 +137,18 @@ struct GeneralSettingsView: View {
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
     @AppStorage("monospacedBulkEditFont") private var monospacedBulkEditFont = false
+    @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
     
     var body: some View {
         Form {
-// TODO: Consider addin g this back some day
-//            Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
+            // TODO: Consider adding this back some day
+            //Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
+            Picker(selection: $listViewStyle) {
+                Text("Summary (Default)").tag(RecipeListViewStyle.summary)
+                Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
+            } label: {
+                Text("Recipe List View Style")
+            }
             Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
         }
     }
