@@ -142,14 +142,18 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             // TODO: Consider adding this back some day
-            //Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
+            Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
+            Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
             Picker(selection: $listViewStyle) {
                 Text("Summary (Default)").tag(RecipeListViewStyle.summary)
                 Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
             } label: {
+                #if os(macOS)
+                Text("Recipe List View Style:")
+                #else
                 Text("Recipe List View Style")
+                #endif
             }
-            Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
         }
     }
 }
