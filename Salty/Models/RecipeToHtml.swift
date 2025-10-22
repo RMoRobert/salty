@@ -7,6 +7,8 @@
 
 import Foundation
 import SwiftHtml
+import ImageIO
+import UniformTypeIdentifiers
 
 extension Recipe {
     var asHtml: String {
@@ -83,9 +85,9 @@ extension Recipe {
                             }
                             .class("recipe-content-area")
                             
-                            if let imageFilename = self.imageFilename {
+                            if let imageAsBase64 = self.imageAsBase64 {
                                 Section {
-                                    Img(src: FileManager.saltyImageFolderUrl.absoluteString + imageFilename, alt: "User-provided photograph of recipe")
+                                    Img(src: "data:image/jpeg;base64, \(imageAsBase64)", alt: "User-provided photograph of recipe")
                                         .id("recipe-image")
                                 }
                                 .id("recipe-image-container")
@@ -164,8 +166,36 @@ extension Recipe {
             }
         }
         
+        
         let html: String = DocumentRenderer(minify: false, indent: 2).render(doc)
         return html
+    }
+
+    var imageAsBase64: String? {
+        // Modified from https://www.reddit.com/r/iOSProgramming/comments/10odrf5/convert_coregraphics_cgimage_and_base64_string
+        guard let imageData = fullImageData else {
+            return nil
+        }
+        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil) else {
+            return nil
+        }
+        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            return nil
+        }
+        // For compression, but unsure if need to manually "releae" CFDictionary, and default is easier for now (and may be perfectly fine)
+        //let properties: [CFString : Any] = ([kCGImageDestinationLossyCompressionQuality: 0.8 as CFNumber] as CFDictionary) as! [CFString : Any]
+        guard let mutableData = CFDataCreateMutable(nil, 0),
+              //let dest = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, properties as CFDictionary)
+              let dest = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, nil)
+        else {
+            return nil
+        }
+        CGImageDestinationAddImage(dest, cgImage, nil)
+        guard CGImageDestinationFinalize(dest) else {
+            return nil
+        }
+        let data = mutableData as Foundation.Data
+        return data.base64EncodedString()
     }
 }
 
