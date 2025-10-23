@@ -258,27 +258,6 @@ struct RecipeNavigationSplitView: View {
                     Toggle(isOn: $viewModel.isFavoritesFilterActive) {
                         Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
                     }
-//                    Menu(content: {
-//                        Button("Create Recipe from Web…") {
-//                            #if os(iOS)
-//                            showingCreateFromWebSheet.toggle()
-//                            #else
-//                            openWindow(id: "create-recipe-from-web-window")
-//                            #endif
-//                        }
-//                        Button("Create Recipe from Image…") {
-//                            showingCreateFromImageSheet.toggle()
-//                        }
-//                        Button("Import Recipes from File…") {
-//                            showingImportFromFileSheet.toggle()
-//                        }
-//                        Divider()
-//                        Button("Open Database…") {
-//                            showingOpenDBSheet.toggle()
-//                        }
-//                    }, label: {
-//                        Label("More", systemImage: "ellipsis")
-//                    })
                 }
                 #endif
             }
@@ -338,36 +317,25 @@ struct RecipeNavigationSplitView: View {
             .searchable(text: $viewModel.searchString)
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
-               let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
-                if useWebRecipeDetailView == true {
-                    RecipeDetailWebView(recipe: recipe)
-                        .id(recipeId) // seems to be needed to force full reload when recipe changes?
-                        .toolbar {
-                            ToolbarItem(placement: .primaryAction) {
-                                Button(action: {
-                                    viewModel.recipeToEditID = recipeId
-                                    viewModel.showingEditSheet = true
-                                }) {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                .keyboardShortcut("e", modifiers: .command)
-                            }
-                        }
+                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
+                Group {
+                    if useWebRecipeDetailView {
+                        RecipeDetailWebView(recipe: recipe)
+                    } else {
+                        RecipeDetailView(recipe: recipe)
+                    }
                 }
-                else {
-                    RecipeDetailView(recipe: recipe)
-                        .id(recipeId) // seems to be needed to force full reload when recipe changes?
-                        .toolbar {
-                            ToolbarItem(placement: .primaryAction) {
-                                Button(action: {
-                                    viewModel.recipeToEditID = recipeId
-                                    viewModel.showingEditSheet = true
-                                }) {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                .keyboardShortcut("e", modifiers: .command)
-                            }
+                .id(recipeId) // seems to be needed to force full reload when recipe changes?
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(action: {
+                            viewModel.recipeToEditID = recipeId
+                            viewModel.showingEditSheet = true
+                        }) {
+                            Label("Edit", systemImage: "pencil")
                         }
+                        .keyboardShortcut("e", modifiers: .command)
+                    }
                 }
             } else {
                 Text("No recipe selected")
