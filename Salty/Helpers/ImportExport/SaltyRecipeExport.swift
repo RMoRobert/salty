@@ -211,6 +211,78 @@ extension SaltyRecipeExport {
         )
     }
     
+    /// Plain text representation of the recipe for text-only transfer operations like text messaging, etc.
+    var plainTextRepresentation: String {
+        var text = ""
+        
+        // Recipe name
+        text += "\(name)\n"
+        text += String(repeating: "=", count: name.count) + "\n\n"
+        
+        // Source information
+        if let source = source, !source.isEmpty {
+            text += "Source: \(source)\n"
+        }
+        if let sourceDetails = sourceDetails, !sourceDetails.isEmpty {
+            text += "Source Details: \(sourceDetails)\n"
+        }
+        
+        // Yield and servings
+        if let yield = yield, !yield.isEmpty {
+            text += "Yield: \(yield)\n"
+        }
+        if let servings = servings {
+            text += "Servings: \(servings)\n"
+        }
+        
+        // Introduction
+        if let introduction = introduction, !introduction.isEmpty {
+            text += "\n\(introduction)\n"
+        }
+        
+        // Preparation times
+        if !preparationTimes.isEmpty {
+            text += "\nPreparation Times:\n"
+            for prepTime in preparationTimes {
+                text += "• \(prepTime.type): \(prepTime.timeString)\n"
+            }
+        }
+        
+        // Ingredients
+        if !ingredients.isEmpty {
+            text += "\nIngredients:\n"
+            for ingredient in ingredients {
+                if ingredient.isHeading == true {
+                    text += "\n\(ingredient.text)\n"
+                } else {
+                    text += "• \(ingredient.text)\n"
+                }
+            }
+        }
+        
+        // Directions
+        if !directions.isEmpty {
+            text += "\nDirections:\n"
+            for (index, direction) in directions.enumerated() {
+                if direction.isHeading == true {
+                    text += "\n\(direction.text)\n"
+                } else {
+                    text += "\(index + 1). \(direction.text)\n"
+                }
+            }
+        }
+        
+        // Notes
+        if !notes.isEmpty {
+            text += "\nNotes:\n"
+            for note in notes {
+                text += "• \(note.title): \(note.content)\n"
+            }
+        }
+        
+        return text
+    }
+    
     /// Exports the recipe to JSON data
     /// - Returns: JSON data representation of the recipe
     func toJSONData() throws -> Data {
@@ -236,7 +308,7 @@ extension SaltyRecipeExport {
     /// Converts SaltyRecipeExport to Recipe object
     /// - Returns: Recipe object with matching data from the SaltyRecipeExport
     func convertToRecipe() -> Recipe {
-        var recipe = Recipe(
+        let recipe = Recipe(
             id: UUID().uuidString, // Generate new ID for import
             name: name,
             createdDate: createdDate ?? Date(),
