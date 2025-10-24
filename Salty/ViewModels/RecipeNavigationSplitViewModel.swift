@@ -320,8 +320,12 @@ class RecipeNavigationSplitViewModel {
         logger.info("path = \(y)")
         logger.info("\(s)")
         if let demoImportUrl = Bundle.main.url(forResource: "DemoRecipes", withExtension: "saltyRecipe") {
-             await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: demoImportUrl)
-            logger.info("Successfully imported sample recipes")
+            do {
+                try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: demoImportUrl)
+                logger.info("Successfully imported sample recipes")
+            } catch {
+                logger.error("Failed to import sample recipes: \(error.localizedDescription)")
+            }
         }
         else {
             logger.info("Failed to locate sample recipe data")

@@ -18,6 +18,8 @@ import Foundation
 import SwiftSoup
 import OSLog
 
+// TODO: Create exporter ; add this file type to importable types as well!
+
 class SchemaOrgRecipeJSONLDImporter {
     private let logger = Logger(subsystem: "Salty", category: "App")
     

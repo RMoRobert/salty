@@ -14,6 +14,7 @@ extension UTType {
     static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
 }
 
+        FileRepresentation(contentType: .saltyRecipe) { recipe in
 // MARK: - Export-Optimized Structs
 
 /// Optimized Direction struct for export/import - removes internal IDs and makes optional fields truly optional

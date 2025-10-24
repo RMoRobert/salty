@@ -12,10 +12,10 @@ import OSLog
 struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
     
-    static func importIntoDatabase(_ database: any DatabaseWriter, jsonFileUrl: URL) async {
+    static func importIntoDatabase(_ database: any DatabaseWriter, jsonFileUrl: URL) async throws {
         guard let jsonData = getDataFromFile(jsonFileUrl) else {
             logger.error("No JSON data found in file; returning")
-            return
+            throw ImportError.noDataFound
         }
         
         do {
@@ -138,6 +138,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
             logger.info("Import completed: \(successCount) successful, \(failureCount) failed")
         } catch {
             logger.error("Could not decode Salty recipe file. Error: \(error.localizedDescription)")
+            throw ImportError.decodingFailed(error)
         }
     }
 }

@@ -28,7 +28,7 @@ struct ImportRecipesFromFileView: View {
     }
     
     // New initializer for pre-selected files
-    init(preSelectedFileURL: URL) {
+    init(preSelectedFileURL: URL?) {
         self.preSelectedFileURL = preSelectedFileURL
     }
     
@@ -45,7 +45,58 @@ struct ImportRecipesFromFileView: View {
         }
     }
     
+    private func startImport() {
+        guard let file = selectedFileUrl else { return }
+        
+        isImporting = true
+        print("Starting automatic import...")
+        let _ = file.startAccessingSecurityScopedResource()
+        
+        Task {
+            do {
+                // Detect file type and use appropriate importer
+                if file.pathExtension.lowercased() == "saltyrecipe" {
+                    try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: file)
+                } else {
+                    try await MacGourmetImportHelper.importIntoDatabase(database, xmlFileUrl: file)
+                }
+                
+                await MainActor.run {
+                    print("Done with automatic import")
+                    file.stopAccessingSecurityScopedResource()
+                    isImporting = false
+                    showingSuccessAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    print("Automatic import failed: \(error.localizedDescription)")
+                    file.stopAccessingSecurityScopedResource()
+                    isImporting = false
+                    errorMessage = "Import failed: \(error.localizedDescription)"
+                    showingErrorAlert = true
+                }
+            }
+        }
+    }
+    
     var body: some View {
+        let chooseFileButton: some View = Button(selectedFileUrl != nil c ? "Choose Other File…" : "Choose File…") {
+            showingImportFilePicker.toggle()
+        }
+            .fileImporter(
+                isPresented: $showingImportFilePicker,
+                allowedContentTypes: [.data, .saltyRecipe]
+            ) { result in
+                switch result {
+                case .success(let file):
+                    selectedFileUrl = file
+                case .failure(let error):
+                    print(error.localizedDescription)
+                    errorMessage = "Failed to select file: \(error.localizedDescription)"
+                    showingErrorAlert = true
+                }
+            }
+        
         VStack(spacing: 20) {
             // Header
             VStack(spacing: 8) {
@@ -66,6 +117,7 @@ struct ImportRecipesFromFileView: View {
                     .padding()
                     .background(Color.secondary.opacity(0.1))
                     .cornerRadius(8)
+                    chooseFileButton
                 }
                 else {
                     Text("No file selected")
@@ -76,22 +128,7 @@ struct ImportRecipesFromFileView: View {
             
             // File selection
             if selectedFileUrl == nil {
-                Button("Choose File…") {  
-                    showingImportFilePicker.toggle() 
-                }
-                .fileImporter(
-                    isPresented: $showingImportFilePicker,
-                    allowedContentTypes: [.data, .saltyRecipe]
-                ) { result in
-                    switch result {
-                    case .success(let file):
-                        selectedFileUrl = file
-                    case .failure(let error):
-                        print(error.localizedDescription)
-                        errorMessage = "Failed to select file: \(error.localizedDescription)"
-                        showingErrorAlert = true
-                    }
-                }
+                chooseFileButton
             }
             // Description
             Text("Import a MacGourmet (.mgourmet) or Salty (.saltyRecipe) file into your recipe library.")
@@ -117,47 +154,16 @@ struct ImportRecipesFromFileView: View {
                                 .multilineTextAlignment(.center)
                         }
                         .padding()
+                    } else if detectedFileType == nil {
+                        Text("Unsupported file type. Please select a .mgourmet or .saltyRecipe file.")
+                            .padding()
+                            .foregroundColor(.orange)
                     } else {
                         Button("Import Recipe") {
-                            isImporting = true
-                            print("Starting import...")
-                            let _ = file.startAccessingSecurityScopedResource()
-                            
-                            Task {
-                                do {
-                                    // Detect file type and use appropriate importer
-                                    if file.pathExtension.lowercased() == "saltyrecipe" {
-                                        try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: file)
-                                    } else {
-                                        try await MacGourmetImportHelper.importIntoDatabase(database, xmlFileUrl: file)
-                                    }
-                                    
-                                    await MainActor.run {
-                                        print("Done with import")
-                                        file.stopAccessingSecurityScopedResource()
-                                        isImporting = false
-                                        showingSuccessAlert = true
-                                    }
-                                } catch {
-                                    await MainActor.run {
-                                        print("Import failed: \(error.localizedDescription)")
-                                        file.stopAccessingSecurityScopedResource()
-                                        isImporting = false
-                                        errorMessage = "Import failed: \(error.localizedDescription)"
-                                        showingErrorAlert = true
-                                    }
-                                }
-                            }
+                            startImport()
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(detectedFileType == nil)
                     }
-                }
-            } else {
-                if let file = selectedFileUrl, detectedFileType == nil {
-                    Text("Unsupported file type. Please select a .mgourmet or .saltyRecipe file.")
-                        .padding()
-                        .foregroundColor(.orange)
                 }
             }
             
@@ -175,9 +181,12 @@ struct ImportRecipesFromFileView: View {
         }
         .padding()
         .onAppear {
+            print("ImportRecipesFromFileView appeared")
+            print("preSelectedFileURL: \(String(describing: preSelectedFileURL))")
             // Set the pre-selected file URL if provided
             if let preSelectedURL = preSelectedFileURL {
                 selectedFileUrl = preSelectedURL
+                print("Set selectedFileUrl to: \(preSelectedURL)")
             }
         }
         .alert("Import Complete", isPresented: $showingSuccessAlert) {

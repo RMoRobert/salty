@@ -12,10 +12,10 @@ import OSLog
 struct MacGourmetImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
     
-    static func importIntoDatabase(_ database: any DatabaseWriter, xmlFileUrl: URL) async {
+    static func importIntoDatabase(_ database: any DatabaseWriter, xmlFileUrl: URL) async throws {
         guard let xmlData = getDataFromFile(xmlFileUrl) else {
             logger.error("No XML data found in file; returning")
-            return
+            throw ImportError.noDataFound
         }
         
         do {
@@ -102,6 +102,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
             logger.info("Import completed: \(successCount) successful, \(failureCount) failed")
         } catch {
             logger.error("Could not decode MacGourmet file. Error: \(error.localizedDescription)")
+            throw ImportError.decodingFailed(error)
         }
     }
 }

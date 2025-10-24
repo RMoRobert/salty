@@ -8,11 +8,21 @@
 import SQLiteData
 import SwiftUI
 
+// Global storage for import URL to avoid state reset issues
+class ImportURLManager: ObservableObject {
+    @Published var pendingImportURL: URL? {
+        didSet {
+            print("ImportURLManager pendingImportURL changed to: \(String(describing: pendingImportURL))")
+        }
+    }
+    @Published var showingImportSheet = false
+}
+
 @main
 struct SaltyApp: App {
     @Dependency(\.context) var context
     @Environment(\.openWindow) private var openWindow
-    @State private var pendingImportURL: URL?
+    @StateObject private var importURLManager = ImportURLManager()
     
     init() {
         if context == .live {
@@ -47,10 +57,18 @@ struct SaltyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
+                .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
                 .onOpenURL { url in
                     handleIncomingURL(url)
                 }
+                .sheet(isPresented: $importURLManager.showingImportSheet) {
+                    ImportRecipesFromFileView(preSelectedFileURL: importURLManager.pendingImportURL)
+                        #if os(macOS)
+                        .frame(minWidth: 500, minHeight: 400)
+                        #endif
+                }
         }
+        .handlesExternalEvents(matching: ["salty-recipe"])
         .commands {
             Menus()
         }
@@ -82,15 +100,6 @@ struct SaltyApp: App {
                 .navigationTitle("Open Database")
         }
 
-        // "Import from File" window
-        WindowGroup(id: "import-from-file-window") {
-            if let url = pendingImportURL {
-                ImportRecipesFromFileView(preSelectedFileURL: url)
-                    .frame(minWidth: 500, minHeight: 400)
-                    .navigationTitle("Import Recipe from File")
-            }
-        }
-        .defaultSize(width: 550, height: 450)
         // "Import from Web" window
         WindowGroup(id: "create-recipe-from-web-window") {
             CreateRecipeFromWebView()
@@ -115,8 +124,10 @@ struct SaltyApp: App {
         // Check if this is a .saltyRecipe file
         if url.pathExtension.lowercased() == "saltyrecipe" {
             print("Received .saltyRecipe file: \(url)")
-            pendingImportURL = url
-            openWindow(id: "import-from-file-window")
+            importURLManager.pendingImportURL = url
+            print("Set importURLManager.pendingImportURL to: \(url)")
+            print("Showing import sheet...")
+            importURLManager.showingImportSheet = true
         } else {
             print("Received unsupported file type: \(url)")
         }
