@@ -80,7 +80,7 @@ struct ImportRecipesFromFileView: View {
     }
     
     var body: some View {
-        let chooseFileButton: some View = Button(selectedFileUrl != nil c ? "Choose Other File…" : "Choose File…") {
+        let chooseFileButton: some View = Button(selectedFileUrl != nil ? "Choose Other File…" : "Choose File…") {
             showingImportFilePicker.toggle()
         }
             .fileImporter(

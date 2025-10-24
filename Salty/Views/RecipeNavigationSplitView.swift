@@ -5,11 +5,13 @@
 //  Created by Robert on 10/25/22, substantial re-creations on 7/24/23 and 6/10/25
 //
 
+import SQLiteData
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
+    @Dependency(\.defaultDatabase) private var database
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @AppStorage("offeredSampleImport") private var offeredSampleImport = false
     // To force for testing:
@@ -54,6 +56,26 @@ struct RecipeNavigationSplitView: View {
             await MainActor.run {
                 offeredSampleImport = true
             }
+        }
+    }
+    
+    private func getCurrentRecipe() -> SaltyRecipeExport? {
+        guard let recipeId = viewModel.selectedRecipeIDs.first else { return nil }
+        guard let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) else { return nil }
+        do {
+            return try SaltyRecipeExport.fromRecipe(recipe, database: database)
+        } catch {
+            print("Error creating SaltyRecipeExport: \(error)")
+            return nil
+        }
+    }
+    
+    private func getSaltyRecipeExport(from recipe: Recipe) -> SaltyRecipeExport? {
+        do {
+            return try SaltyRecipeExport.fromRecipe(recipe, database: database)
+        } catch {
+            print("Error creating SaltyRecipeExport: \(error)")
+            return nil
         }
     }
     
@@ -104,6 +126,9 @@ struct RecipeNavigationSplitView: View {
                                 Button("Edit") {
                                     viewModel.recipeToEditID = recipe.id
                                     viewModel.showingEditSheet = true
+                                }
+                                ShareLink(item: getSaltyRecipeExport(from: recipe) ?? "Error creating recipe export") {
+                                    Label("Share…", systemImage: "square.and.arrow.up")
                                 }
                                 Button("Export…") {
                                     // Export all selected recipes with prompt via same technique as menu item; or single recipe directly
@@ -327,6 +352,11 @@ struct RecipeNavigationSplitView: View {
                 }
                 .id(recipeId) // seems to be needed to force full reload when recipe changes?
                 .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        ShareLink(item: getCurrentRecipe() ??  "No recipe selected") {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button(action: {
                             viewModel.recipeToEditID = recipeId
