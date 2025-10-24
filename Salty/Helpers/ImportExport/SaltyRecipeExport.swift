@@ -8,13 +8,37 @@
 import Foundation
 import SQLiteData
 import UniformTypeIdentifiers
+import CoreTransferable
 
 extension UTType {
     static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe")
     static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
 }
 
+extension SaltyRecipeExport: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .saltyRecipe)
+        DataRepresentation(importedContentType: .saltyRecipe) { data in
+            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
+            return recipe
+        }
+        DataRepresentation(exportedContentType: .saltyRecipe) { recipe in
+            let data = try JSONEncoder().encode(recipe)
+            return data
+        }
         FileRepresentation(contentType: .saltyRecipe) { recipe in
+            let docsURL = URL.temporaryDirectory.appendingPathComponent("\(recipe.name)\(UUID().uuidString)", conformingTo: .saltyRecipe)
+            let data = try JSONEncoder().encode(recipe)
+            try data.write(to: docsURL)
+            return SentTransferredFile(docsURL)
+        } importing: { received in
+            let data = try Data(contentsOf: received.file)
+            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
+            return recipe
+        }
+    }
+}
+
 // MARK: - Export-Optimized Structs
 
 /// Optimized Direction struct for export/import - removes internal IDs and makes optional fields truly optional
