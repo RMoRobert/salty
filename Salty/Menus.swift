@@ -58,6 +58,29 @@ struct Menus: Commands {
            }
            .disabled(sheetTracker.isAnySheetShown)
        }
+//       CommandGroup(before: .sidebar) {
+//           Menu("Sort By") {
+//               Button("Name") {
+//                   // TODO: Implement name sorting
+//               }
+//               Button("Date Modified") {
+//                   // TODO: Implement date modified sorting
+//               }
+//               Button("Date Created/Added") {
+//                   // TODO: Implement date created sorting
+//               }
+//               Button("Source") {
+//                   // TODO: Implement source sorting
+//               }
+//               Button("Rating") {
+//                   // TODO: Implement rating sorting
+//               }
+//               Button("Difficulty") {
+//                   // TODO: Implement difficulty sorting
+//               }
+//           }
+//           Divider()
+//       }
        #if os(macOS)
        CommandGroup(before: .windowList) {
            Button("Edit Categories") {
