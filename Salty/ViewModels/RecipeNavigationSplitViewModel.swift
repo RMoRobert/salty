@@ -273,6 +273,19 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    var shareableRecipeForSelectedRecipe: SaltyRecipeExport? {
+        guard let id = selectedRecipeIDs.first, let recipe = recipes.first(where: { $0.id == id }) else {
+            return nil
+        }
+        do {
+            let shareableRecipe = try SaltyRecipeExport.fromRecipe(recipe, database: database)
+            return shareableRecipe
+        }
+        catch {
+            return nil
+        }
+    }
+    
     /// Exports multiple selected recipes to JSON format
     func exportSelectedRecipes() {
         Task {

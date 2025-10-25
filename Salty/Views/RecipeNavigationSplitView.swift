@@ -101,32 +101,7 @@ struct RecipeNavigationSplitView: View {
                         RecipeRowView(recipe: recipe)
                             .id(recipe.id)
                             .contextMenu {
-                                Button("Edit") {
-                                    viewModel.recipeToEditID = recipe.id
-                                    viewModel.showingEditSheet = true
-                                }
-                                Button("Export…") {
-                                    // Export all selected recipes with prompt via same technique as menu item; or single recipe directly
-                                    if viewModel.selectedRecipeIDs.count > 1 {
-                                        viewModel.exportSelectedRecipes()
-                                    }
-                                    else {
-                                        viewModel.exportRecipe(recipe.id)
-                                    }
-                                }
-                                Button(role: .destructive, action: {
-                                    // Delete all selected recipes with prompt via same technique as menu item; or single recipe directly
-                                    if viewModel.selectedRecipeIDs.count > 1 {
-                                        showingDeleteConfirmation = true
-                                    } else {
-                                        withAnimation {
-                                            viewModel.deleteRecipe(id: recipe.id)
-                                        }
-                                    }
-                                }) {
-                                    Text("Delete")
-                                }
-                                .keyboardShortcut(.delete, modifiers: [.command])
+                                contextMenuForRecipe(recipe)
                             }
                     }
                     #if !os(macOS)
@@ -445,6 +420,44 @@ struct RecipeNavigationSplitView: View {
             // Set to true after successful view load
             offeredSampleImport = true
         }
+    }
+    
+    @ViewBuilder
+    private func contextMenuForRecipe(_ recipe: Recipe) -> some View {
+        Button("Edit") {
+            viewModel.recipeToEditID = recipe.id
+            viewModel.showingEditSheet = true
+        }
+        Button("Export…") {
+            // Export all selected recipes with prompt via same technique as menu item; or single recipe directly
+            if viewModel.selectedRecipeIDs.count > 1 {
+                viewModel.exportSelectedRecipes()
+            }
+            else {
+                viewModel.exportRecipe(recipe.id)
+            }
+        }
+        Group {
+            if let shareableRecipe: SaltyRecipeExport = viewModel.shareableRecipeForSelectedRecipe {
+                ShareLink(item: shareableRecipe,
+                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                          message: Text(shareableRecipe.plainTextRepresentation),
+                          preview: SharePreview(recipe.name, image: recipe.fullImageData ?? Data()))
+            }
+        }
+        Button(role: .destructive, action: {
+            // Delete all selected recipes with prompt via same technique as menu item; or single recipe directly
+            if viewModel.selectedRecipeIDs.count > 1 {
+                showingDeleteConfirmation = true
+            } else {
+                withAnimation {
+                    viewModel.deleteRecipe(id: recipe.id)
+                }
+            }
+        }) {
+            Text("Delete")
+        }
+        .keyboardShortcut(.delete, modifiers: [.command])
     }
 }
 
