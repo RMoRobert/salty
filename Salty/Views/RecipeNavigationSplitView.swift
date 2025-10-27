@@ -451,16 +451,18 @@ struct RecipeNavigationSplitView: View {
                 viewModel.exportRecipe(recipe.id)
             }
         }
-// Removing from context menu since is now on toolbar (keeping this for now in case change mind):
-//        Group {
-//            if let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
-//                ShareLink(item: shareableRecipe,
-//                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-//                          message: Text(shareableRecipe.plainTextRepresentation),
-//                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-//                )
-//            }
-//        }
+        #if !os(macOS)
+        // Is in toolbar on macOS, but keep in context menu on iOS:
+        Group {
+            if let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+                ShareLink(item: shareableRecipe,
+                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                          message: Text(shareableRecipe.plainTextRepresentation),
+                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                )
+            }
+        }
+        #endif
         Button(role: .destructive, action: {
             // Delete all selected recipes with prompt via same technique as menu item; or single recipe directly
             if viewModel.selectedRecipeIDs.count > 1 {

@@ -7,15 +7,15 @@
 
 import SwiftUI
 
-func createXPImage(_ data: Data) -> Image {
+func createXPImage(_ value: Data) -> Image {
 #if canImport(UIKit)
-    let imageFromData: UIImage = UIImage(data: data) ?? UIImage()
-    return Image(uiImage: (UIKit))
+    let theImage: UIImage = UIImage(data: value) ?? UIImage()
+    return Image(uiImage: theImage)
 #elseif canImport(AppKit)
-    let (UIKit): NSImage = NSImage(data: data) ?? NSImage()
-    return Image(nsImage: (UIKit))
+    let theImage: NSImage = NSImage(data: value) ?? NSImage()
+    return Image(nsImage: theImage)
 #else
-    return Image(systemImage: "some_default")
+    return Image(systemImage: "list.dash.header.rectangle")
 #endif
 }
 

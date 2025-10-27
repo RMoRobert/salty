@@ -26,7 +26,7 @@ extension SaltyRecipeExport: Transferable {
      */
         
 //       CodableRepresentation(contentType: .saltyRecipe)
-//
+
 //        DataRepresentation(contentType: .saltyRecipe) { recipe in
 //            let data = try JSONEncoder().encode(recipe)
 //            return data
@@ -36,11 +36,9 @@ extension SaltyRecipeExport: Transferable {
 //        }
         
 //        FileRepresentation(contentType: .saltyRecipe) { recipe in
-//            let _ = print("file!")
 //            let docsURL = URL.temporaryDirectory.appendingPathComponent("\(recipe.name).saltyRecipe", conformingTo: .saltyRecipe)
 //            let data = try JSONEncoder().encode(recipe)
 //            try data.write(to: docsURL)
-//            let _ = print(docsURL.absoluteString)
 //            return SentTransferredFile(docsURL)
 //        } importing: { received in
 //            let data = try Data(contentsOf: received.file)
@@ -52,7 +50,6 @@ extension SaltyRecipeExport: Transferable {
         
         // Plain text representation:
         DataRepresentation(contentType: .plainText) { recipe in
-            let _ = print("data 2!")
             let text = recipe.plainTextRepresentation
             return text.data(using: .utf8) ?? Data()
         } importing: { data in
