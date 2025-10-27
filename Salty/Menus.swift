@@ -30,10 +30,11 @@ class SheetStateTracker: ObservableObject {
 }
 
 struct Menus: Commands {
-   @Environment(\.openWindow) private var openWindow
-   @StateObject private var sheetTracker = SheetStateTracker()
+    @Environment(\.openWindow) private var openWindow
+    @StateObject private var sheetTracker = SheetStateTracker()
+    @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
     
-   var body: some Commands {
+    var body: some Commands {
        ToolbarCommands()
        SidebarCommands()
        CommandGroup(after: .newItem) {
@@ -58,26 +59,15 @@ struct Menus: Commands {
            }
            .disabled(sheetTracker.isAnySheetShown)
        }
+// TODO: Placeholder for when implement:
 //       CommandGroup(before: .sidebar) {
 //           Menu("Sort By") {
-//               Button("Name") {
-//                   // TODO: Implement name sorting
+//               Picker("Sort Options", selection: $recipeListSortOrder) {
+//                   ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
+//                       Text(option.displayName).tag(option)
+//                   }
 //               }
-//               Button("Date Modified") {
-//                   // TODO: Implement date modified sorting
-//               }
-//               Button("Date Created/Added") {
-//                   // TODO: Implement date created sorting
-//               }
-//               Button("Source") {
-//                   // TODO: Implement source sorting
-//               }
-//               Button("Rating") {
-//                   // TODO: Implement rating sorting
-//               }
-//               Button("Difficulty") {
-//                   // TODO: Implement difficulty sorting
-//               }
+//               .pickerStyle(.inline)
 //           }
 //           Divider()
 //       }

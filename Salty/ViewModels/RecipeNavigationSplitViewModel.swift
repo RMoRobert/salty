@@ -273,10 +273,10 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
-    var shareableRecipeForSelectedRecipe: SaltyRecipeExport? {
-        guard let id = selectedRecipeIDs.first, let recipe = recipes.first(where: { $0.id == id }) else {
-            return nil
-        }
+    /// Creates a shareable recipe export for the given recipe
+    /// - Parameter recipe: The recipe to convert to a shareable format
+    /// - Returns: A SaltyRecipeExport if successful, nil otherwise
+    func shareableRecipe(for recipe: Recipe) -> SaltyRecipeExport? {
         do {
             let shareableRecipe = try SaltyRecipeExport.fromRecipe(recipe, database: database)
             return shareableRecipe

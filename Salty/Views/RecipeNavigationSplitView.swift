@@ -417,10 +417,6 @@ struct RecipeNavigationSplitView: View {
         .onChange(of: isAnySheetShown) { _, _ in
             notifySheetStateChanged()
         }
-        .task(id: viewModel.recipeListSortOrder) {
-            // Update recipes query when sort order changes
-            await viewModel.updateRecipesQuery()
-        }
         .onAppear {
             // Set up initial state after the view appears
             viewModel.setupInitialState()
