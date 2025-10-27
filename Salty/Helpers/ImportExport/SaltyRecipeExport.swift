@@ -11,30 +11,54 @@ import UniformTypeIdentifiers
 import CoreTransferable
 
 extension UTType {
-    static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe")
+    static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe", conformingTo:  .json)
     static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
 }
 
 extension SaltyRecipeExport: Transferable {
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .saltyRecipe)
-        DataRepresentation(importedContentType: .saltyRecipe) { data in
-            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
-            return recipe
-        }
-        DataRepresentation(exportedContentType: .saltyRecipe) { recipe in
-            let data = try JSONEncoder().encode(recipe)
-            return data
-        }
-        FileRepresentation(contentType: .saltyRecipe) { recipe in
-            let docsURL = URL.temporaryDirectory.appendingPathComponent("\(recipe.name)\(UUID().uuidString)", conformingTo: .saltyRecipe)
-            let data = try JSONEncoder().encode(recipe)
-            try data.write(to: docsURL)
-            return SentTransferredFile(docsURL)
-        } importing: { received in
-            let data = try Data(contentsOf: received.file)
-            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
-            return recipe
+        
+    /*
+     Have tried various representations here but can only get plain text to reliably populate sharing
+     destinations (e-mail, etc.). Keeping explicit "Export" option in menus (for file export) for now
+     but keeping this here so users have way to share as plain text via e-mail, text message, etc.
+     Will try to figure this out again some day...
+     */
+        
+//       CodableRepresentation(contentType: .saltyRecipe)
+//
+//        DataRepresentation(contentType: .saltyRecipe) { recipe in
+//            let data = try JSONEncoder().encode(recipe)
+//            return data
+//        } importing: { data in
+//            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
+//            return recipe
+//        }
+        
+//        FileRepresentation(contentType: .saltyRecipe) { recipe in
+//            let _ = print("file!")
+//            let docsURL = URL.temporaryDirectory.appendingPathComponent("\(recipe.name).saltyRecipe", conformingTo: .saltyRecipe)
+//            let data = try JSONEncoder().encode(recipe)
+//            try data.write(to: docsURL)
+//            let _ = print(docsURL.absoluteString)
+//            return SentTransferredFile(docsURL)
+//        } importing: { received in
+//            let data = try Data(contentsOf: received.file)
+//            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
+//            return recipe
+//        }
+        
+        // ProxyRepresentation(exporting: \.plainTextRepresentation)
+        
+        // Plain text representation:
+        DataRepresentation(contentType: .plainText) { recipe in
+            let _ = print("data 2!")
+            let text = recipe.plainTextRepresentation
+            return text.data(using: .utf8) ?? Data()
+        } importing: { data in
+            // This probably won't work super-well, but is required and should do *something*:
+            let recipe: Recipe = RecipeFromTextParser().parseRecipe(from: String(data: data, encoding: .utf8) ?? "")
+            return try self.fromRecipe(recipe)
         }
     }
 }
@@ -203,6 +227,35 @@ extension SaltyRecipeExport {
             course: courseName,
             categories: categoryNames.isEmpty ? nil : categoryNames,
             tags: tagNames.isEmpty ? nil : tagNames,
+            directions: recipe.directions.map { SaltyDirectionExport(from: $0) },
+            ingredients: recipe.ingredients.map { SaltyIngredientExport(from: $0) },
+            notes: recipe.notes,
+            preparationTimes: recipe.preparationTimes.map { SaltyPreparationTimeExport(from: $0) },
+            nutrition: recipe.nutrition
+        )
+    }
+    
+    /// Creates a SaltyRecipeExport from a Recipe with no attempts to fetch any database information (course, categories, etc.)
+    /// - Parameters:
+    ///   - recipe: The Recipe to convert
+    /// - Returns: A SaltyRecipeExport with all data populated
+    static func fromRecipe(_ recipe: Recipe) throws -> SaltyRecipeExport {
+        
+        return SaltyRecipeExport(
+            id: recipe.id,
+            name: recipe.name,
+            createdDate: recipe.createdDate,
+            lastModifiedDate: recipe.lastModifiedDate,
+            lastPrepared: recipe.lastPrepared,
+            source: recipe.source.isEmpty ? nil : recipe.source,
+            sourceDetails: recipe.sourceDetails.isEmpty ? nil : recipe.sourceDetails,
+            introduction: recipe.introduction.isEmpty ? nil : recipe.introduction,
+            difficulty: recipe.difficulty,
+            rating: recipe.rating,
+            isFavorite: recipe.isFavorite,
+            wantToMake: recipe.wantToMake,
+            yield: recipe.yield.isEmpty ? nil : recipe.yield,
+            servings: recipe.servings,
             directions: recipe.directions.map { SaltyDirectionExport(from: $0) },
             ingredients: recipe.ingredients.map { SaltyIngredientExport(from: $0) },
             notes: recipe.notes,

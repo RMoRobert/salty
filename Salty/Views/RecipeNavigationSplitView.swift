@@ -442,7 +442,8 @@ struct RecipeNavigationSplitView: View {
                 ShareLink(item: shareableRecipe,
                           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
                           message: Text(shareableRecipe.plainTextRepresentation),
-                          preview: SharePreview(recipe.name, image: recipe.fullImageData ?? Data()))
+                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                )
             }
         }
         Button(role: .destructive, action: {

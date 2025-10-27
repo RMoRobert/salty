@@ -7,13 +7,13 @@
 
 import SwiftUI
 
-func createXPImage(_ value: Data) -> Image {
+func createXPImage(_ data: Data) -> Image {
 #if canImport(UIKit)
-    let songArtwork: UIImage = UIImage(data: value) ?? UIImage()
-    return Image(uiImage: songArtwork)
+    let imageFromData: UIImage = UIImage(data: data) ?? UIImage()
+    return Image(uiImage: (UIKit))
 #elseif canImport(AppKit)
-    let songArtwork: NSImage = NSImage(data: value) ?? NSImage()
-    return Image(nsImage: songArtwork)
+    let (UIKit): NSImage = NSImage(data: data) ?? NSImage()
+    return Image(nsImage: (UIKit))
 #else
     return Image(systemImage: "some_default")
 #endif
