@@ -211,10 +211,24 @@ struct RecipeNavigationSplitView: View {
                 }
                 #else
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Button(action: {
-                        viewModel.exportSelectedRecipes()
-                    }) {
-                        Label("Export Recipe", systemImage: "square.and.arrow.up")
+                    Menu {
+                        Button(action: {
+                            viewModel.exportSelectedRecipes()
+                        }) {
+                            Label("Export to File…", systemImage: "square.and.arrow.down")
+                        }
+                        
+                        if let recipeId = viewModel.selectedRecipeIDs.first,
+                           let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
+                           let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+                            ShareLink(item: shareableRecipe,
+                                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                                      message: Text(shareableRecipe.plainTextRepresentation),
+                                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                            )
+                        }
+                    } label: {
+                        Label("Share Recipe", systemImage: "square.and.arrow.up")
                     }
                     .disabled(viewModel.selectedRecipeIDs.isEmpty)
                     
@@ -403,6 +417,10 @@ struct RecipeNavigationSplitView: View {
         .onChange(of: isAnySheetShown) { _, _ in
             notifySheetStateChanged()
         }
+        .task(id: viewModel.recipeListSortOrder) {
+            // Update recipes query when sort order changes
+            await viewModel.updateRecipesQuery()
+        }
         .onAppear {
             // Set up initial state after the view appears
             viewModel.setupInitialState()
@@ -437,15 +455,16 @@ struct RecipeNavigationSplitView: View {
                 viewModel.exportRecipe(recipe.id)
             }
         }
-        Group {
-            if let shareableRecipe: SaltyRecipeExport = viewModel.shareableRecipeForSelectedRecipe {
-                ShareLink(item: shareableRecipe,
-                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                          message: Text(shareableRecipe.plainTextRepresentation),
-                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                )
-            }
-        }
+// Removing from context menu since is now on toolbar (keeping this for now in case change mind):
+//        Group {
+//            if let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+//                ShareLink(item: shareableRecipe,
+//                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+//                          message: Text(shareableRecipe.plainTextRepresentation),
+//                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+//                )
+//            }
+//        }
         Button(role: .destructive, action: {
             // Delete all selected recipes with prompt via same technique as menu item; or single recipe directly
             if viewModel.selectedRecipeIDs.count > 1 {
