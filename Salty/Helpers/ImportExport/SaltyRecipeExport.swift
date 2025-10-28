@@ -25,7 +25,9 @@ extension SaltyRecipeExport: Transferable {
      Will try to figure this out again some day...
      */
         
-//       CodableRepresentation(contentType: .saltyRecipe)
+        // Would be my preference, and seems OK to keep for now since UI is only using plainTextRepresentation for sharing
+        // and probably won't even see this (or next) -- but would like to make work some day:
+        CodableRepresentation(contentType: .saltyRecipe)
 
 //        DataRepresentation(contentType: .saltyRecipe) { recipe in
 //            let data = try JSONEncoder().encode(recipe)

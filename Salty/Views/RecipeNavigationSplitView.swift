@@ -221,7 +221,13 @@ struct RecipeNavigationSplitView: View {
                         if let recipeId = viewModel.selectedRecipeIDs.first,
                            let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
                            let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
-                            ShareLink(item: shareableRecipe,
+                            // Would like this to work with plain text fallback, but can't get to...
+                            // ShareLink(item: shareableRecipe,
+                            //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                            //           message: Text(shareableRecipe.plainTextRepresentation),
+                            //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                            // )
+                            ShareLink(item: shareableRecipe.plainTextRepresentation + "\n\nShared from Salty Recipe Manager for iOS and macOS",
                                       subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
                                       message: Text(shareableRecipe.plainTextRepresentation),
                                       preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
