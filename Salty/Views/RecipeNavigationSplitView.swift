@@ -245,7 +245,11 @@ struct RecipeNavigationSplitView: View {
                         Label("New Recipe", systemImage: "plus")
                     }
                     Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                        Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
+                        let imageName: String = isLiquidGlassAvailable() ?
+                        "line.3.horizontal.decrease" :
+                        (viewModel.isFavoritesFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        Label("Filter (Favorites Only)", systemImage: imageName)
+                            .foregroundColor(viewModel.isFavoritesFilterActive && !isLiquidGlassAvailable() ? Color.accentColor : nil)
                     }
                 }
                 #endif
