@@ -255,7 +255,8 @@ struct RecipeNavigationSplitView: View {
                         "line.3.horizontal.decrease" :
                         (viewModel.isFavoritesFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                         Label("Filter (Favorites Only)", systemImage: imageName)
-                            .foregroundColor(viewModel.isFavoritesFilterActive && !isLiquidGlassAvailable() ? Color.accentColor : nil)
+                        // Needed to make look correcton macOS 15; removing is fine for macOS 26, but simulating same behavior for now as long as supporting both:
+                           .foregroundColor(viewModel.isFavoritesFilterActive ? (isLiquidGlassAvailable() ? Color.white : Color.accentColor) : nil)
                     }
                 }
                 #endif
