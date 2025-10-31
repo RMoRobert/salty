@@ -29,9 +29,31 @@ class SheetStateTracker: ObservableObject {
     }
 }
 
+// Track recipe selection state for enabling/disabling menu items
+class SelectionStateTracker: ObservableObject {
+    @Published var hasRecipeSelected = false
+    
+    init() {
+        NotificationCenter.default.addObserver(
+            forName: .recipeSelectionChanged,
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let hasSelected = notification.userInfo?["hasSelected"] as? Bool {
+                self.hasRecipeSelected = hasSelected
+            }
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+}
+
 struct Menus: Commands {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var sheetTracker = SheetStateTracker()
+    @StateObject private var selectionTracker = SelectionStateTracker()
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
     
     var body: some Commands {
@@ -58,6 +80,12 @@ struct Menus: Commands {
                NotificationCenter.default.post(name: .exportSelectedRecipes, object: nil)
            }
            .disabled(sheetTracker.isAnySheetShown)
+           Divider()
+           Button("Get Info") {
+               NotificationCenter.default.post(name: .showRecipeInfoInspector, object: nil)
+           }
+           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .keyboardShortcut("i", modifiers: [.command])
        }
 // TODO: Placeholder for when implement:
 //       CommandGroup(before: .sidebar) {

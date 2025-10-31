@@ -29,6 +29,7 @@ struct RecipeNavigationSplitView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingSettingsSheet = false
     @State private var showingFirstLaunchAlert = false
+    @State private var recipeIDForInspector: String? = nil
     
     private var isAnySheetShown: Bool {
         showingEditLibCategoriesSheet ||
@@ -99,6 +100,13 @@ struct RecipeNavigationSplitView: View {
                 List(selection: $viewModel.selectedRecipeIDs) {
                     ForEach(viewModel.filteredRecipes) { recipe in
                         RecipeRowView(recipe: recipe)
+                            .popover(isPresented: Binding(
+                                get: { recipeIDForInspector == recipe.id },
+                                set: { if !$0 { recipeIDForInspector = nil } }
+                            )) {
+                                RecipeInfoInspectorView(recipe: recipe)
+                                    .frame(minWidth: 280)
+                            }
                             .id(recipe.id)
                             .contextMenu {
                                 contextMenuForRecipe(recipe)
@@ -425,6 +433,19 @@ struct RecipeNavigationSplitView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showCreateFromWebSheet)) { _ in
             showingCreateFromWebSheet = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showRecipeInfoInspector)) { _ in
+            if let recipeId = viewModel.selectedRecipeIDs.first {
+                recipeIDForInspector = recipeId
+            }
+        }
+        .onChange(of: viewModel.selectedRecipeIDs) { _, _ in
+            let hasSelected = !viewModel.selectedRecipeIDs.isEmpty
+            NotificationCenter.default.post(
+                name: .recipeSelectionChanged,
+                object: nil,
+                userInfo: ["hasSelected": hasSelected]
+            )
+        }
         .onChange(of: isAnySheetShown) { _, _ in
             notifySheetStateChanged()
         }
@@ -444,6 +465,14 @@ struct RecipeNavigationSplitView: View {
             
             // Set to true after successful view load
             offeredSampleImport = true
+            
+            // Notify menu about initial selection state
+            let hasSelected = !viewModel.selectedRecipeIDs.isEmpty
+            NotificationCenter.default.post(
+                name: .recipeSelectionChanged,
+                object: nil,
+                userInfo: ["hasSelected": hasSelected]
+            )
         }
     }
     
@@ -487,6 +516,12 @@ struct RecipeNavigationSplitView: View {
             Text("Delete")
         }
         .keyboardShortcut(.delete, modifiers: [.command])
+        #if os(macOS)
+        Divider()
+        Button("Get Info") {
+            recipeIDForInspector = recipe.id
+        }
+        #endif
     }
 }
 
@@ -516,6 +551,33 @@ struct ExportDocument: FileDocument {
     
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         return FileWrapper(regularFileWithContents: data)
+    }
+}
+
+
+// MARK: - Inspector View
+
+private struct RecipeInfoInspectorView: View {
+    let recipe: Recipe
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(recipe.name)
+                .font(.headline)
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Created")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(recipe.createdDate.formatted(date: .abbreviated, time: .shortened))
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Last Modified")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(recipe.lastModifiedDate.formatted(date: .abbreviated, time: .shortened))
+            }
+        }
+        .padding()
     }
 }
 

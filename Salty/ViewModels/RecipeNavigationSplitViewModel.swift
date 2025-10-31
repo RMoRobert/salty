@@ -16,6 +16,8 @@ extension Notification.Name {
     static let showImportFromFileSheet = Notification.Name("showImportFromFileSheet")
     static let showCreateFromWebSheet = Notification.Name("showCreateFromWebSheet")
     static let sheetStateChanged = Notification.Name("sheetStateChanged")
+    static let showRecipeInfoInspector = Notification.Name("showRecipeInfoInspector")
+    static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
 }
 
 @Observable
