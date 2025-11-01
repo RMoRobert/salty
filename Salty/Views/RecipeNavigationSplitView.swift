@@ -1,3 +1,7 @@
+// This is free software: you can redistribute and/or modify it
+// under the terms of the GNU Lesser General Public License 3.0
+// as published by the Free Software Foundation https://fsf.org
+
 //
 //  RecipeNavigationSplitView.swift
 //  Salty
@@ -516,12 +520,10 @@ struct RecipeNavigationSplitView: View {
             Text("Delete")
         }
         .keyboardShortcut(.delete, modifiers: [.command])
-        #if os(macOS)
         Divider()
         Button("Get Info") {
             recipeIDForInspector = recipe.id
         }
-        #endif
     }
 }
 
