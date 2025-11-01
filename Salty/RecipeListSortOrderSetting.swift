@@ -32,3 +32,26 @@ enum RecipeListSortOrderSetting: String, Codable, CaseIterable {
         }
     }
 }
+
+enum RecipeListSortDirection: String, Codable, CaseIterable {
+    case ascending
+    case descending
+    
+    var displayName: String {
+        switch self {
+        case .ascending:
+            return "Ascending"
+        case .descending:
+            return "Descending"
+        }
+    }
+    
+    var sqlSuffix: String {
+        switch self {
+        case .ascending:
+            return "ASC"
+        case .descending:
+            return "DESC"
+        }
+    }
+}

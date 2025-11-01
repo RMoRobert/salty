@@ -63,7 +63,7 @@ struct RecipeNavigationSplitView: View {
     }
     
     private var recipeQueryId: String {
-        "\(viewModel.searchString)||\(viewModel.selectedSidebarItemId ?? "")"
+        "\(viewModel.searchString)||\(viewModel.selectedSidebarItemId ?? "")||\(viewModel.isFavoritesFilterActive)||\(viewModel.recipeListSortOrder.rawValue)||\(viewModel.recipeListSortDirection.rawValue)"
     }
     
     var body: some View {

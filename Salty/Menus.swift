@@ -55,6 +55,7 @@ struct Menus: Commands {
     @StateObject private var sheetTracker = SheetStateTracker()
     @StateObject private var selectionTracker = SelectionStateTracker()
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
+    @AppStorage("recipeListSortDirection") private var recipeListSortDirection: RecipeListSortDirection = .ascending
     
     var body: some Commands {
        ToolbarCommands()
@@ -87,18 +88,23 @@ struct Menus: Commands {
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            .keyboardShortcut("i", modifiers: [.command])
        }
-// TODO: Placeholder for when implement:
-//       CommandGroup(before: .sidebar) {
-//           Menu("Sort By") {
-//               Picker("Sort Options", selection: $recipeListSortOrder) {
-//                   ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
-//                       Text(option.displayName).tag(option)
-//                   }
-//               }
-//               .pickerStyle(.inline)
-//           }
-//           Divider()
-//       }
+       CommandGroup(before: .sidebar) {
+           Menu("Sort By") {
+               Picker("Sort Options", selection: $recipeListSortOrder) {
+                   ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
+                       Text(option.displayName).tag(option)
+                   }
+               }
+               .pickerStyle(.inline)
+               Picker("Sort Direction", selection: $recipeListSortDirection) {
+                   ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
+                       Text(direction.displayName).tag(direction)
+                   }
+               }
+               .pickerStyle(.inline)
+           }
+           Divider()
+       }
        #if os(macOS)
        CommandGroup(before: .windowList) {
            Button("Edit Categories") {

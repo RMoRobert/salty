@@ -28,6 +28,42 @@ class RecipeNavigationSplitViewModel {
     init() {
         // Check if this is a new launch by looking for existing recipes
         // We'll set this properly after the database is loaded
+        
+        // Initialize sort settings from UserDefaults (only if they exist, otherwise use defaults)
+        if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortOrder"),
+           let setting = RecipeListSortOrderSetting(rawValue: rawValue) {
+            recipeListSortOrder = setting
+        }
+        
+        if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortDirection"),
+           let direction = RecipeListSortDirection(rawValue: rawValue) {
+            recipeListSortDirection = direction
+        }
+        
+        // Observe UserDefaults changes for sort settings (from menu updates)
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            // Update stored properties if UserDefaults changed externally
+            if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortOrder"),
+               let setting = RecipeListSortOrderSetting(rawValue: rawValue),
+               setting != self.recipeListSortOrder {
+                self.recipeListSortOrder = setting
+            }
+            
+            if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortDirection"),
+               let direction = RecipeListSortDirection(rawValue: rawValue),
+               direction != self.recipeListSortDirection {
+                self.recipeListSortDirection = direction
+            }
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     /// Call this method after the database is loaded to set up the initial state
@@ -62,6 +98,27 @@ class RecipeNavigationSplitViewModel {
     var selectedSidebarItemId: String?
     var selectedRecipeIDs = Set<String>()
     var isFavoritesFilterActive = false
+    
+    var recipeListSortOrder: RecipeListSortOrderSetting = .byName {
+        didSet {
+            // Only write to UserDefaults if the value in UserDefaults is different
+            // This prevents redundant writes when syncing from external changes
+            if UserDefaults.standard.string(forKey: "recipeListSortOrder") != recipeListSortOrder.rawValue {
+                UserDefaults.standard.set(recipeListSortOrder.rawValue, forKey: "recipeListSortOrder")
+            }
+        }
+    }
+    
+    var recipeListSortDirection: RecipeListSortDirection = .ascending {
+        didSet {
+            // Only write to UserDefaults if the value in UserDefaults is different
+            // This prevents redundant writes when syncing from external changes
+            if UserDefaults.standard.string(forKey: "recipeListSortDirection") != recipeListSortDirection.rawValue {
+                UserDefaults.standard.set(recipeListSortDirection.rawValue, forKey: "recipeListSortDirection")
+            }
+        }
+    }
+    
     var showingEditSheet = false
     var recipeToEditID: String?
     var shouldScrollToNewRecipe = false
@@ -135,53 +192,157 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
-    func updateRecipesQuery() async {
-        do {
-            let isAllRecipes = selectedSidebarItemId == nil || selectedSidebarItemId == allRecipesID
-            let hasSearch = !searchString.isEmpty
-            
-            if isAllRecipes && !hasSearch {
-                // All recipes, no search
-                try await $recipes.load(
-                    #sql(
-                    """
-                    SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE
-                    """,
-                    as: Recipe.self)
-                )
-            }
-            else if isAllRecipes && hasSearch {
-                // All recipes with search
-                let searchPattern = "%\(searchString)%"
-                try await $recipes.load(
-                    #sql(
-                    """
-                    SELECT \(Recipe.columns) FROM \(Recipe.self)
-                    WHERE \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
-                    ORDER BY \(Recipe.name) COLLATE NOCASE
-                    """,
-                    as: Recipe.self)
-                )
-            }
-            else if !isAllRecipes && !hasSearch {
-                // Category filter, no search
-                if let categoryId = selectedSidebarItemId {
-                    try await $recipes.load(
-                        #sql(
-                        """
-                        SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
-                        INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
-                        WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
-                        ORDER BY \(Recipe.name) COLLATE NOCASE
-                        """,
-                        as: Recipe.self)
-                    )
+    private func loadAllRecipesQuery(searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        // Build query using method chaining
+        let searchPattern = searchPattern
+        
+        if let searchPattern = searchPattern, includeFavorites {
+            // Query with search AND favorites
+            try await $recipes.load(
+                Recipe
+                    .where {
+                        #sql("\($0.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && $0.isFavorite == true
+                    }
+                    .order {
+                        switch (sortOrder, sortDirection) {
+                        case (.byName, .ascending):
+                            #sql("\($0.name) COLLATE NOCASE")
+                        case (.byName, .descending):
+                            #sql("\($0.name) COLLATE NOCASE DESC")
+                        case (.bySource, .ascending):
+                            #sql("\($0.source) COLLATE NOCASE")
+                        case (.bySource, .descending):
+                            #sql("\($0.source) COLLATE NOCASE DESC")
+                        case (.byDateModified, .ascending):
+                            $0.lastModifiedDate
+                        case (.byDateModified, .descending):
+                            $0.lastModifiedDate.desc()
+                        case (.byDateCreated, .ascending):
+                            $0.createdDate
+                        case (.byDateCreated, .descending):
+                            $0.createdDate.desc()
+                        case (.byRating, .ascending):
+                            $0.rating
+                        case (.byRating, .descending):
+                            $0.rating.desc()
+                        case (.byDifficulty, .ascending):
+                            $0.difficulty
+                        case (.byDifficulty, .descending):
+                            $0.difficulty.desc()
+                        }
+                    }
+            )
+        } else if let searchPattern = searchPattern {
+            // Query with search only
+            try await $recipes.load(
+                Recipe
+                    .where {
+                        #sql("\($0.name) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                    }
+                    .order {
+                        switch (sortOrder, sortDirection) {
+                        case (.byName, .ascending):
+                            #sql("\($0.name) COLLATE NOCASE")
+                        case (.byName, .descending):
+                            #sql("\($0.name) COLLATE NOCASE DESC")
+                        case (.bySource, .ascending):
+                            #sql("\($0.source) COLLATE NOCASE")
+                        case (.bySource, .descending):
+                            #sql("\($0.source) COLLATE NOCASE DESC")
+                        case (.byDateModified, .ascending):
+                            $0.lastModifiedDate
+                        case (.byDateModified, .descending):
+                            $0.lastModifiedDate.desc()
+                        case (.byDateCreated, .ascending):
+                            $0.createdDate
+                        case (.byDateCreated, .descending):
+                            $0.createdDate.desc()
+                        case (.byRating, .ascending):
+                            $0.rating
+                        case (.byRating, .descending):
+                            $0.rating.desc()
+                        case (.byDifficulty, .ascending):
+                            $0.difficulty
+                        case (.byDifficulty, .descending):
+                            $0.difficulty.desc()
+                        }
+                    }
+            )
+        } else if includeFavorites {
+            // Query with favorites only
+            try await $recipes.load(
+                Recipe
+                    .where {
+                        $0.isFavorite == true
+                    }
+                    .order {
+                        switch (sortOrder, sortDirection) {
+                        case (.byName, .ascending):
+                            #sql("\($0.name) COLLATE NOCASE")
+                        case (.byName, .descending):
+                            #sql("\($0.name) COLLATE NOCASE DESC")
+                        case (.bySource, .ascending):
+                            #sql("\($0.source) COLLATE NOCASE")
+                        case (.bySource, .descending):
+                            #sql("\($0.source) COLLATE NOCASE DESC")
+                        case (.byDateModified, .ascending):
+                            $0.lastModifiedDate
+                        case (.byDateModified, .descending):
+                            $0.lastModifiedDate.desc()
+                        case (.byDateCreated, .ascending):
+                            $0.createdDate
+                        case (.byDateCreated, .descending):
+                            $0.createdDate.desc()
+                        case (.byRating, .ascending):
+                            $0.rating
+                        case (.byRating, .descending):
+                            $0.rating.desc()
+                        case (.byDifficulty, .ascending):
+                            $0.difficulty
+                        case (.byDifficulty, .descending):
+                            $0.difficulty.desc()
+                        }
+                    }
+            )
+        } else {
+            // Query without WHERE clause
+            try await $recipes.load(
+                Recipe.order {
+                    switch (sortOrder, sortDirection) {
+                    case (.byName, .ascending):
+                        #sql("\($0.name) COLLATE NOCASE")
+                    case (.byName, .descending):
+                        #sql("\($0.name) COLLATE NOCASE DESC")
+                    case (.bySource, .ascending):
+                        #sql("\($0.source) COLLATE NOCASE")
+                    case (.bySource, .descending):
+                        #sql("\($0.source) COLLATE NOCASE DESC")
+                    case (.byDateModified, .ascending):
+                        $0.lastModifiedDate
+                    case (.byDateModified, .descending):
+                        $0.lastModifiedDate.desc()
+                    case (.byDateCreated, .ascending):
+                        $0.createdDate
+                    case (.byDateCreated, .descending):
+                        $0.createdDate.desc()
+                    case (.byRating, .ascending):
+                        $0.rating
+                    case (.byRating, .descending):
+                        $0.rating.desc()
+                    case (.byDifficulty, .ascending):
+                        $0.difficulty
+                    case (.byDifficulty, .descending):
+                        $0.difficulty.desc()
+                    }
                 }
-            }
-            else {
-                // Category filter with search
-                if let categoryId = selectedSidebarItemId {
-                    let searchPattern = "%\(searchString)%"
+            )
+        }
+    }
+    
+    private func loadCategoryRecipesQuery(categoryId: String, searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        switch (searchPattern != nil, includeFavorites, sortOrder, sortDirection) {
+        case (true, true, .byName, .ascending):
+            let searchPattern = searchPattern!
                     try await $recipes.load(
                         #sql(
                         """
@@ -189,11 +350,610 @@ class RecipeNavigationSplitViewModel {
                         INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
                         WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
                         AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
-                        ORDER BY \(Recipe.name) COLLATE NOCASE
+                        AND \(Recipe.isFavorite) = \(bind: true)
+                        ORDER BY \(Recipe.name) COLLATE NOCASE ASC
                         """,
                         as: Recipe.self)
                     )
-                }
+        case (true, true, .byName, .descending):
+            let searchPattern = searchPattern!
+                    try await $recipes.load(
+                        #sql(
+                        """
+                        SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                        INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                        WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                        AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.name) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byDateModified, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.lastModifiedDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byDateModified, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.lastModifiedDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byDateCreated, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.createdDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byDateCreated, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.createdDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .bySource, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.source) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .bySource, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.source) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byRating, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.rating) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byRating, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.rating) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byDifficulty, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.difficulty) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, true, .byDifficulty, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.difficulty) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byName, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.name) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byName, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.name) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byDateModified, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.lastModifiedDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byDateModified, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.lastModifiedDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byDateCreated, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.createdDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byDateCreated, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.createdDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .bySource, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.source) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .bySource, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.source) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byRating, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.rating) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byRating, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.rating) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byDifficulty, .ascending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.difficulty) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (true, false, .byDifficulty, .descending):
+            let searchPattern = searchPattern!
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                ORDER BY \(Recipe.difficulty) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byName, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.name) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byName, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.name) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byDateModified, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.lastModifiedDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byDateModified, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.lastModifiedDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byDateCreated, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.createdDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byDateCreated, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.createdDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .bySource, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.source) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .bySource, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.source) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byRating, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.rating) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byRating, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.rating) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byDifficulty, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.difficulty) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, true, .byDifficulty, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                AND \(Recipe.isFavorite) = \(bind: true)
+                ORDER BY \(Recipe.difficulty) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byName, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.name) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byName, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.name) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byDateModified, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.lastModifiedDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byDateModified, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.lastModifiedDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byDateCreated, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.createdDate) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byDateCreated, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.createdDate) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .bySource, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.source) COLLATE NOCASE ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .bySource, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.source) COLLATE NOCASE DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byRating, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.rating) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byRating, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.rating) DESC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byDifficulty, .ascending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.difficulty) ASC
+                """,
+                as: Recipe.self)
+            )
+        case (false, false, .byDifficulty, .descending):
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                ORDER BY \(Recipe.difficulty) DESC
+                """,
+                as: Recipe.self)
+            )
+        }
+    }
+    
+    func updateRecipesQuery() async {
+        do {
+            let isAllRecipes = selectedSidebarItemId == nil || selectedSidebarItemId == allRecipesID
+            let searchPattern = searchString.isEmpty ? nil : "%\(searchString)%"
+            let includeFavorites = isFavoritesFilterActive
+            
+            if isAllRecipes {
+                try await loadAllRecipesQuery(searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
+            } else if let categoryId = selectedSidebarItemId {
+                try await loadCategoryRecipesQuery(categoryId: categoryId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
             }
         }
         catch {
