@@ -48,7 +48,9 @@ class RecipeNavigationSplitViewModel {
     
     // MARK: - Data (using SQLiteData property wrappers)
     @ObservationIgnored
-    @FetchAll(#sql("SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE"))
+//    @FetchAll(#sql("SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE"))
+//    var recipes: [Recipe]
+    @FetchAll
     var recipes: [Recipe]
     
     @ObservationIgnored
@@ -73,54 +75,54 @@ class RecipeNavigationSplitViewModel {
     var showingExportErrorAlert = false
     
 
-    // TODO: Do more of this in database and not filtering afterwards
-    // Consider also using "@Select" instead of retrieving entire recipe data for preview only
-    var filteredRecipes: [Recipe] {
-        var recipesToFilter: [Recipe]
-        
-        if selectedSidebarItemId == allRecipesID {
-            recipesToFilter = recipes
-        } else if let categoryId = selectedSidebarItemId,
-                  let category = categories.first(where: { $0.id == categoryId }) {
-            // Filter recipes for the selected category
-            do {
-                let recipeIds = try database.read { db in
-                    try RecipeCategory
-                        .where { $0.categoryId == category.id }
-                        .fetchAll(db)
-                        .map { $0.recipeId }
-                }
-                
-                recipesToFilter = recipes.filter { recipe in
-                    recipeIds.contains(recipe.id)
-                }
-            } catch {
-                recipesToFilter = []
-            }
-        } else {
-            recipesToFilter = []
-        }
-        
-        // Apply search filter if search string is not empty
-        if !searchString.isEmpty {
-            let normalizedSearch = searchString
-                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            recipesToFilter = recipesToFilter.filter { recipe in
-                let normalizedName = recipe.name
-                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                
-                return normalizedName.contains(normalizedSearch)
-            }
-        }
-        
-        if isFavoritesFilterActive == true {
-            recipesToFilter = recipesToFilter.filter(\.self.isFavorite)
-        }
-        
-        return recipesToFilter
-    }
+//    // TODO: Do more of this in database and not filtering afterwards
+//    // Consider also using "@Select" instead of retrieving entire recipe data for preview only
+//    var filteredRecipes: [Recipe] {
+//        var recipesToFilter: [Recipe]
+//        
+//        if selectedSidebarItemId == allRecipesID {
+//            recipesToFilter = recipes
+//        } else if let categoryId = selectedSidebarItemId,
+//                  let category = categories.first(where: { $0.id == categoryId }) {
+//            // Filter recipes for the selected category
+//            do {
+//                let recipeIds = try database.read { db in
+//                    try RecipeCategory
+//                        .where { $0.categoryId == category.id }
+//                        .fetchAll(db)
+//                        .map { $0.recipeId }
+//                }
+//                
+//                recipesToFilter = recipes.filter { recipe in
+//                    recipeIds.contains(recipe.id)
+//                }
+//            } catch {
+//                recipesToFilter = []
+//            }
+//        } else {
+//            recipesToFilter = []
+//        }
+//        
+//        // Apply search filter if search string is not empty
+//        if !searchString.isEmpty {
+//            let normalizedSearch = searchString
+//                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+//                .trimmingCharacters(in: .whitespacesAndNewlines)
+//            
+//            recipesToFilter = recipesToFilter.filter { recipe in
+//                let normalizedName = recipe.name
+//                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+//                
+//                return normalizedName.contains(normalizedSearch)
+//            }
+//        }
+//        
+//        if isFavoritesFilterActive == true {
+//            recipesToFilter = recipesToFilter.filter(\.self.isFavorite)
+//        }
+//        
+//        return recipesToFilter
+//    }
     
     var navigationTitle: String {
         if selectedSidebarItemId == allRecipesID {
@@ -130,6 +132,73 @@ class RecipeNavigationSplitViewModel {
             return category.name
         } else {
             return "Recipes"
+        }
+    }
+    
+    func updateRecipesQuery() async {
+        do {
+            let isAllRecipes = selectedSidebarItemId == nil || selectedSidebarItemId == allRecipesID
+            let hasSearch = !searchString.isEmpty
+            
+            if isAllRecipes && !hasSearch {
+                // All recipes, no search
+                try await $recipes.load(
+                    #sql(
+                    """
+                    SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE
+                    """,
+                    as: Recipe.self)
+                )
+            }
+            else if isAllRecipes && hasSearch {
+                // All recipes with search
+                let searchPattern = "%\(searchString)%"
+                try await $recipes.load(
+                    #sql(
+                    """
+                    SELECT \(Recipe.columns) FROM \(Recipe.self)
+                    WHERE \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                    ORDER BY \(Recipe.name) COLLATE NOCASE
+                    """,
+                    as: Recipe.self)
+                )
+            }
+            else if !isAllRecipes && !hasSearch {
+                // Category filter, no search
+                if let categoryId = selectedSidebarItemId {
+                    try await $recipes.load(
+                        #sql(
+                        """
+                        SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                        INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                        WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                        ORDER BY \(Recipe.name) COLLATE NOCASE
+                        """,
+                        as: Recipe.self)
+                    )
+                }
+            }
+            else {
+                // Category filter with search
+                if let categoryId = selectedSidebarItemId {
+                    let searchPattern = "%\(searchString)%"
+                    try await $recipes.load(
+                        #sql(
+                        """
+                        SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                        INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                        WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                        AND \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)
+                        ORDER BY \(Recipe.name) COLLATE NOCASE
+                        """,
+                        as: Recipe.self)
+                    )
+                }
+            }
+        }
+        catch {
+            print("Error fetching recipes: \(error)")
+            logger.error("Error fetching recipes: \(error)")
         }
     }
     

@@ -62,6 +62,10 @@ struct RecipeNavigationSplitView: View {
         }
     }
     
+    private var recipeQueryId: String {
+        "\(viewModel.searchString)||\(viewModel.selectedSidebarItemId ?? "")"
+    }
+    
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $viewModel.selectedSidebarItemId) {
@@ -102,7 +106,7 @@ struct RecipeNavigationSplitView: View {
         } content: {
             ScrollViewReader { proxy in
                 List(selection: $viewModel.selectedRecipeIDs) {
-                    ForEach(viewModel.filteredRecipes) { recipe in
+                    ForEach(viewModel.recipes) { recipe in
                         RecipeRowView(recipe: recipe)
                             .popover(isPresented: Binding(
                                 get: { recipeIDForInspector == recipe.id },
@@ -120,7 +124,7 @@ struct RecipeNavigationSplitView: View {
                     .onDelete { indexSet in
                         withAnimation {
                             let recipesToDelete = indexSet.compactMap { index in
-                                viewModel.filteredRecipes.indices.contains(index) ? viewModel.filteredRecipes[index] : nil
+                                viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
                             }
                             for recipe in recipesToDelete {
                                 viewModel.deleteRecipe(id: recipe.id)
@@ -128,6 +132,9 @@ struct RecipeNavigationSplitView: View {
                         }
                     }
                     #endif
+                }
+                .task(id: recipeQueryId) {
+                    await viewModel.updateRecipesQuery()
                 }
                 #if !os(macOS)
                 .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
@@ -142,7 +149,7 @@ struct RecipeNavigationSplitView: View {
                     if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
                         // Wait a bit for the recipe to appear in the list before scrolling
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            if viewModel.filteredRecipes.contains(where: { $0.id == newId }) {
+                            if viewModel.recipes.contains(where: { $0.id == newId }) {
                                 withAnimation {
                                     proxy.scrollTo(newId)
                                 }
