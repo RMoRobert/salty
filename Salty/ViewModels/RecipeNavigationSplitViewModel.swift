@@ -1573,8 +1573,20 @@ class RecipeNavigationSplitViewModel {
             return draftRecipe
         }
         
-        // Otherwise, find existing recipe
-        return recipes.first(where: { $0.id == recipeId })
+        // First try to find in the current filtered recipes list
+        if let recipe = recipes.first(where: { $0.id == recipeId }) {
+            return recipe
+        }
+        
+        // If not found in filtered list (e.g., category removed when selected and Edit view open), fetch directly from database
+        do {
+            return try database.read { db in
+                try Recipe.where { $0.id == recipeId }.fetchOne(db)
+            }
+        } catch {
+            logger.error("Error fetching recipe for edit: \(error)")
+            return nil
+        }
     }
     
     func clearDraftRecipe() {
