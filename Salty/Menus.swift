@@ -50,12 +50,80 @@ class SelectionStateTracker: ObservableObject {
     }
 }
 
+// Track search options state to make menu reactive to UserDefaults changes
+class SearchOptionsTracker: ObservableObject {
+    @Published private var optionStates: [RecipeListSearchOptions: Bool] = [:]
+    
+    init() {
+        // Initialize from UserDefaults
+        loadFromUserDefaults()
+        
+        // Observe UserDefaults changes
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.loadFromUserDefaults()
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    private func loadFromUserDefaults() {
+        for option in RecipeListSearchOptions.allCases {
+            if UserDefaults.standard.object(forKey: option.userDefaultsKey) is Bool {
+                optionStates[option] = UserDefaults.standard.bool(forKey: option.userDefaultsKey)
+            } else {
+                // Set default: name = true, others = false
+                let defaultValue = option == .name
+                UserDefaults.standard.set(defaultValue, forKey: option.userDefaultsKey)
+                optionStates[option] = defaultValue
+            }
+        }
+    }
+    
+    func isSelected(_ option: RecipeListSearchOptions) -> Bool {
+        return optionStates[option] ?? (option == .name)
+    }
+    
+    func setSelected(_ option: RecipeListSearchOptions, _ value: Bool) {
+        if !value {
+            // Check if this is the last selected option
+            let otherOptions = RecipeListSearchOptions.allCases.filter { $0 != option }
+            let anyOtherSelected = otherOptions.contains { isSelected($0) }
+            if !anyOtherSelected {
+                // Prevent unchecking if it's the last selected option
+                return
+            }
+        }
+        UserDefaults.standard.set(value, forKey: option.userDefaultsKey)
+        optionStates[option] = value
+    }
+}
+
 struct Menus: Commands {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var sheetTracker = SheetStateTracker()
     @StateObject private var selectionTracker = SelectionStateTracker()
+    @StateObject private var searchOptionsTracker = SearchOptionsTracker()
+    
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
     @AppStorage("recipeListSortDirection") private var recipeListSortDirection: RecipeListSortDirection = .ascending
+    
+    // Helper to create a binding for a search option with validation
+    private func binding(for option: RecipeListSearchOptions) -> Binding<Bool> {
+        Binding(
+            get: {
+                searchOptionsTracker.isSelected(option)
+            },
+            set: { newValue in
+                searchOptionsTracker.setSelected(option, newValue)
+            }
+        )
+    }
     
     var body: some Commands {
        ToolbarCommands()
@@ -102,6 +170,13 @@ struct Menus: Commands {
                    }
                }
                .pickerStyle(.inline)
+           }
+           Menu("Search Options") {
+               Section("Search In…") {
+                   ForEach(RecipeListSearchOptions.allCases, id: \.self) { option in
+                       Toggle(option.displayName, isOn: binding(for: option))
+                   }
+               }
            }
            Divider()
        }

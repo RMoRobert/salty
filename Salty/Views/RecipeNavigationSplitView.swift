@@ -12,6 +12,41 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Track search options changes to trigger query updates
+class SearchOptionsChangeTracker: ObservableObject {
+    @Published var changeId = UUID()
+    private var lastSearchOptionsKey: String = ""
+    
+    init() {
+        // Initialize with current search options
+        lastSearchOptionsKey = currentSearchOptionsKey()
+        
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let currentKey = self.currentSearchOptionsKey()
+            // Only update if search options actually changed
+            if currentKey != self.lastSearchOptionsKey {
+                self.lastSearchOptionsKey = currentKey
+                self.changeId = UUID()
+            }
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    private func currentSearchOptionsKey() -> String {
+        RecipeListSearchOptions.allCases
+            .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
+            .joined(separator: "")
+    }
+}
+
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
@@ -19,6 +54,7 @@ struct RecipeNavigationSplitView: View {
     // To force for testing:
     //@State private var offeredSampleImport = false
     @Environment(\.openWindow) private var openWindow
+    @StateObject private var searchOptionsTracker = SearchOptionsChangeTracker()
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var isEditMode = false
@@ -63,7 +99,12 @@ struct RecipeNavigationSplitView: View {
     }
     
     private var recipeQueryId: String {
-        "\(viewModel.searchString)||\(viewModel.selectedSidebarItemId ?? "")||\(viewModel.isFavoritesFilterActive)||\(viewModel.recipeListSortOrder.rawValue)||\(viewModel.recipeListSortDirection.rawValue)"
+        // Include search options in the query ID so changes trigger refresh
+        // Use the tracker's changeId to force update when search options change
+        let searchOptionsKey = RecipeListSearchOptions.allCases
+            .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
+            .joined(separator: "")
+        return "\(viewModel.searchString)||\(viewModel.selectedSidebarItemId ?? "")||\(viewModel.isFavoritesFilterActive)||\(viewModel.recipeListSortOrder.rawValue)||\(viewModel.recipeListSortDirection.rawValue)||\(searchOptionsKey)||\(searchOptionsTracker.changeId.uuidString)"
     }
     
     var body: some View {

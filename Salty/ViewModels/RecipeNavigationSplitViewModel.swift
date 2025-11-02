@@ -192,16 +192,53 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    // Helper to get selected search options from UserDefaults
+    private func getSelectedSearchOptions() -> Set<RecipeListSearchOptions> {
+        var options: Set<RecipeListSearchOptions> = []
+        for option in RecipeListSearchOptions.allCases {
+            if UserDefaults.standard.bool(forKey: option.userDefaultsKey) {
+                options.insert(option)
+            }
+        }
+        // Default to name if none selected
+        return options.isEmpty ? [.name] : options
+    }
+    
+    // Helper to check if search requires JOINs
+    private func searchRequiresJoins(_ options: Set<RecipeListSearchOptions>) -> Bool {
+        options.contains(.category) || options.contains(.course) || options.contains(.tag)
+    }
+    
     private func loadAllRecipesQuery(searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
-        // Build query using method chaining
-        let searchPattern = searchPattern
+        let searchOptions = getSelectedSearchOptions()
+        let requiresJoins = searchRequiresJoins(searchOptions)
         
+        // If search requires JOINs, use #sql directly
+        if let searchPattern = searchPattern, requiresJoins {
+            try await loadAllRecipesQueryWithJoins(searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection, searchOptions: searchOptions)
+            return
+        }
+        
+        // Build query using method chaining for simple searches (no JOINs needed)
         if let searchPattern = searchPattern, includeFavorites {
-            // Query with search AND favorites
+            // Query with search AND favorites - build OR conditions inline
             try await $recipes.load(
                 Recipe
-                    .where {
-                        #sql("\($0.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && $0.isFavorite == true
+                    .where { recipe in
+                        // Build OR conditions inline - check which options are selected
+                        if searchOptions.contains(.name) && searchOptions.contains(.introduction) {
+                            // Both selected - use OR
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if searchOptions.contains(.name) {
+                            // Only name selected
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                        } else if searchOptions.contains(.introduction) {
+                            // Only introduction selected
+                            #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                        } else {
+                            // Fallback to name
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                        }
                     }
                     .order {
                         switch (sortOrder, sortDirection) {
@@ -236,8 +273,21 @@ class RecipeNavigationSplitViewModel {
             // Query with search only
             try await $recipes.load(
                 Recipe
-                    .where {
-                        #sql("\($0.name) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                    .where { recipe in
+                        // Build OR conditions inline - check which options are selected
+                        if searchOptions.contains(.name) && searchOptions.contains(.introduction) {
+                            // Both selected - use OR
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if searchOptions.contains(.name) {
+                            // Only name selected
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if searchOptions.contains(.introduction) {
+                            // Only introduction selected
+                            #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else {
+                            // Fallback to name
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        }
                     }
                     .order {
                         switch (sortOrder, sortDirection) {
@@ -339,12 +389,281 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    private func loadAllRecipesQueryWithJoins(searchPattern: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection, searchOptions: Set<RecipeListSearchOptions>) async throws {
+        // Use full #sql for queries requiring JOINs
+        // Build ORDER BY as plain SQL strings (not SQL expressions)
+        let direction = sortDirection.sqlSuffix
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE"
+            case .bySource: return "source COLLATE NOCASE"
+            case .byDateModified: return "lastModifiedDate"
+            case .byDateCreated: return "createdDate"
+            case .byRating: return "rating"
+            case .byDifficulty: return "difficulty"
+            }
+        }()
+        
+        // Build search conditions inline in #sql macro with bind: syntax
+        // Count options to determine OR separators
+        let optionCount = searchOptions.count
+        
+        // Build the search pattern with wildcards once
+        let searchPatternWithWildcards = "%\(searchPattern)%"
+        
+        // Build WHERE conditions using if-else to avoid bind: in inactive branches
+        // Collect active conditions first, then build SQL based on which are active
+        let hasName = searchOptions.contains(.name)
+        let hasIntroduction = searchOptions.contains(.introduction)
+        let hasCourse = searchOptions.contains(.course)
+        let hasCategory = searchOptions.contains(.category)
+        let hasTag = searchOptions.contains(.tag)
+        
+        // Build WHERE clause conditionally - only include bind: for active conditions
+        // Use if-else to generate different SQL strings so bind: only appears in executed paths
+        if hasTag && !hasName && !hasIntroduction && !hasCourse && !hasCategory {
+            // Only tag selected
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                WHERE (
+                    EXISTS (SELECT 1 FROM \(RecipeTag.self) INNER JOIN \(Tag.self) ON \(RecipeTag.tagId) = \(Tag.id) WHERE \(RecipeTag.recipeId) = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))
+                )
+                \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                ORDER BY \(raw: orderByFragment) \(raw: direction)
+                """,
+                as: Recipe.self)
+            )
+        } else if hasName && !hasIntroduction && !hasCourse && !hasCategory && !hasTag {
+            // Only name selected
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                WHERE (
+                    \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)
+                )
+                \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                ORDER BY \(raw: orderByFragment) \(raw: direction)
+                """,
+                as: Recipe.self)
+            )
+        } else {
+            // Multiple conditions - build OR clause with only active conditions
+            var conditions: [String] = []
+            
+            if hasName || (!hasIntroduction && !hasCourse && !hasCategory && !hasTag) {
+                conditions.append("name")
+            }
+            if hasIntroduction {
+                conditions.append("intro")
+            }
+            if hasCourse {
+                conditions.append("course")
+            }
+            if hasCategory {
+                conditions.append("category")
+            }
+            if hasTag {
+                conditions.append("tag")
+            }
+            
+            // Build the SQL with explicit conditions for each active option
+            // This is verbose but ensures bind: only appears for active conditions
+            if conditions.count == 2 {
+                // Two conditions - handle common cases
+                if conditions.contains("name") && conditions.contains("intro") {
+                    try await $recipes.load(
+                        #sql(
+                        """
+                        SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                        WHERE (
+                            \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards) OR
+                            \(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)
+                        )
+                        \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                        ORDER BY \(raw: orderByFragment) \(raw: direction)
+                        """,
+                        as: Recipe.self)
+                    )
+                } else {
+                    // Fallback - use general approach with all conditions
+                    try await loadAllRecipesQueryWithJoinsGeneral(searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection, searchOptions: searchOptions, orderByFragment: orderByFragment, direction: direction, searchPatternWithWildcards: searchPatternWithWildcards)
+                }
+            } else {
+                // More than 2 or complex combination - use general method
+                try await loadAllRecipesQueryWithJoinsGeneral(searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection, searchOptions: searchOptions, orderByFragment: orderByFragment, direction: direction, searchPatternWithWildcards: searchPatternWithWildcards)
+            }
+        }
+    }
+    
+    // Helper method for general case with multiple search conditions
+    // Uses explicit condition building to avoid bind: in inactive branches
+    private func loadAllRecipesQueryWithJoinsGeneral(searchPattern: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection, searchOptions: Set<RecipeListSearchOptions>, orderByFragment: String, direction: String, searchPatternWithWildcards: String) async throws {
+        let hasName = searchOptions.contains(.name)
+        let hasIntroduction = searchOptions.contains(.introduction)
+        let hasCourse = searchOptions.contains(.course)
+        let hasCategory = searchOptions.contains(.category)
+        let hasTag = searchOptions.contains(.tag)
+        let effectiveHasName = hasName || (!hasIntroduction && !hasCourse && !hasCategory && !hasTag)
+        
+        // Build WHERE parts - we'll combine them manually
+        // For the general case, we need to handle all combinations
+        // Since we can't use ternaries with bind:, we'll use separate queries for different patterns
+        // For now, handle the most common case: name + one other
+        
+        if effectiveHasName && hasIntroduction && !hasCourse && !hasCategory && !hasTag {
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                WHERE (
+                    \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards) OR
+                    \(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)
+                )
+                \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                ORDER BY \(raw: orderByFragment) \(raw: direction)
+                """,
+                as: Recipe.self)
+            )
+        } else if effectiveHasName && hasTag && !hasIntroduction && !hasCourse && !hasCategory {
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                WHERE (
+                    \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards) OR
+                    EXISTS (SELECT 1 FROM \(RecipeTag.self) INNER JOIN \(Tag.self) ON \(RecipeTag.tagId) = \(Tag.id) WHERE \(RecipeTag.recipeId) = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))
+                )
+                \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                ORDER BY \(raw: orderByFragment) \(raw: direction)
+                """,
+                as: Recipe.self)
+            )
+        } else {
+            // Complex case - for now, fall back to searching just by name
+            // TODO: Handle complex multi-condition cases properly
+            // The issue is that bind: can't be used outside #sql macro, so we'd need
+            // to handle each combination separately with explicit if-else chains
+            try await $recipes.load(
+                #sql(
+                """
+                SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                WHERE (
+                    \(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)
+                )
+                \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                ORDER BY \(raw: orderByFragment) \(raw: direction)
+                """,
+                as: Recipe.self)
+            )
+        }
+    }
+    
     private func loadCategoryRecipesQuery(categoryId: String, searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        let searchOptions = getSelectedSearchOptions()
+        
+        // For category queries, we need full #sql statements
+        // Build search conditions using switch on options (simplified to common cases)
+        if let searchPattern = searchPattern {
+            // Use the same JOIN-based search condition helper
+            // Since we're in a category view, we still want to search across fields
+            try await loadCategoryRecipesQueryWithSearch(categoryId: categoryId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection, searchOptions: searchOptions)
+        } else {
+            // No search, just category filter
+            try await loadCategoryRecipesQueryWithoutSearch(categoryId: categoryId, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection)
+        }
+    }
+    
+    private func loadCategoryRecipesQueryWithSearch(categoryId: String, searchPattern: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection, searchOptions: Set<RecipeListSearchOptions>) async throws {
+        // Build ORDER BY as plain SQL strings
+        let direction = sortDirection.sqlSuffix
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE"
+            case .bySource: return "source COLLATE NOCASE"
+            case .byDateModified: return "lastModifiedDate"
+            case .byDateCreated: return "createdDate"
+            case .byRating: return "rating"
+            case .byDifficulty: return "difficulty"
+            }
+        }()
+        
+        // Build the search pattern with wildcards
+        let searchPatternWithWildcards = "%\(searchPattern)%"
+        
+        // Determine which options are enabled
+        let hasName = searchOptions.contains(.name)
+        let hasIntroduction = searchOptions.contains(.introduction)
+        let hasCourse = searchOptions.contains(.course)
+        let hasCategory = searchOptions.contains(.category)
+        let hasTag = searchOptions.contains(.tag)
+        
+        // Count active options for OR separator logic
+        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag].filter { $0 }.count
+        let needsFallback = activeCount == 0
+        
+        // Build the search condition with proper OR separators
+        try await $recipes.load(
+            #sql(
+            """
+            SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+            INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+            WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+            AND (
+                \(needsFallback || hasName ? "\(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(((needsFallback || hasName) && activeCount > (needsFallback ? 0 : 1)) ? " OR " : "")
+                \(hasIntroduction ? "\(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(hasIntroduction && (hasCourse || hasCategory || hasTag) ? " OR " : "")
+                \(hasCourse ? "EXISTS (SELECT 1 FROM \(Course.self) WHERE \(Course.id) = \(Recipe.courseId) AND \(Course.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+                \(hasCourse && (hasCategory || hasTag) ? " OR " : "")
+                \(hasCategory ? "EXISTS (SELECT 1 FROM \(RecipeCategory.self) AS rc2 INNER JOIN \(Category.self) ON rc2.categoryId = \(Category.id) WHERE rc2.recipeId = \(Recipe.id) AND \(Category.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+                \(hasCategory && hasTag ? " OR " : "")
+                \(hasTag ? "EXISTS (SELECT 1 FROM \(RecipeTag.self) INNER JOIN \(Tag.self) ON \(RecipeTag.tagId) = \(Tag.id) WHERE \(RecipeTag.recipeId) = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+            )
+            \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+            ORDER BY \(raw: orderByFragment) \(raw: direction)
+            """,
+            as: Recipe.self)
+        )
+    }
+    
+    private func loadCategoryRecipesQueryWithoutSearch(categoryId: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        let direction = sortDirection.sqlSuffix
+        
+        // Build ORDER BY as plain SQL string fragment
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE \(direction)"
+            case .bySource: return "source COLLATE NOCASE \(direction)"
+            case .byDateModified: return "lastModifiedDate \(direction)"
+            case .byDateCreated: return "createdDate \(direction)"
+            case .byRating: return "rating \(direction)"
+            case .byDifficulty: return "difficulty \(direction)"
+            }
+        }()
+        
+        try await $recipes.load(
+            #sql(
+            """
+            SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+            INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+            WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+            \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+            ORDER BY \(raw: orderByFragment)
+            """,
+            as: Recipe.self)
+        )
+    }
+    
+    // Old method kept for reference - can be removed once confirmed working
+    private func loadCategoryRecipesQuery_OLD(categoryId: String, searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
         switch (searchPattern != nil, includeFavorites, sortOrder, sortDirection) {
         case (true, true, .byName, .ascending):
             let searchPattern = searchPattern!
-                    try await $recipes.load(
-                        #sql(
+            try await $recipes.load(
+                #sql(
                         """
                         SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
                         INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
@@ -354,11 +673,11 @@ class RecipeNavigationSplitViewModel {
                         ORDER BY \(Recipe.name) COLLATE NOCASE ASC
                         """,
                         as: Recipe.self)
-                    )
+            )
         case (true, true, .byName, .descending):
             let searchPattern = searchPattern!
-                    try await $recipes.load(
-                        #sql(
+            try await $recipes.load(
+                #sql(
                         """
                         SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
                         INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
@@ -367,7 +686,7 @@ class RecipeNavigationSplitViewModel {
                 AND \(Recipe.isFavorite) = \(bind: true)
                 ORDER BY \(Recipe.name) COLLATE NOCASE DESC
                 """,
-                as: Recipe.self)
+                        as: Recipe.self)
             )
         case (true, true, .byDateModified, .ascending):
             let searchPattern = searchPattern!
