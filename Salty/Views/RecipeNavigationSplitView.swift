@@ -111,6 +111,9 @@ struct RecipeNavigationSplitView: View {
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
     @AppStorage("sidebarShowTags") private var showTags = true
+    @AppStorage("sidebarExpandCategories") private var expandCategories = true
+    @AppStorage("sidebarExpandCourses") private var expandCourses = true
+    @AppStorage("sidebarExpandTags") private var expandTags = true
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var isEditMode = false
@@ -176,7 +179,7 @@ struct RecipeNavigationSplitView: View {
                 
                 // Categories:
                 if showCategories {
-                    Section {
+                    Section(isExpanded: $expandCategories) {
                         ForEach(viewModel.categories) { category in
                             CategoryDropTargetView(
                                 category: category,
@@ -190,7 +193,7 @@ struct RecipeNavigationSplitView: View {
                 
                 // Courses:
                 if showCourses {
-                    Section {
+                    Section(isExpanded: $expandCourses) {
                         ForEach(viewModel.courses) { course in
                             Label(course.name, systemImage: "fork.knife")
                                 .tag("course_\(course.id)")
@@ -202,7 +205,7 @@ struct RecipeNavigationSplitView: View {
                 
                 // Tags:
                 if showTags {
-                    Section {
+                    Section(isExpanded: $expandTags) {
                         ForEach(viewModel.tags) { tag in
                             TagDropTargetView(
                                 tag: tag,

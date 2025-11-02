@@ -138,22 +138,94 @@ struct GeneralSettingsView: View {
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
     @AppStorage("monospacedBulkEditFont") private var monospacedBulkEditFont = false
     @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
+    @AppStorage("sidebarShowCategories") private var showCategories = true
+    @AppStorage("sidebarShowCourses") private var showCourses = true
+    @AppStorage("sidebarShowTags") private var showTags = true
+    
+    // Computed properties for bindings that ensure at least one is always checked
+    private var showCategoriesBinding: Binding<Bool> {
+        Binding(
+            get: { showCategories },
+            set: { newValue in
+                // Only allow unchecking if at least one other item is checked
+                if !newValue {
+                    let othersChecked = showCourses || showTags
+                    if othersChecked {
+                        showCategories = false
+                    }
+                } else {
+                    showCategories = true
+                }
+            }
+        )
+    }
+    
+    private var showCoursesBinding: Binding<Bool> {
+        Binding(
+            get: { showCourses },
+            set: { newValue in
+                // Only allow unchecking if at least one other item is checked
+                if !newValue {
+                    let othersChecked = showCategories || showTags
+                    if othersChecked {
+                        showCourses = false
+                    }
+                } else {
+                    showCourses = true
+                }
+            }
+        )
+    }
+    
+    private var showTagsBinding: Binding<Bool> {
+        Binding(
+            get: { showTags },
+            set: { newValue in
+                // Only allow unchecking if at least one other item is checked
+                if !newValue {
+                    let othersChecked = showCategories || showCourses
+                    if othersChecked {
+                        showTags = false
+                    }
+                } else {
+                    showTags = true
+                }
+            }
+        )
+    }
     
     var body: some View {
         Form {
-            // TODO: Consider adding this back some day
-            Toggle("Use web-based recipe detail view (instead of native UI-based view)", isOn: $useWebRecipeDetailView)
-            Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
-            Picker(selection: $listViewStyle) {
-                Text("Summary (Default)").tag(RecipeListViewStyle.summary)
-                Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
-            } label: {
-                #if os(macOS)
+            Section {
                 Text("Recipe List View Style:")
-                #else
-                Text("Recipe List View Style")
-                #endif
+                    .accessibilityHidden(true)
+                Picker(selection: $listViewStyle) {
+                    Text("Summary (Default)").tag(RecipeListViewStyle.summary)
+                    Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
+                } label: {
+                    #if os(macOS)
+                    Text("Style:")
+                        .accessibilityLabel("Recipe List View Style")
+                    #else
+                    Text("Style")
+                        .accessibilityLabel("Recipe List View Style")
+                    #endif
+                }
             }
+            Divider()
+            Section {
+                Toggle("Show Categories", isOn: showCategoriesBinding)
+                Toggle("Show Courses", isOn: showCoursesBinding)
+                Toggle("Show Tags", isOn: showTagsBinding)
+            } header: {
+                Text("Sidebar Items:")
+            } footer: {
+                Text("At least one sidebar item must be enabled.")
+                    .font(.caption)
+            }
+            Divider()
+            Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
+            Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
         }
     }
 }
