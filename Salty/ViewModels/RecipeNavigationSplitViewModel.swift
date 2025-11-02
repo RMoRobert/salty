@@ -1701,6 +1701,62 @@ class RecipeNavigationSplitViewModel {
             logger.info("Failed to locate sample recipe data")
         }
     }
+    
+    // MARK: - Category and Tag Management
+    
+    /// Adds a recipe to a category if it's not already associated
+    func addRecipeToCategory(recipeId: String, categoryId: String) {
+        do {
+            try database.write { db in
+                // Check if relationship already exists
+                let existingRelationship = try RecipeCategory
+                    .where { $0.recipeId == recipeId && $0.categoryId == categoryId }
+                    .fetchOne(db)
+                
+                if existingRelationship == nil {
+                    // Create relationship only if it doesn't already exist
+                    let recipeCategory = RecipeCategory(
+                        id: UUID().uuidString,
+                        recipeId: recipeId,
+                        categoryId: categoryId
+                    )
+                    try RecipeCategory.insert(recipeCategory).execute(db)
+                    logger.info("Added recipe \(recipeId) to category \(categoryId)")
+                } else {
+                    logger.info("Recipe \(recipeId) is already in category \(categoryId)")
+                }
+            }
+        } catch {
+            logger.error("Error adding recipe to category: \(error)")
+        }
+    }
+    
+    /// Adds a recipe to a tag if it's not already associated
+    func addRecipeToTag(recipeId: String, tagId: String) {
+        do {
+            try database.write { db in
+                // Check if relationship already exists
+                let existingRelationship = try RecipeTag
+                    .where { $0.recipeId == recipeId && $0.tagId == tagId }
+                    .fetchOne(db)
+                
+                if existingRelationship == nil {
+                    // Create relationship only if it doesn't already exist
+                    let recipeTag = RecipeTag(
+                        id: UUID().uuidString,
+                        recipeId: recipeId,
+                        tagId: tagId
+                    )
+                    try RecipeTag.insert(recipeTag).execute(db)
+                    logger.info("Added recipe \(recipeId) to tag \(tagId)")
+                } else {
+                    logger.info("Recipe \(recipeId) is already tagged with \(tagId)")
+                }
+            }
+        } catch {
+            logger.error("Error adding recipe to tag: \(error)")
+        }
+    }
 }
 
 // MARK: - Preview ViewModel

@@ -12,6 +12,58 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Drop Target Views
+
+private struct CategoryDropTargetView: View {
+    let category: Category
+    let viewModel: RecipeNavigationSplitViewModel
+    @State private var isTargeted = false
+    
+    var body: some View {
+        Label(category.name, systemImage: "rectangle.stack")
+            .tag("cat_\(category.id)")
+            .dropDestination(for: String.self) { recipeIds, location in
+                for recipeId in recipeIds {
+                    viewModel.addRecipeToCategory(recipeId: recipeId, categoryId: category.id)
+                }
+                return !recipeIds.isEmpty
+            } isTargeted: { hovering in
+                isTargeted = hovering
+            }
+            .listRowBackground(
+                Color.accentColor
+                    .cornerRadius(5)
+                    .opacity(isTargeted ? 0.15 : 0.0)
+                    .padding(.horizontal, 10)
+            )
+    }
+}
+
+private struct TagDropTargetView: View {
+    let tag: Tag
+    let viewModel: RecipeNavigationSplitViewModel
+    @State private var isTargeted = false
+    
+    var body: some View {
+        Label(tag.name, systemImage: "tag")
+            .tag("tag_\(tag.id)")
+            .dropDestination(for: String.self) { recipeIds, location in
+                for recipeId in recipeIds {
+                    viewModel.addRecipeToTag(recipeId: recipeId, tagId: tag.id)
+                }
+                return !recipeIds.isEmpty
+            } isTargeted: { hovering in
+                isTargeted = hovering
+            }
+            .listRowBackground(
+                Color.accentColor
+                    .cornerRadius(5)
+                    .opacity(isTargeted ? 0.15 : 0.0)
+                    .padding(.horizontal, 10)
+            )
+    }
+}
+
 // Track search options changes to trigger query updates
 class SearchOptionsChangeTracker: ObservableObject {
     @Published var changeId = UUID()
@@ -126,8 +178,10 @@ struct RecipeNavigationSplitView: View {
                 if showCategories {
                     Section {
                         ForEach(viewModel.categories) { category in
-                            Label(category.name, systemImage: "rectangle.stack")
-                                .tag("cat_\(category.id)")
+                            CategoryDropTargetView(
+                                category: category,
+                                viewModel: viewModel
+                            )
                         }
                     } header: {
                         Text("Categories")
@@ -150,8 +204,10 @@ struct RecipeNavigationSplitView: View {
                 if showTags {
                     Section {
                         ForEach(viewModel.tags) { tag in
-                            Label(tag.name, systemImage: "tag")
-                                .tag("tag_\(tag.id)")
+                            TagDropTargetView(
+                                tag: tag,
+                                viewModel: viewModel
+                            )
                         }
                     } header: {
                         Text("Tags")
@@ -194,6 +250,7 @@ struct RecipeNavigationSplitView: View {
                                     .frame(minWidth: 280)
                             }
                             .id(recipe.id)
+                            .draggable(recipe.id)
                             .contextMenu {
                                 contextMenuForRecipe(recipe)
                             }
