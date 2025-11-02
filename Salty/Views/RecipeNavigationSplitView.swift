@@ -55,6 +55,10 @@ struct RecipeNavigationSplitView: View {
     //@State private var offeredSampleImport = false
     @Environment(\.openWindow) private var openWindow
     @StateObject private var searchOptionsTracker = SearchOptionsChangeTracker()
+    
+    @AppStorage("sidebarShowCategories") private var showCategories = true
+    @AppStorage("sidebarShowCourses") private var showCourses = true
+    @AppStorage("sidebarShowTags") private var showTags = true
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var isEditMode = false
@@ -119,13 +123,39 @@ struct RecipeNavigationSplitView: View {
                 }
                 
                 // Categories:
-                Section {
-                    ForEach(viewModel.categories) { category in
-                        Label(category.name, systemImage: "rectangle.stack")
-                            .tag(category.id)
+                if showCategories {
+                    Section {
+                        ForEach(viewModel.categories) { category in
+                            Label(category.name, systemImage: "rectangle.stack")
+                                .tag("cat_\(category.id)")
+                        }
+                    } header: {
+                        Text("Categories")
                     }
-                } header: {
-                    Text("Categories")
+                }
+                
+                // Courses:
+                if showCourses {
+                    Section {
+                        ForEach(viewModel.courses) { course in
+                            Label(course.name, systemImage: "fork.knife")
+                                .tag("course_\(course.id)")
+                        }
+                    } header: {
+                        Text("Courses")
+                    }
+                }
+                
+                // Tags:
+                if showTags {
+                    Section {
+                        ForEach(viewModel.tags) { tag in
+                            Label(tag.name, systemImage: "tag")
+                                .tag("tag_\(tag.id)")
+                        }
+                    } header: {
+                        Text("Tags")
+                    }
                 }
 //                // Smart Lists:
 //                Section {
@@ -140,6 +170,13 @@ struct RecipeNavigationSplitView: View {
                 // On macOS, set default selection to "All Recipes" if no selection exists
                 if viewModel.selectedSidebarItemId == nil {
                     viewModel.selectedSidebarItemId = viewModel.allRecipesID
+                } else if let selectedId = viewModel.selectedSidebarItemId,
+                          selectedId != viewModel.allRecipesID,
+                          !selectedId.hasPrefix("cat_"),
+                          !selectedId.hasPrefix("course_"),
+                          !selectedId.hasPrefix("tag_") {
+                    // Migrate legacy category ID (without prefix) to new format
+                    viewModel.selectedSidebarItemId = "cat_\(selectedId)"
                 }
             }
             #endif

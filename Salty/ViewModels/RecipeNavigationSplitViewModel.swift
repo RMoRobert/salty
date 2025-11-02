@@ -75,6 +75,9 @@ class RecipeNavigationSplitViewModel {
     }
     // MARK: - Constants
     let allRecipesID: String = "0"
+    private let categoryPrefix = "cat_"
+    private let coursePrefix = "course_"
+    private let tagPrefix = "tag_"
     private let logger = Logger(subsystem: "Salty", category: "Database")
     
     // MARK: - Dependencies
@@ -92,6 +95,14 @@ class RecipeNavigationSplitViewModel {
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
     var categories: [Category]
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
+    var courses: [Course]
+    
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
+    var tags: [Tag]
             
     // MARK: - State
     var searchString = ""
@@ -184,12 +195,30 @@ class RecipeNavigationSplitViewModel {
     var navigationTitle: String {
         if selectedSidebarItemId == allRecipesID {
             return "Recipes"
-        } else if let categoryId = selectedSidebarItemId,
-                  let category = categories.first(where: { $0.id == categoryId }) {
-            return category.name
-        } else {
-            return "Recipes"
+        } else if let selectedId = selectedSidebarItemId {
+            if selectedId.hasPrefix(categoryPrefix) {
+                let categoryId = String(selectedId.dropFirst(categoryPrefix.count))
+                if let category = categories.first(where: { $0.id == categoryId }) {
+                    return category.name
+                }
+            } else if selectedId.hasPrefix(coursePrefix) {
+                let courseId = String(selectedId.dropFirst(coursePrefix.count))
+                if let course = courses.first(where: { $0.id == courseId }) {
+                    return course.name
+                }
+            } else if selectedId.hasPrefix(tagPrefix) {
+                let tagId = String(selectedId.dropFirst(tagPrefix.count))
+                if let tag = tags.first(where: { $0.id == tagId }) {
+                    return tag.name
+                }
+            } else {
+                // Legacy: treat as category ID without prefix (for backward compatibility)
+                if let category = categories.first(where: { $0.id == selectedId }) {
+                    return category.name
+                }
+            }
         }
+        return "Recipes"
     }
     
     // Helper to get selected search options from UserDefaults
@@ -650,6 +679,172 @@ class RecipeNavigationSplitViewModel {
             SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
             INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
             WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+            \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+            ORDER BY \(raw: orderByFragment)
+            """,
+            as: Recipe.self)
+        )
+    }
+    
+    // MARK: - Course Query Methods
+    
+    private func loadCourseRecipesQuery(courseId: String, searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        let searchOptions = getSelectedSearchOptions()
+        
+        if let searchPattern = searchPattern {
+            try await loadCourseRecipesQueryWithSearch(courseId: courseId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection, searchOptions: searchOptions)
+        } else {
+            try await loadCourseRecipesQueryWithoutSearch(courseId: courseId, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection)
+        }
+    }
+    
+    private func loadCourseRecipesQueryWithSearch(courseId: String, searchPattern: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection, searchOptions: Set<RecipeListSearchOptions>) async throws {
+        let direction = sortDirection.sqlSuffix
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE"
+            case .bySource: return "source COLLATE NOCASE"
+            case .byDateModified: return "lastModifiedDate"
+            case .byDateCreated: return "createdDate"
+            case .byRating: return "rating"
+            case .byDifficulty: return "difficulty"
+            }
+        }()
+        
+        let searchPatternWithWildcards = "%\(searchPattern)%"
+        let hasName = searchOptions.contains(.name)
+        let hasIntroduction = searchOptions.contains(.introduction)
+        let hasCourse = searchOptions.contains(.course)
+        let hasCategory = searchOptions.contains(.category)
+        let hasTag = searchOptions.contains(.tag)
+        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag].filter { $0 }.count
+        let needsFallback = activeCount == 0
+        
+        try await $recipes.load(
+            #sql(
+            """
+            SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+            WHERE \(Recipe.courseId) = \(bind: courseId)
+            AND (
+                \(needsFallback || hasName ? "\(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(((needsFallback || hasName) && activeCount > (needsFallback ? 0 : 1)) ? " OR " : "")
+                \(hasIntroduction ? "\(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(hasIntroduction && (hasCourse || hasCategory || hasTag) ? " OR " : "")
+                \(hasCourse ? "EXISTS (SELECT 1 FROM \(Course.self) WHERE \(Course.id) = \(Recipe.courseId) AND \(Course.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+                \(hasCourse && (hasCategory || hasTag) ? " OR " : "")
+                \(hasCategory ? "EXISTS (SELECT 1 FROM \(RecipeCategory.self) INNER JOIN \(Category.self) ON \(RecipeCategory.categoryId) = \(Category.id) WHERE \(RecipeCategory.recipeId) = \(Recipe.id) AND \(Category.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+                \(hasCategory && hasTag ? " OR " : "")
+                \(hasTag ? "EXISTS (SELECT 1 FROM \(RecipeTag.self) INNER JOIN \(Tag.self) ON \(RecipeTag.tagId) = \(Tag.id) WHERE \(RecipeTag.recipeId) = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+            )
+            \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+            ORDER BY \(raw: orderByFragment) \(raw: direction)
+            """,
+            as: Recipe.self)
+        )
+    }
+    
+    private func loadCourseRecipesQueryWithoutSearch(courseId: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        let direction = sortDirection.sqlSuffix
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE \(direction)"
+            case .bySource: return "source COLLATE NOCASE \(direction)"
+            case .byDateModified: return "lastModifiedDate \(direction)"
+            case .byDateCreated: return "createdDate \(direction)"
+            case .byRating: return "rating \(direction)"
+            case .byDifficulty: return "difficulty \(direction)"
+            }
+        }()
+        
+        try await $recipes.load(
+            #sql(
+            """
+            SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+            WHERE \(Recipe.courseId) = \(bind: courseId)
+            \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+            ORDER BY \(raw: orderByFragment)
+            """,
+            as: Recipe.self)
+        )
+    }
+    
+    // MARK: - Tag Query Methods
+    
+    private func loadTagRecipesQuery(tagId: String, searchPattern: String?, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        let searchOptions = getSelectedSearchOptions()
+        
+        if let searchPattern = searchPattern {
+            try await loadTagRecipesQueryWithSearch(tagId: tagId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection, searchOptions: searchOptions)
+        } else {
+            try await loadTagRecipesQueryWithoutSearch(tagId: tagId, includeFavorites: includeFavorites, sortOrder: sortOrder, sortDirection: sortDirection)
+        }
+    }
+    
+    private func loadTagRecipesQueryWithSearch(tagId: String, searchPattern: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection, searchOptions: Set<RecipeListSearchOptions>) async throws {
+        let direction = sortDirection.sqlSuffix
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE"
+            case .bySource: return "source COLLATE NOCASE"
+            case .byDateModified: return "lastModifiedDate"
+            case .byDateCreated: return "createdDate"
+            case .byRating: return "rating"
+            case .byDifficulty: return "difficulty"
+            }
+        }()
+        
+        let searchPatternWithWildcards = "%\(searchPattern)%"
+        let hasName = searchOptions.contains(.name)
+        let hasIntroduction = searchOptions.contains(.introduction)
+        let hasCourse = searchOptions.contains(.course)
+        let hasCategory = searchOptions.contains(.category)
+        let hasTag = searchOptions.contains(.tag)
+        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag].filter { $0 }.count
+        let needsFallback = activeCount == 0
+        
+        try await $recipes.load(
+            #sql(
+            """
+            SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+            INNER JOIN \(RecipeTag.self) ON \(Recipe.id) = \(RecipeTag.recipeId)
+            WHERE \(RecipeTag.tagId) = \(bind: tagId)
+            AND (
+                \(needsFallback || hasName ? "\(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(((needsFallback || hasName) && activeCount > (needsFallback ? 0 : 1)) ? " OR " : "")
+                \(hasIntroduction ? "\(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(hasIntroduction && (hasCourse || hasCategory || hasTag) ? " OR " : "")
+                \(hasCourse ? "EXISTS (SELECT 1 FROM \(Course.self) WHERE \(Course.id) = \(Recipe.courseId) AND \(Course.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+                \(hasCourse && (hasCategory || hasTag) ? " OR " : "")
+                \(hasCategory ? "EXISTS (SELECT 1 FROM \(RecipeCategory.self) INNER JOIN \(Category.self) ON \(RecipeCategory.categoryId) = \(Category.id) WHERE \(RecipeCategory.recipeId) = \(Recipe.id) AND \(Category.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+                \(hasCategory && hasTag ? " OR " : "")
+                \(hasTag ? "EXISTS (SELECT 1 FROM \(RecipeTag.self) AS rt2 INNER JOIN \(Tag.self) ON rt2.tagId = \(Tag.id) WHERE rt2.recipeId = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
+            )
+            \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+            ORDER BY \(raw: orderByFragment) \(raw: direction)
+            """,
+            as: Recipe.self)
+        )
+    }
+    
+    private func loadTagRecipesQueryWithoutSearch(tagId: String, includeFavorites: Bool, sortOrder: RecipeListSortOrderSetting, sortDirection: RecipeListSortDirection) async throws {
+        let direction = sortDirection.sqlSuffix
+        let orderByFragment: String = {
+            switch sortOrder {
+            case .byName: return "name COLLATE NOCASE \(direction)"
+            case .bySource: return "source COLLATE NOCASE \(direction)"
+            case .byDateModified: return "lastModifiedDate \(direction)"
+            case .byDateCreated: return "createdDate \(direction)"
+            case .byRating: return "rating \(direction)"
+            case .byDifficulty: return "difficulty \(direction)"
+            }
+        }()
+        
+        try await $recipes.load(
+            #sql(
+            """
+            SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+            INNER JOIN \(RecipeTag.self) ON \(Recipe.id) = \(RecipeTag.recipeId)
+            WHERE \(RecipeTag.tagId) = \(bind: tagId)
             \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
             ORDER BY \(raw: orderByFragment)
             """,
@@ -1271,8 +1466,20 @@ class RecipeNavigationSplitViewModel {
             
             if isAllRecipes {
                 try await loadAllRecipesQuery(searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
-            } else if let categoryId = selectedSidebarItemId {
-                try await loadCategoryRecipesQuery(categoryId: categoryId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
+            } else if let selectedId = selectedSidebarItemId {
+                if selectedId.hasPrefix(categoryPrefix) {
+                    let categoryId = String(selectedId.dropFirst(categoryPrefix.count))
+                    try await loadCategoryRecipesQuery(categoryId: categoryId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
+                } else if selectedId.hasPrefix(coursePrefix) {
+                    let courseId = String(selectedId.dropFirst(coursePrefix.count))
+                    try await loadCourseRecipesQuery(courseId: courseId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
+                } else if selectedId.hasPrefix(tagPrefix) {
+                    let tagId = String(selectedId.dropFirst(tagPrefix.count))
+                    try await loadTagRecipesQuery(tagId: tagId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
+                } else {
+                    // Legacy: treat as category ID without prefix (for backward compatibility)
+                    try await loadCategoryRecipesQuery(categoryId: selectedId, searchPattern: searchPattern, includeFavorites: includeFavorites, sortOrder: recipeListSortOrder, sortDirection: recipeListSortDirection)
+                }
             }
         }
         catch {
@@ -1505,15 +1712,21 @@ class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
     // MARK: - Preview Data
     private let previewRecipes: [Recipe]
     private let previewCategories: [Category]
+    private let previewCourses: [Course]
+    private let previewTags: [Tag]
     
     // MARK: - Override @FetchAll properties for preview
     override var recipes: [Recipe] { previewRecipes }
     override var categories: [Category] { previewCategories }
+    override var courses: [Course] { previewCourses }
+    override var tags: [Tag] { previewTags }
     
     // MARK: - Initialization
-    init(previewData: (recipes: [Recipe], categories: [Category])) {
+    init(previewData: (recipes: [Recipe], categories: [Category], courses: [Course], tags: [Tag])) {
         self.previewRecipes = previewData.recipes
         self.previewCategories = previewData.categories
+        self.previewCourses = previewData.courses
+        self.previewTags = previewData.tags
         super.init()
     }
     

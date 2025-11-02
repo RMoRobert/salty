@@ -156,30 +156,62 @@ struct Menus: Commands {
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            .keyboardShortcut("i", modifiers: [.command])
        }
-       CommandGroup(before: .sidebar) {
-           Menu("Sort By") {
-               Picker("Sort Options", selection: $recipeListSortOrder) {
-                   ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
-                       Text(option.displayName).tag(option)
-                   }
-               }
-               .pickerStyle(.inline)
-               Picker("Sort Direction", selection: $recipeListSortDirection) {
-                   ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
-                       Text(direction.displayName).tag(direction)
-                   }
-               }
-               .pickerStyle(.inline)
-           }
-           Menu("Search Options") {
-               Section("Search In…") {
-                   ForEach(RecipeListSearchOptions.allCases, id: \.self) { option in
-                       Toggle(option.displayName, isOn: binding(for: option))
-                   }
-               }
-           }
-           Divider()
-       }
+        CommandGroup(before: .sidebar) {
+            Menu("Sort By") {
+                Picker("Sort Options", selection: $recipeListSortOrder) {
+                    ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.inline)
+                Picker("Sort Direction", selection: $recipeListSortDirection) {
+                    ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
+                        Text(direction.displayName).tag(direction)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+            Menu("Search Options") {
+                Section("Search In…") {
+                    ForEach(RecipeListSearchOptions.allCases, id: \.self) { option in
+                        Toggle(option.displayName, isOn: binding(for: option))
+                    }
+                }
+            }
+            #if os(macOS)
+            Divider()
+            #endif
+            Menu("Sidebar Items") {
+                Toggle("Show Categories", isOn: Binding(
+                    get: {
+                        if UserDefaults.standard.object(forKey: "sidebarShowCategories") == nil {
+                            return true // Default to true if not set
+                        }
+                        return UserDefaults.standard.bool(forKey: "sidebarShowCategories")
+                    },
+                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowCategories") }
+                ))
+                Toggle("Show Courses", isOn: Binding(
+                    get: {
+                        if UserDefaults.standard.object(forKey: "sidebarShowCourses") == nil {
+                            return true // Default to true if not set
+                        }
+                        return UserDefaults.standard.bool(forKey: "sidebarShowCourses")
+                    },
+                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowCourses") }
+                ))
+                Toggle("Show Tags", isOn: Binding(
+                    get: {
+                        if UserDefaults.standard.object(forKey: "sidebarShowTags") == nil {
+                            return true // Default to true if not set
+                        }
+                        return UserDefaults.standard.bool(forKey: "sidebarShowTags")
+                    },
+                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowTags") }
+                ))
+            }
+            //Divider()
+        }
        #if os(macOS)
        CommandGroup(before: .windowList) {
            Button("Edit Categories") {
