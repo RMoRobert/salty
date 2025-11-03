@@ -197,8 +197,6 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text("Recipe List View Style:")
-                    .accessibilityHidden(true)
                 Picker(selection: $listViewStyle) {
                     Text("Summary (Default)").tag(RecipeListViewStyle.summary)
                     Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
@@ -211,21 +209,39 @@ struct GeneralSettingsView: View {
                         .accessibilityLabel("Recipe List View Style")
                     #endif
                 }
+            } header: {
+                #if os(macOS)
+                    Text("Recipe List View Style:")
+                #else
+                    Text("Recipe List View Style")
+                #endif
             }
-            Divider()
             Section {
                 Toggle("Show Categories", isOn: showCategoriesBinding)
                 Toggle("Show Courses", isOn: showCoursesBinding)
                 Toggle("Show Tags", isOn: showTagsBinding)
             } header: {
-                Text("Sidebar Items:")
+                #if os(macOS)
+                    Text("Sidebar Items:")
+                        .padding(.top)
+                #else
+                    Text("Sidebar Items")
+                #endif
             } footer: {
                 Text("At least one sidebar item must be enabled.")
                     .font(.caption)
             }
-            Divider()
-            Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
-            Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
+            Section {
+                Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
+                Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
+            } header: {
+                #if os(macOS)
+                    Text("View Options:")
+                        .padding(.top)
+                #else
+                    Text("View Options")
+                #endif
+            }
         }
     }
 }

@@ -64,41 +64,6 @@ private struct TagDropTargetView: View {
     }
 }
 
-// Track search options changes to trigger query updates
-class SearchOptionsChangeTracker: ObservableObject {
-    @Published var changeId = UUID()
-    private var lastSearchOptionsKey: String = ""
-    
-    init() {
-        // Initialize with current search options
-        lastSearchOptionsKey = currentSearchOptionsKey()
-        
-        NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            let currentKey = self.currentSearchOptionsKey()
-            // Only update if search options actually changed
-            if currentKey != self.lastSearchOptionsKey {
-                self.lastSearchOptionsKey = currentKey
-                self.changeId = UUID()
-            }
-        }
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    
-    private func currentSearchOptionsKey() -> String {
-        RecipeListSearchOptions.allCases
-            .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
-            .joined(separator: "")
-    }
-}
-
 struct RecipeNavigationSplitView: View {
     @State var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
@@ -106,7 +71,7 @@ struct RecipeNavigationSplitView: View {
     // To force for testing:
     //@State private var offeredSampleImport = false
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var searchOptionsTracker = SearchOptionsChangeTracker()
+    @StateObject private var searchOptionsTracker = SearchOptionsTracker()
     
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
@@ -326,15 +291,42 @@ struct RecipeNavigationSplitView: View {
                     .disabled(isEditMode)
                     
                     Menu(content: {
-                        Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                            Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
-                        }
-                        Divider()
                         Button(action: {
                             isEditMode.toggle()
                         }) {
                             Label(isEditMode ? "Done" : "Edit", systemImage: isEditMode ? "checkmark" : "pencil")
                         }
+                        Toggle(isOn: $viewModel.isFavoritesFilterActive) {
+                            Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
+                        }
+                        #if !os(macOS)
+                        Divider()
+                        Menu("Sort By", systemImage: "arrow.up.arrow.down") {
+                            Picker("Sort Options", selection: Binding(
+                                get: { viewModel.recipeListSortOrder },
+                                set: { viewModel.recipeListSortOrder = $0 }
+                            )) {
+                                ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                            Picker("Sort Direction", selection: Binding(
+                                get: { viewModel.recipeListSortDirection },
+                                set: { viewModel.recipeListSortDirection = $0 }
+                            )) {
+                                ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
+                                    Text(direction.displayName).tag(direction)
+                                }
+                            }
+                        }
+                        Menu("Search Options") {
+                            Section("Search In…") {
+                                ForEach(RecipeListSearchOptions.allCases, id: \.self) { option in
+                                    Toggle(option.displayName, isOn: binding(for: option))
+                                }
+                            }
+                        }
+                        #endif
                         Divider()
                         Button("Category Editor") {
                             showingEditLibCategoriesSheet = true
@@ -358,7 +350,7 @@ struct RecipeNavigationSplitView: View {
 
                         #if !os(macOS)
                         Divider()
-                        Button("Settings…") {
+                        Button("Settings…", systemImage: "gear") {
                             showingSettingsSheet = true
                         }
                         #endif
@@ -623,6 +615,19 @@ struct RecipeNavigationSplitView: View {
                 userInfo: ["hasSelected": hasSelected]
             )
         }
+    }
+    
+    // Helper to create a binding for a search option with validation
+    // Shared implementation with Menus.swift
+    private func binding(for option: RecipeListSearchOptions) -> Binding<Bool> {
+        Binding(
+            get: {
+                searchOptionsTracker.isSelected(option)
+            },
+            set: { newValue in
+                searchOptionsTracker.setSelected(option, newValue)
+            }
+        )
     }
     
     @ViewBuilder

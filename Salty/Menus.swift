@@ -51,12 +51,16 @@ class SelectionStateTracker: ObservableObject {
 }
 
 // Track search options state to make menu reactive to UserDefaults changes
+// Also tracks changes via changeId to trigger query updates
 class SearchOptionsTracker: ObservableObject {
     @Published private var optionStates: [RecipeListSearchOptions: Bool] = [:]
+    @Published var changeId = UUID()
+    private var lastSearchOptionsKey: String = ""
     
     init() {
         // Initialize from UserDefaults
         loadFromUserDefaults()
+        lastSearchOptionsKey = currentSearchOptionsKey()
         
         // Observe UserDefaults changes
         NotificationCenter.default.addObserver(
@@ -65,6 +69,7 @@ class SearchOptionsTracker: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             self?.loadFromUserDefaults()
+            self?.checkForChanges()
         }
     }
     
@@ -85,6 +90,21 @@ class SearchOptionsTracker: ObservableObject {
         }
     }
     
+    private func currentSearchOptionsKey() -> String {
+        RecipeListSearchOptions.allCases
+            .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
+            .joined(separator: "")
+    }
+    
+    private func checkForChanges() {
+        let currentKey = currentSearchOptionsKey()
+        // Only update if search options actually changed
+        if currentKey != lastSearchOptionsKey {
+            lastSearchOptionsKey = currentKey
+            changeId = UUID()
+        }
+    }
+    
     func isSelected(_ option: RecipeListSearchOptions) -> Bool {
         return optionStates[option] ?? (option == .name)
     }
@@ -101,6 +121,7 @@ class SearchOptionsTracker: ObservableObject {
         }
         UserDefaults.standard.set(value, forKey: option.userDefaultsKey)
         optionStates[option] = value
+        checkForChanges()
     }
 }
 

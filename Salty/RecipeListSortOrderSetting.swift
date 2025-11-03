@@ -58,30 +58,34 @@ enum RecipeListSortDirection: String, Codable, CaseIterable {
 
 enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
     case name
+    case ingredients
+    case introduction
     case category
     case course
-    case tag
-    case introduction
+    case tags
     
     // Compile-time constants for UserDefaults keys (required for @AppStorage)
     static let nameKey = "searchOptionName"
+    static let ingredientsKey = "searchOptionIngredients"
+    static let introductionKey = "searchOptionIntroduction"
     static let categoryKey = "searchOptionCategory"
     static let courseKey = "searchOptionCourse"
     static let tagKey = "searchOptionTag"
-    static let introductionKey = "searchOptionIntroduction"
     
     var displayName: String {
         switch self {
         case .name:
             return "Name"
+        case .ingredients:
+            return "Ingredients"
+        case .introduction:
+            return "Introduction"
         case .category:
             return "Category"
         case .course:
             return "Course"
-        case .tag:
-            return "Tag"
-        case .introduction:
-            return "Introduction"
+        case .tags:
+            return "Tags"
         }
     }
     
@@ -90,14 +94,16 @@ enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
         switch self {
         case .name:
             return Self.nameKey
+        case .ingredients:
+            return Self.ingredientsKey
+        case .introduction:
+            return Self.introductionKey
         case .category:
             return Self.categoryKey
         case .course:
             return Self.courseKey
-        case .tag:
+        case .tags:
             return Self.tagKey
-        case .introduction:
-            return Self.introductionKey
         }
     }
 }
