@@ -12,12 +12,35 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Conditional List Row Background Modifier
+
+private struct ConditionalListRowBackground<Background: View>: ViewModifier {
+    let isTargeted: Bool
+    let background: Background
+    
+    func body(content: Content) -> some View {
+        if isTargeted {
+            content
+                .listRowBackground(background)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Drop Target Views
 
 private struct CategoryDropTargetView: View {
     let category: Category
     let viewModel: RecipeNavigationSplitViewModel
     @State private var isTargeted = false
+    
+    private var dropTargetBackground: some View {
+        Color.accentColor
+            .cornerRadius(5)
+            .opacity(0.15)
+            .padding(.horizontal, 10)
+    }
     
     var body: some View {
         Label(category.name, systemImage: "rectangle.stack")
@@ -30,12 +53,7 @@ private struct CategoryDropTargetView: View {
             } isTargeted: { hovering in
                 isTargeted = hovering
             }
-            .listRowBackground(
-                Color.accentColor
-                    .cornerRadius(5)
-                    .opacity(isTargeted ? 0.15 : 0.0)
-                    .padding(.horizontal, 10)
-            )
+            .modifier(ConditionalListRowBackground(isTargeted: isTargeted, background: dropTargetBackground))
     }
 }
 
@@ -43,6 +61,13 @@ private struct TagDropTargetView: View {
     let tag: Tag
     let viewModel: RecipeNavigationSplitViewModel
     @State private var isTargeted = false
+    
+    private var dropTargetBackground: some View {
+        Color.accentColor
+            .cornerRadius(5)
+            .opacity(0.15)
+            .padding(.horizontal, 10)
+    }
     
     var body: some View {
         Label(tag.name, systemImage: "tag")
@@ -55,12 +80,7 @@ private struct TagDropTargetView: View {
             } isTargeted: { hovering in
                 isTargeted = hovering
             }
-            .listRowBackground(
-                Color.accentColor
-                    .cornerRadius(5)
-                    .opacity(isTargeted ? 0.15 : 0.0)
-                    .padding(.horizontal, 10)
-            )
+            .modifier(ConditionalListRowBackground(isTargeted: isTargeted, background: dropTargetBackground))
     }
 }
 
