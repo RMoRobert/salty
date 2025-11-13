@@ -262,6 +262,7 @@ struct RecipeNavigationSplitView: View {
                                 .foregroundStyle(.tertiary)
                             Spacer()
                         }
+                        .listRowSeparator(.hidden)
                     }
                 }
                 .task(id: recipeQueryId) {
