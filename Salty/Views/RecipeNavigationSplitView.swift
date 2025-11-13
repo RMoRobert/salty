@@ -243,14 +243,6 @@ struct RecipeNavigationSplitView: View {
                                 contextMenuForRecipe(recipe)
                             }
                     }
-                    if (viewModel.recipes.isEmpty) {
-                        HStack {
-                            Spacer()
-                            Text("No recipes")
-                                .foregroundStyle(.tertiary)
-                            Spacer()
-                        }
-                    }
                     #if !os(macOS)
                     .onDelete { indexSet in
                         withAnimation {
@@ -263,6 +255,14 @@ struct RecipeNavigationSplitView: View {
                         }
                     }
                     #endif
+                    if (viewModel.recipes.isEmpty) {
+                        HStack {
+                            Spacer()
+                            Text("No recipes")
+                                .foregroundStyle(.tertiary)
+                            Spacer()
+                        }
+                    }
                 }
                 .task(id: recipeQueryId) {
                     await viewModel.updateRecipesQuery()

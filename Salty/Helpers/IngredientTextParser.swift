@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Utility class for parsing and formatting ingredient text
+/// Utility class for parsing and formatting ingredient text from bulk text editor
 struct IngredientTextParser {
     
     /// Parses bulk text into Ingredient objects
@@ -130,3 +130,92 @@ struct IngredientTextParser {
         return parseIngredientsSimple(from: cleanedText)
     }
 } 
+
+
+/// Utility struct extension for parsing quantity out of ingredient string (used in UI)
+extension Ingredient {
+    /// Parses the ingredient text to identify the quantity portion (number + unit).
+    /// Returns a tuple with the quantity string and the remainder of the text.
+    func parseQuantity() -> (quantity: String, remainder: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespaces)
+        
+        // Check if text starts with a number (including fractions like 1/2, 1 1/2, decimals)
+        // Pattern matches: "1", "1.5", "1/2", "1 1/2", "1/4", etc.
+        let numberPattern = #"^(\d+(?:\.\d+)?(?:\s+\d+/\d+)?(?:\s*/\s*\d+)?)"#
+        guard let numberRange = trimmedText.range(of: numberPattern, options: .regularExpression) else {
+            return ("", trimmedText)
+        }
+        
+        let numberString = String(trimmedText[numberRange])
+        let afterNumber = String(trimmedText[numberRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        
+        // If there's nothing after the number, return it as quantity
+        guard !afterNumber.isEmpty else {
+            return (numberString, "")
+        }
+        
+        // Check for multi-word units first (e.g., "fl oz", "fluid ounce")
+        let multiWordUnits: [String] = [
+            "fl oz", "fl. oz.", "floz",
+            "fluid ounce", "fluid ounces"
+        ]
+        
+        let afterNumberLower = afterNumber.lowercased()
+        for unit in multiWordUnits {
+            let unitLower = unit.lowercased()
+            if afterNumberLower.hasPrefix(unitLower) {
+                // Find the actual unit string in the original text (preserving case)
+                // We need to match character by character to handle case variations
+                let unitLength = unit.count
+                if afterNumber.count >= unitLength {
+                    // Try to find the unit match preserving original case
+                    let possibleUnit = String(afterNumber.prefix(unitLength))
+                    if possibleUnit.lowercased() == unitLower {
+                        let afterUnit = String(afterNumber.dropFirst(unitLength)).trimmingCharacters(in: .whitespaces)
+                        let fullQuantity = "\(numberString) \(possibleUnit)"
+                        return (fullQuantity, afterUnit)
+                    }
+                }
+            }
+        }
+        
+        // Extract the next word/token (may include periods, hyphens, etc.)
+        let wordPattern = #"^([\w\.\-]+)"#
+        guard let wordRange = afterNumber.range(of: wordPattern, options: .regularExpression) else {
+            return (numberString, afterNumber)
+        }
+        
+        let word = String(afterNumber[wordRange]).lowercased()
+        let afterWord = String(afterNumber[wordRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        
+        // Check if the word is a unit of measurement
+        let units: Set<String> = [
+            "cup", "cups", "c", "c.",
+            "tablespoon", "tablespoons", "tbl", "tbl.", "tbsp", "tbsp.", "tbs", "tbs.",
+            "teaspoon", "teaspoons", "t", "t.", "tsp", "tsp.",
+            "gram", "grams", "g", "g.",
+            "kilogram", "kilograms", "kg", "kg.",
+            "ounce", "ounces", "oz", "oz.",
+            "pound", "pounds", "lb", "lb.", "lbs", "lbs.",
+            "milliliter", "milliliters", "ml", "ml.",
+            "liter", "liters", "l", "l.",
+            "package", "packages", "pkg", "pkg.",
+            "can", "cans",
+            "bottle", "bottles",
+            "piece", "pieces", "pc", "pc.",
+            "dash", "dashes",
+            "pinch", "pinches",
+            "drop", "drops"
+        ]
+        
+        // Check if word (with or without trailing period) matches a unit
+        let wordWithoutPeriod = word.replacingOccurrences(of: ".", with: "")
+        if units.contains(word) || units.contains(wordWithoutPeriod) {
+            let fullQuantity = "\(numberString) \(String(afterNumber[wordRange]))"
+            return (fullQuantity, afterWord)
+        }
+        
+        // If not a unit, return just the number as quantity
+        return (numberString, afterNumber)
+    }
+}

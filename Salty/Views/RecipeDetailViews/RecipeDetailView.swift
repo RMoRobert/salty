@@ -267,10 +267,21 @@ private struct IngredientsSection: View {
                             //.baselineOffset(1)
                             .foregroundStyle(.recipeDetailBoxForeground)
                             .fontWeight(.bold)
-                        Text(recipe.ingredients[index].text)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .foregroundStyle(.recipeDetailBoxForeground)
-                            .fontWeight(.regular)
+                        let parsed = recipe.ingredients[index].parseQuantity()
+                        if !parsed.quantity.isEmpty {
+                            (Text(parsed.quantity)
+                                .fontWeight(.semibold) +
+                             Text(parsed.remainder.isEmpty ? "" : " \(parsed.remainder)")
+                                .fontWeight(.regular))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .foregroundStyle(.recipeDetailBoxForeground)
+                                .accessibilityElement(children: .combine)
+                        } else {
+                            Text(recipe.ingredients[index].text)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .foregroundStyle(.recipeDetailBoxForeground)
+                                .fontWeight(.regular)
+                        }
                     }
                     .padding(.bottom, 4)
                 }
