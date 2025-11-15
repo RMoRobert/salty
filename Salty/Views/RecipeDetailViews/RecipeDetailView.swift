@@ -31,6 +31,8 @@ struct RecipeDetailView: View {
                         }
                         NotesSection(recipe: recipe)
                             .padding(.top, 2)
+                        VariationsSection(recipe: recipe)
+                            .padding(.top, 2)
                         TagsSection(viewModel: viewModel)
                             .padding(.top, 2)
                     }
@@ -342,6 +344,35 @@ private struct NotesSection: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, index == 0 ? 0 : 2) // no top padding for first note
+                    .padding(.bottom, 2)
+                }
+            }
+            
+            .modifier(RecipeSectionBoxModifier())
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+private struct VariationsSection: View {
+    let recipe: Recipe
+    var body: some View {
+        if recipe.variations.count > 0 {
+            VStack(alignment: .leading) {
+                Text("Variations")
+                    .modifier(TitleStyle())
+                    .padding(.bottom, 2) // override to reduce space below heading
+                ForEach(recipe.variations.indices, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(recipe.variations[index].variationName)
+                            .font(.callout)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.recipeDetailBoxForeground2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(recipe.variations[index].text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, index == 0 ? 0 : 2) // no top padding for first variation
                     .padding(.bottom, 2)
                 }
             }

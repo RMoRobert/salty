@@ -32,6 +32,7 @@ struct RecipeDetailEditDesktopView: View {
                 DirectionsView(viewModel: viewModel)
                 PreparationTimesView(viewModel: viewModel)
                 NotesView(viewModel: viewModel)
+                VariationsView(viewModel: viewModel)
                 TagsView(viewModel: viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
                 NutritionView(viewModel: viewModel)
                 PhotoView(viewModel: viewModel)
@@ -414,6 +415,49 @@ struct RecipeDetailEditDesktopView: View {
             }
             .sheet(isPresented: $viewModel.showingEditNotesSheet) {
                 NotesEditView(recipe: $viewModel.recipe)
+            }
+        }
+    }
+    
+    // MARK: - Variations View
+    struct VariationsView: View {
+        @Bindable var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Variations:")
+                        .modifier(TitleDesktopEditorStyle())
+                    Spacer()
+                    Button("Edit Variations") {
+                        viewModel.showingEditVariationsSheet.toggle()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                
+                if viewModel.recipe.variations.isEmpty {
+                    Text("No variations added")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(viewModel.recipe.variations) { variation in
+                            VStack(alignment: .leading, spacing: 4) {
+                                if !variation.variationName.isEmpty {
+                                    Text(variation.variationName)
+                                        .fontWeight(.semibold)
+                                }
+                                Text(variation.text)
+                                    .font(.body)
+                                    .lineLimit(6)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $viewModel.showingEditVariationsSheet) {
+                VariationsEditView(recipe: $viewModel.recipe)
             }
         }
     }

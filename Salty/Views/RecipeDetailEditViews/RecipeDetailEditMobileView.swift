@@ -28,6 +28,7 @@ struct RecipeDetailEditMobileView: View {
             DirectionsView(viewModel: viewModel)
             PreparationTimesView(viewModel: viewModel)
             NotesView(viewModel: viewModel)
+            VariationsView(viewModel: viewModel)
             TagsView(viewModel: viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
             NutritionView(viewModel: viewModel)
             ImageView(viewModel: viewModel)
@@ -387,6 +388,47 @@ struct RecipeDetailEditMobileView: View {
                         ))
                     }) {
                         Label("Add Note", systemImage: "plus.circle.fill")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    
+                    Spacer()
+                }
+            }
+        }
+    }
+    
+    // MARK: - Variations Section
+    struct VariationsView: View {
+        @Bindable var viewModel: RecipeDetailEditViewModel
+        
+        var body: some View {
+            Section("Variations") {
+                ForEach($viewModel.recipe.variations) { $variation in
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Variation name", text: $variation.variationName)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        TextField("Variation text", text: $variation.text, axis: .vertical)
+                            .font(.body)
+                            .lineLimit(3...6)
+                    }
+                }
+                .onDelete { indexSet in
+                    viewModel.recipe.variations.remove(atOffsets: indexSet)
+                }
+                .onMove { from, to in
+                    viewModel.recipe.variations.move(fromOffsets: from, toOffset: to)
+                }
+                
+                HStack {
+                    Button(action: {
+                        viewModel.recipe.variations.append(Variation(
+                            id: UUID().uuidString,
+                            variationName: "",
+                            text: "New variation text"
+                        ))
+                    }) {
+                        Label("Add Variation", systemImage: "plus.circle.fill")
                     }
                     .labelStyle(.titleAndIcon)
                     

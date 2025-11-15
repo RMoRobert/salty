@@ -63,6 +63,8 @@ enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
     case category
     case course
     case tags
+    case notes
+ //   case variations
     
     // Compile-time constants for UserDefaults keys (required for @AppStorage)
     static let nameKey = "searchOptionName"
@@ -71,6 +73,8 @@ enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
     static let categoryKey = "searchOptionCategory"
     static let courseKey = "searchOptionCourse"
     static let tagKey = "searchOptionTag"
+    static let notesKey = "searchOptionNotes"
+//    static let variationsKey = "searchOptionVariations"
     
     var displayName: String {
         switch self {
@@ -86,6 +90,11 @@ enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
             return "Course"
         case .tags:
             return "Tags"
+// Really want to separate these out some day, but this is easier for now:
+        case .notes:
+            return "Notes and Variations"
+//        case .variations:
+//            return "Variations"
         }
     }
     
@@ -104,6 +113,10 @@ enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
             return Self.courseKey
         case .tags:
             return Self.tagKey
+        case .notes:
+            return Self.notesKey
+//        case .variations:
+//            return Self.variationsKey
         }
     }
 }

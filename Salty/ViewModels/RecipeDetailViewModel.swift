@@ -88,7 +88,7 @@ class RecipeDetailViewModel {
         self.recipeId = recipe.id
         self._recipe = FetchOne(
             wrappedValue: recipe, 
-            #sql("SELECT * FROM \(Recipe.self) WHERE \(Recipe.id) = \(bind: recipe.id)")
+            #sql("SELECT \(Recipe.columns) FROM \(Recipe.self) WHERE \(Recipe.id) = \(bind: recipe.id)")
         )
     }
     

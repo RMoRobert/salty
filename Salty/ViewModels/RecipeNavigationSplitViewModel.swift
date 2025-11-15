@@ -258,19 +258,44 @@ class RecipeNavigationSplitViewModel {
                         let hasName = searchOptions.contains(.name)
                         let hasIntroduction = searchOptions.contains(.introduction)
                         let hasIngredients = searchOptions.contains(.ingredients)
+                        //let hasNotes = searchOptions.contains(.notes)
+//                      //let hasVariations = searchOptions.contains(.variations)
+                        // Combining for now to make easy, would like to separate some day...
+                        let hasNotesOrVariations = searchOptions.contains(.notes)
                         
-                        if hasName && hasIntroduction && hasIngredients {
-                            // All three selected
+                        if hasName && hasIntroduction && hasIngredients && hasNotesOrVariations {
+                            // All four selected (with notes/variations)
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasName && hasIntroduction && hasIngredients {
+                            // Name, introduction, and ingredients
                             (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasName && hasIntroduction && hasNotesOrVariations {
+                            // Name, introduction, and notes/variations
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasName && hasIngredients && hasNotesOrVariations {
+                            // Name, ingredients, and notes/variations
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasIntroduction && hasIngredients && hasNotesOrVariations {
+                            // Introduction, ingredients, and notes/variations
+                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
                         } else if hasName && hasIntroduction {
                             // Name and introduction
                             (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
                         } else if hasName && hasIngredients {
                             // Name and ingredients
                             (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasName && hasNotesOrVariations {
+                            // Name and notes/variations
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
                         } else if hasIntroduction && hasIngredients {
                             // Introduction and ingredients
                             (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasIntroduction && hasNotesOrVariations {
+                            // Introduction and notes/variations
+                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                        } else if hasIngredients && hasNotesOrVariations {
+                            // Ingredients and notes/variations
+                            (#sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
                         } else if hasName {
                             // Only name selected
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
@@ -280,6 +305,9 @@ class RecipeNavigationSplitViewModel {
                         } else if hasIngredients {
                             // Only ingredients selected
                             #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                        } else if hasNotesOrVariations {
+                            // Only notes/variations selected - search both
+                            (#sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
                         } else {
                             // Fallback to name
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
@@ -323,19 +351,44 @@ class RecipeNavigationSplitViewModel {
                         let hasName = searchOptions.contains(.name)
                         let hasIntroduction = searchOptions.contains(.introduction)
                         let hasIngredients = searchOptions.contains(.ingredients)
+                        //let hasNotes = searchOptions.contains(.notes)
+                        //let hasVariations = searchOptions.contains(.variations)
+                        // Combining to make easy for now; would like to separate some day:
+                        let hasNotesOrVariations = searchOptions.contains(.notes)
                         
-                        if hasName && hasIntroduction && hasIngredients {
-                            // All three selected
+                        if hasName && hasIntroduction && hasIngredients && hasNotesOrVariations {
+                            // All four selected (with notes/variations)
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasName && hasIntroduction && hasIngredients {
+                            // Name, introduction, and ingredients
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasName && hasIntroduction && hasNotesOrVariations {
+                            // Name, introduction, and notes/variations
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasName && hasIngredients && hasNotesOrVariations {
+                            // Name, ingredients, and notes/variations
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasIntroduction && hasIngredients && hasNotesOrVariations {
+                            // Introduction, ingredients, and notes/variations
+                            #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
                         } else if hasName && hasIntroduction {
                             // Name and introduction
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")
                         } else if hasName && hasIngredients {
                             // Name and ingredients
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasName && hasNotesOrVariations {
+                            // Name and notes/variations
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
                         } else if hasIntroduction && hasIngredients {
                             // Introduction and ingredients
                             #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasIntroduction && hasNotesOrVariations {
+                            // Introduction and notes/variations
+                            #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasIngredients && hasNotesOrVariations {
+                            // Ingredients and notes/variations
+                            #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
                         } else if hasName {
                             // Only name selected
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)")
@@ -345,6 +398,9 @@ class RecipeNavigationSplitViewModel {
                         } else if hasIngredients {
                             // Only ingredients selected
                             #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")
+                        } else if hasNotesOrVariations {
+                            // Only notes/variations selected - search both
+                            #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")
                         } else {
                             // Fallback to name
                             #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)")
@@ -526,9 +582,13 @@ class RecipeNavigationSplitViewModel {
         let hasCategory = searchOptions.contains(.category)
         let hasTag = searchOptions.contains(.tags)
         let hasIngredients = searchOptions.contains(.ingredients)
+        //let hasNotes = searchOptions.contains(.notes)
+        //let hasVariations = searchOptions.contains(.variations)
+        // Combining to make easy for now; would like to separate some day:
+        let hasNotesOrVariations = searchOptions.contains(.notes)
         
         // Build combination identifier
-        let combo = (hasName ? 1 : 0) | (hasIntroduction ? 2 : 0) | (hasCourse ? 4 : 0) | (hasCategory ? 8 : 0) | (hasTag ? 16 : 0) | (hasIngredients ? 32 : 0)
+        let combo = (hasName ? 1 : 0) | (hasIntroduction ? 2 : 0) | (hasCourse ? 4 : 0) | (hasCategory ? 8 : 0) | (hasTag ? 16 : 0) | (hasIngredients ? 32 : 0) | (hasNotesOrVariations ? 64 : 0)
         
         // Handle all combinations explicitly
         switch combo {
@@ -637,11 +697,11 @@ class RecipeNavigationSplitViewModel {
             )
         default:
             // For other complex combinations, handle them explicitly
-            try await loadAllRecipesQueryWithJoinsFallback(searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients)
+            try await loadAllRecipesQueryWithJoinsFallback(searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients, hasNotesOrVariations: hasNotesOrVariations)
         }
     }
     
-    private func loadAllRecipesQueryWithJoinsFallback(searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool) async throws {
+    private func loadAllRecipesQueryWithJoinsFallback(searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool, hasNotesOrVariations: Bool) async throws {
         // Handle remaining complex combinations explicitly
         // For cases with course/category, we need to handle them case by case
         // Default to name-only search as fallback to avoid SQL errors
@@ -699,10 +759,14 @@ class RecipeNavigationSplitViewModel {
         let hasCategory = searchOptions.contains(.category)
         let hasTag = searchOptions.contains(.tags)
         let hasIngredients = searchOptions.contains(.ingredients)
+        //let hasNotes = searchOptions.contains(.notes)
+        //let hasVariations = searchOptions.contains(.variations)
+        // Combining to make easy for now; would like to separate some day:
+        let hasNotesOrVariations = searchOptions.contains(.notes)
         
         // Build WHERE clause conditions - only include active options
         // Use a helper function approach to avoid bind: in inactive branches
-        if hasName && !hasIntroduction && !hasCourse && !hasCategory && !hasTag && !hasIngredients {
+        if hasName && !hasIntroduction && !hasCourse && !hasCategory && !hasTag && !hasIngredients && !hasNotesOrVariations {
             // Only name selected
             try await $recipes.load(
                 #sql(
@@ -719,13 +783,13 @@ class RecipeNavigationSplitViewModel {
         } else {
             // Build conditions array and join with OR
             // We need to handle multiple conditions - use a more flexible approach
-            try await loadCategoryRecipesQueryWithSearchGeneral(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients)
+            try await loadCategoryRecipesQueryWithSearchGeneral(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients, hasNotesOrVariations: hasNotesOrVariations)
         }
     }
     
-    private func loadCategoryRecipesQueryWithSearchGeneral(categoryId: String, searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool) async throws {
+    private func loadCategoryRecipesQueryWithSearchGeneral(categoryId: String, searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool, hasNotesOrVariations: Bool) async throws {
         // Count active options - use actual values, not "effective" name
-        let activeOptions = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients].filter { $0 }
+        let activeOptions = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients, hasNotesOrVariations].filter { $0 }
         let activeCount = activeOptions.count
         
         // Default to name only if NO options are selected at all
@@ -768,6 +832,19 @@ class RecipeNavigationSplitViewModel {
                     INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
                     WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
                     AND \(Recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)
+                    \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
+                    ORDER BY \(raw: orderByFragment) \(raw: direction)
+                    """,
+                    as: Recipe.self)
+                )
+            } else if hasNotesOrVariations {
+                try await $recipes.load(
+                    #sql(
+                    """
+                    SELECT DISTINCT \(Recipe.columns) FROM \(Recipe.self)
+                    INNER JOIN \(RecipeCategory.self) ON \(Recipe.id) = \(RecipeCategory.recipeId)
+                    WHERE \(RecipeCategory.categoryId) = \(bind: categoryId)
+                    AND (\(Recipe.notes) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards) OR \(Recipe.variations) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))
                     \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
                     ORDER BY \(raw: orderByFragment) \(raw: direction)
                     """,
@@ -831,20 +908,20 @@ class RecipeNavigationSplitViewModel {
                 )
             } else {
                 // Fallback for other 2-option combinations
-                try await loadCategoryRecipesQueryWithSearchComplex(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients)
+                try await loadCategoryRecipesQueryWithSearchComplex(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients, hasNotesOrVariations: hasNotesOrVariations)
             }
         } else {
             // Three or more conditions - use complex handler
-            try await loadCategoryRecipesQueryWithSearchComplex(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients)
+            try await loadCategoryRecipesQueryWithSearchComplex(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients, hasNotesOrVariations: hasNotesOrVariations)
         }
     }
     
-    private func loadCategoryRecipesQueryWithSearchComplex(categoryId: String, searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool) async throws {
+    private func loadCategoryRecipesQueryWithSearchComplex(categoryId: String, searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool, hasNotesOrVariations: Bool) async throws {
         // Handle all combinations explicitly - build queries for each specific combination
         // to avoid bind: in inactive branches
         
         // Count which fields are active
-        let activeFields = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients]
+        let activeFields = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients, hasNotesOrVariations]
         let activeCount = activeFields.filter { $0 }.count
         
         // Handle common combinations explicitly
@@ -893,11 +970,11 @@ class RecipeNavigationSplitViewModel {
         } else {
             // Handle all other combinations - build query with all active fields
             // Use explicit if-else chains to ensure bind: only in active branches
-            try await loadCategoryRecipesQueryWithSearchAllFields(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients)
+            try await loadCategoryRecipesQueryWithSearchAllFields(categoryId: categoryId, searchPatternWithWildcards: searchPatternWithWildcards, includeFavorites: includeFavorites, orderByFragment: orderByFragment, direction: direction, hasName: hasName, hasIntroduction: hasIntroduction, hasCourse: hasCourse, hasCategory: hasCategory, hasTag: hasTag, hasIngredients: hasIngredients, hasNotesOrVariations: hasNotesOrVariations)
         }
     }
     
-    private func loadCategoryRecipesQueryWithSearchAllFields(categoryId: String, searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool) async throws {
+    private func loadCategoryRecipesQueryWithSearchAllFields(categoryId: String, searchPatternWithWildcards: String, includeFavorites: Bool, orderByFragment: String, direction: String, hasName: Bool, hasIntroduction: Bool, hasCourse: Bool, hasCategory: Bool, hasTag: Bool, hasIngredients: Bool, hasNotesOrVariations: Bool) async throws {
         // Build WHERE clause parts based on active options
         // We need to handle this carefully to avoid bind: in inactive branches
         // Since we can't build strings with bind: outside #sql, we'll use nested conditionals
@@ -1175,10 +1252,14 @@ class RecipeNavigationSplitViewModel {
         let hasName = searchOptions.contains(.name)
         let hasIntroduction = searchOptions.contains(.introduction)
         let hasIngredients = searchOptions.contains(.ingredients)
+        //let hasNotes = searchOptions.contains(.notes)
+        //let hasVariations = searchOptions.contains(.variations)
+        // Combining to make easy for now; would like to separate some day:
+        let hasNotesOrVariations = searchOptions.contains(.notes)
         let hasCourse = searchOptions.contains(.course)
         let hasCategory = searchOptions.contains(.category)
         let hasTag = searchOptions.contains(.tags)
-        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag].filter { $0 }.count
+        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients, hasNotesOrVariations].filter { $0 }.count
         let needsFallback = activeCount == 0
         
         try await $recipes.load(
@@ -1190,14 +1271,16 @@ class RecipeNavigationSplitViewModel {
                 \(needsFallback || hasName ? "\(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
                 \(((needsFallback || hasName) && activeCount > (needsFallback ? 0 : 1)) ? " OR " : "")
                 \(hasIntroduction ? "\(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
-                \(hasIntroduction && (hasCourse || hasCategory || hasTag || hasIngredients) ? " OR " : "")
+                \(hasIntroduction && (hasCourse || hasCategory || hasTag || hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasCourse ? "EXISTS (SELECT 1 FROM \(Course.self) WHERE \(Course.id) = \(Recipe.courseId) AND \(Course.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
-                \(hasCourse && (hasCategory || hasTag || hasIngredients) ? " OR " : "")
+                \(hasCourse && (hasCategory || hasTag || hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasCategory ? "EXISTS (SELECT 1 FROM \(RecipeCategory.self) INNER JOIN \(Category.self) ON \(RecipeCategory.categoryId) = \(Category.id) WHERE \(RecipeCategory.recipeId) = \(Recipe.id) AND \(Category.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
-                \(hasCategory && (hasTag || hasIngredients) ? " OR " : "")
+                \(hasCategory && (hasTag || hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasTag ? "EXISTS (SELECT 1 FROM \(RecipeTag.self) INNER JOIN \(Tag.self) ON \(RecipeTag.tagId) = \(Tag.id) WHERE \(RecipeTag.recipeId) = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
-                \(hasTag && hasIngredients ? " OR " : "")
+                \(hasTag && (hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasIngredients ? "\(Recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(hasIngredients && hasNotesOrVariations ? " OR " : "")
+                \(hasNotesOrVariations ? "(\(Recipe.notes) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards) OR \(Recipe.variations) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
             )
             \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
             ORDER BY \(raw: orderByFragment) \(raw: direction)
@@ -1263,7 +1346,11 @@ class RecipeNavigationSplitViewModel {
         let hasCategory = searchOptions.contains(.category)
         let hasTag = searchOptions.contains(.tags)
         let hasIngredients = searchOptions.contains(.ingredients)
-        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients].filter { $0 }.count
+        //let hasNotes = searchOptions.contains(.notes)
+        //let hasVariations = searchOptions.contains(.variations)
+        // Combining to make easy for now; would like to separate some day:
+        let hasNotesOrVariations = searchOptions.contains(.notes)
+        let activeCount = [hasName, hasIntroduction, hasCourse, hasCategory, hasTag, hasIngredients, hasNotesOrVariations].filter { $0 }.count
         let needsFallback = activeCount == 0
         
         try await $recipes.load(
@@ -1276,14 +1363,16 @@ class RecipeNavigationSplitViewModel {
                 \(needsFallback || hasName ? "\(Recipe.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
                 \(((needsFallback || hasName) && activeCount > (needsFallback ? 0 : 1)) ? " OR " : "")
                 \(hasIntroduction ? "\(Recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
-                \(hasIntroduction && (hasCourse || hasCategory || hasTag || hasIngredients) ? " OR " : "")
+                \(hasIntroduction && (hasCourse || hasCategory || hasTag || hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasCourse ? "EXISTS (SELECT 1 FROM \(Course.self) WHERE \(Course.id) = \(Recipe.courseId) AND \(Course.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
-                \(hasCourse && (hasCategory || hasTag || hasIngredients) ? " OR " : "")
+                \(hasCourse && (hasCategory || hasTag || hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasCategory ? "EXISTS (SELECT 1 FROM \(RecipeCategory.self) INNER JOIN \(Category.self) ON \(RecipeCategory.categoryId) = \(Category.id) WHERE \(RecipeCategory.recipeId) = \(Recipe.id) AND \(Category.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
-                \(hasCategory && (hasTag || hasIngredients) ? " OR " : "")
+                \(hasCategory && (hasTag || hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasTag ? "EXISTS (SELECT 1 FROM \(RecipeTag.self) AS rt2 INNER JOIN \(Tag.self) ON rt2.tagId = \(Tag.id) WHERE rt2.recipeId = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
-                \(hasTag && hasIngredients ? " OR " : "")
+                \(hasTag && (hasIngredients || hasNotesOrVariations) ? " OR " : "")
                 \(hasIngredients ? "\(Recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards)" : "")
+                \(hasIngredients && hasNotesOrVariations ? " OR " : "")
+                \(hasNotesOrVariations ? "(\(Recipe.notes) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards) OR \(Recipe.variations) COLLATE NOCASE LIKE \(bind: searchPatternWithWildcards))" : "")
             )
             \(includeFavorites ? "AND \(Recipe.isFavorite) = \(bind: true)" : "")
             ORDER BY \(raw: orderByFragment) \(raw: direction)

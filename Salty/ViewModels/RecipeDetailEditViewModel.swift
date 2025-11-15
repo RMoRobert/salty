@@ -59,6 +59,7 @@ class RecipeDetailEditViewModel {
     var showingBulkEditDirectionsSheet = false
     var showingEditPreparationTimes = false
     var showingEditNotesSheet = false
+    var showingEditVariationsSheet = false
     var showingNutritionEditSheet = false
     var showingScanTextSheet = false
     var scanTextTarget: ScanTextTarget = .ingredients
@@ -75,7 +76,7 @@ class RecipeDetailEditViewModel {
         if isNewRecipe {
             // New recipes are considered to have unsaved changes if they have meaningful content
             return !recipe.name.isEmpty || !recipe.source.isEmpty || !recipe.introduction.isEmpty ||
-                   !recipe.ingredients.isEmpty || !recipe.directions.isEmpty || !recipe.notes.isEmpty
+                   !recipe.ingredients.isEmpty || !recipe.directions.isEmpty || !recipe.notes.isEmpty || !recipe.variations.isEmpty
         } else {
             // Existing recipes have unsaved changes if they differ from the original
             return recipe != originalRecipe

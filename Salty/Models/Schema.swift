@@ -45,6 +45,8 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable, TableRecord  {
     var ingredients: [Ingredient] = []
     @Column(as: [Note].JSONRepresentation.self)
     var notes: [Note] = []
+    @Column(as: [Variation].JSONRepresentation.self)
+    var variations: [Variation] = []
     @Column(as: [PreparationTime].JSONRepresentation.self)
     var preparationTimes: [PreparationTime] = []
     @Column(as: NutritionInformation?.JSONRepresentation.self)
@@ -167,6 +169,12 @@ struct Note: Codable, Hashable, Equatable, Identifiable {
     var id: String
     var title: String
     var content: String
+}
+
+struct Variation: Codable, Hashable, Equatable, Identifiable {
+    var id: String
+    var variationName: String
+    var text: String
 }
 
 @Table("course")
@@ -537,6 +545,17 @@ func appDatabase() throws -> any DatabaseWriter {
         // Add one shopping list (freeform with example format) to database
         let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
         try ShoppingList.insert { shoppingList }.execute(db)
+    }
+    
+    migrator.registerMigration("0003: Add 'variations' column to 'recipe' table") { db in
+        logger.info("Running '0003: Add variations column...' migration")
+        
+        try db.alter(table: "recipe") { t in
+            t.add(column: "variations", .jsonText)
+        }
+
+        // Set existing recipes to have empty array instead of NULL
+        try db.execute(sql: "UPDATE recipe SET variations = '[]' WHERE variations IS NULL")
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):
