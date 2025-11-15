@@ -124,6 +124,25 @@ struct SaltyPreparationTimeExport: Codable, Equatable {
     }
 }
 
+/// Optimized Variation struct for export/import - removes internal IDs
+struct SaltyVariationExport: Codable, Equatable {
+    var variationName: String
+    var text: String
+    
+    init(from variation: Variation) {
+        self.variationName = variation.variationName
+        self.text = variation.text
+    }
+    
+    func convertToVariation() -> Variation {
+        return Variation(
+            id: UUID().uuidString,
+            variationName: variationName,
+            text: text
+        )
+    }
+}
+
 
 /// A Recipe-like object generally suitable for export, sharing, and ease of later import via similar importer object. Small
 /// differences from `Recipe` exist, e.g., most properties optional (and may be excluded from export if not provided);
@@ -151,6 +170,7 @@ struct SaltyRecipeExport: Codable, Equatable {
     var directions: [SaltyDirectionExport] = []
     var ingredients: [SaltyIngredientExport] = []
     var notes: [Note] = []
+    var variations: [SaltyVariationExport]? // Optional for backwards compatibility
     var preparationTimes: [SaltyPreparationTimeExport] = []
     var nutrition: NutritionInformation?
 }
@@ -229,6 +249,7 @@ extension SaltyRecipeExport {
             directions: recipe.directions.map { SaltyDirectionExport(from: $0) },
             ingredients: recipe.ingredients.map { SaltyIngredientExport(from: $0) },
             notes: recipe.notes,
+            variations: recipe.variations.isEmpty ? nil : recipe.variations.map { SaltyVariationExport(from: $0) },
             preparationTimes: recipe.preparationTimes.map { SaltyPreparationTimeExport(from: $0) },
             nutrition: recipe.nutrition
         )
@@ -258,6 +279,7 @@ extension SaltyRecipeExport {
             directions: recipe.directions.map { SaltyDirectionExport(from: $0) },
             ingredients: recipe.ingredients.map { SaltyIngredientExport(from: $0) },
             notes: recipe.notes,
+            variations: recipe.variations.isEmpty ? nil : recipe.variations.map { SaltyVariationExport(from: $0) },
             preparationTimes: recipe.preparationTimes.map { SaltyPreparationTimeExport(from: $0) },
             nutrition: recipe.nutrition
         )
@@ -332,6 +354,18 @@ extension SaltyRecipeExport {
             }
         }
         
+        // Variations
+        if let variations = variations, !variations.isEmpty {
+            text += "\nVariations:\n"
+            for variation in variations {
+                if !variation.variationName.isEmpty {
+                    text += "• \(variation.variationName): \(variation.text)\n"
+                } else {
+                    text += "• \(variation.text)\n"
+                }
+            }
+        }
+        
         return text
     }
     
@@ -381,6 +415,7 @@ extension SaltyRecipeExport {
             directions: directions.map { $0.convertToDirection() },
             ingredients: ingredients.map { $0.convertToIngredient() },
             notes: notes,
+            variations: variations?.map { $0.convertToVariation() } ?? [],
             preparationTimes: preparationTimes.map { $0.convertToPreparationTime() },
             nutrition: nutrition
         )

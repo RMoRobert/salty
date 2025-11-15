@@ -553,9 +553,6 @@ func appDatabase() throws -> any DatabaseWriter {
         try db.alter(table: "recipe") { t in
             t.add(column: "variations", .jsonText)
         }
-
-        // Set existing recipes to have empty array instead of NULL
-        try db.execute(sql: "UPDATE recipe SET variations = '[]' WHERE variations IS NULL")
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):
