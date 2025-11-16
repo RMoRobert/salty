@@ -556,7 +556,7 @@ func appDatabase() throws -> any DatabaseWriter {
     }
     
       // Example of what additional future migrations could look like in future (do not use this example verbatim--already part of schema):
-//    migrator.registerMigration("0003: Convert to single course per recipe") { db in
+//    migrator.registerMigration("0010: Convert to single course per recipe") { db in
 //        // Add column
 //        try db.alter(table: "recipe") { t in
 //            t.add(column: "courseId", .text).references("course", onDelete: .setNull)

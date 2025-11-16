@@ -128,6 +128,7 @@ struct SampleData {
                 Note(id: UUID().uuidString, title: "Substitutions", content: "You can substitute whole wheat flour for up to half of the all-purpose flour."),
                 Note(id: UUID().uuidString, title: "", content: "This is a note without a title to test how the UI handles missing titles.")
             ],
+            variations: [Variation(id: UUID().uuidString, variationName: "Variation 1", text: "Do the other thing instead of this one thing. Then, it can be this other thing. Here is some more text just in case.")],
             preparationTimes: [
                 PreparationTime(id: UUID().uuidString, type: "Prep", timeString: "15 minutes"),
                 PreparationTime(id: UUID().uuidString, type: "Cook", timeString: "30 minutes"),

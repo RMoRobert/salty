@@ -26,9 +26,20 @@ extension Recipe {
                         Section {
                             Div {
                                 H1(name).id("recipe-name")
-                                //if author != "" { P(author).id("recipe-author") }
-                                if source  != ""{ P(source).id("recipe-source") }
-                                if sourceDetails != "" { P(sourceDetails).id("recipe-sourceDetails") }
+                                if !source.isEmpty { P(source).id("recipe-source") }
+                                if !sourceDetails.isEmpty { P(sourceDetails).id("recipe-sourceDetails") }
+                                
+                                Div {
+                                    if !yield.isEmpty {
+                                        P(yield).id("recipe-yield-item")
+                                    }
+                                    if let servings = servings, servings > 0 {
+                                        P("\(servings)").id("recipe-servings-item")
+                                    }
+                                    // Note: course name would require database lookup - would need to be passed as parameter
+                                    // For now, course is not displayed in HTML export
+                                }
+                                .class("recipe-yield-and-servings-container")
                                 
                                 if rating != .notSet {
                                     Div {
@@ -94,6 +105,14 @@ extension Recipe {
                             }
                         }
                         .id("recipe-info-container")
+                        
+                        if !introduction.isEmpty {
+                            Section {
+                                P(introduction)
+                                    .class("recipe-introduction")
+                            }
+                            .id("recipe-introduction-container")
+                        }
 
                         Section {
                             H2("Ingredients").id("recipe-ingredients-heading")
@@ -116,14 +135,20 @@ extension Recipe {
                         Section {
                             H2("Directions").id("recipe-directions-heading")
                             Ul {
-                                for direction in directions {
+                                for (index, direction) in directions.enumerated() {
                                     if let isHeading = direction.isHeading, isHeading {
                                             Li(direction.text)
                                                 .class("recipe-directions-heading")
                                     }
                                     else {
-                                        Li(direction.text)
-                                            .class("recipe-directions-step")
+                                        let stepNumber = directions.prefix(index + 1).filter { $0.isHeading != true }.count
+                                        Li {
+                                            Span("\(stepNumber).")
+                                                .class("recipe-directions-step-number")
+                                            Span(direction.text)
+                                                .class("recipe-directions-step-text")
+                                        }
+                                        .class("recipe-directions-step")
                                     }
                                 }
                             }
@@ -132,8 +157,8 @@ extension Recipe {
                         .id("recipe-directions-container")
                         
                         
-                        Section {
-                            if notes.count > 0 {
+                        if notes.count > 0 {
+                            Section {
                                 H2("Notes").id("recipe-notes")
                                 for note in notes {
                                     Div {
@@ -145,8 +170,24 @@ extension Recipe {
                                     .class("recipe-note-container")
                                 }
                             }
+                            .id("recipe-notes-container")
                         }
-                        .id("recipe-notes-container")
+                        
+                        if variations.count > 0 {
+                            Section {
+                                H2("Variations").id("recipe-variations-heading")
+                                for variation in variations {
+                                    Div {
+                                        H3(variation.variationName)
+                                            .class("recipe-variation-heading")
+                                        P(variation.text)
+                                            .class("recipe-variation-text")
+                                    }
+                                    .class("recipe-variation-container")
+                                }
+                            }
+                            .id("recipe-variations-container")
+                        }
                         
                     // TODO: Adapt to new tags table (not row) -- and see if can apply to course and category, too?
 //                        if tags.count > 0 {
@@ -662,7 +703,7 @@ body {
     line-height: 1.2;
     color: #222;
     padding: 2rem;
-    background-color: white;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
     color: rgb(25, 25, 25);
     max-width: 1200px;
     margin: 0 auto;
@@ -724,13 +765,14 @@ main {
 /* Recipe Image Styling */
 #recipe-image-container {
    grid-column: 2;
-   grid-row: 1 / span 3;
-   margin-top: 1rem;
+   grid-row: 1;
+   margin-top: 0;
+   align-self: start;
 }
 
 #recipe-image {
-   width: 200px;
-   height: 200px;
+   width: 150px;
+   height: 150px;
    object-fit: cover;
    border-radius: 16px;
    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -763,9 +805,9 @@ main {
    
    #recipe-image {
        width: 100%;
-       max-width: 300px;
+       max-width: 200px;
        height: auto;
-       max-height: 300px;
+       max-height: 200px;
    }
 }
 
@@ -970,7 +1012,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     display: flex;
     flex-wrap: wrap;
     gap: 0.75em;
-    margin: 1em 0;
+    margin: 0.5em 0;
     list-style: none;
     padding: 0;
 }
@@ -979,9 +1021,9 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
     border: 1px solid #e1e5e9;
     border-radius: 20px;
-    padding: 1em;
+    padding: 0.75em;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    min-width: 80px;
+    min-width: 70px;
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -1035,37 +1077,23 @@ h2 {
 /* Directions Styling */
 .recipe-directions-step {
     margin: 1em 0;
-    padding: 1em 1.5em;
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-    border-radius: 16px;
-    border: 1px solid #e1e5e9;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    transition: all 0.2s ease;
-    position: relative;
+    padding: 0.5em 0;
     line-height: 1.6;
+    display: flex;
+    gap: 0.5em;
 }
 
-.recipe-directions-step::before {
-    content: counter(step-counter);
-    counter-increment: step-counter;
-    position: absolute;
-    left: -1em;
-    top: 1em;
-    background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
-    color: white;
-    width: 2em;
-    height: 2em;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 0.9em;
-    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+.recipe-directions-step-number {
+    font-weight: bold;
+    color: #1d1d1f;
+    flex-shrink: 0;
+}
+
+.recipe-directions-step-text {
+    flex: 1;
 }
 
 .recipe-directions-list {
-    counter-reset: step-counter;
     list-style: none;
     padding: 0;
     margin: 0;
@@ -1078,6 +1106,45 @@ h2 {
     font-weight: 600;
     font-size: 0.95em;
     position: relative;
+}
+
+/* Introduction Styling */
+#recipe-introduction-container {
+    font-size: 90%;
+    margin-bottom: 2rem;
+    font-style: italic;
+}
+
+.recipe-introduction {
+    margin: 0;
+    line-height: 1.6;
+    color: #1d1d1f;
+}
+
+/* Metadata Styling */
+.recipe-yield-and-servings-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin: 0;
+}
+
+#recipe-yield-item, #recipe-servings-item {
+    padding: 0.25em 0.75em 0.25em 0;
+    background: rgba(255, 255, 255, 0.66);
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+#recipe-yield-item::before {
+    content: "Yield: ";
+    font-weight: normal;
+}
+
+#recipe-servings-item::before {
+    content: "Servings: ";
+    font-weight: normal;
 }
 
 /* Notes Styling */
@@ -1097,6 +1164,27 @@ h2 {
 }
 
 #recipe-notes-container {
+    font-size: 90%;
+    margin-top: 2rem;
+}
+
+/* Variations Styling */
+.recipe-variation-heading {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #1f1f1f;
+}
+
+.recipe-variation-container {
+    margin: 1em 0;
+    padding: 0.5em 1.5em;
+    background: #f8f9fa;
+    border-radius: 12px;
+    line-height: 1.25;
+    color: #1d1d1f;
+}
+
+#recipe-variations-container {
     font-size: 90%;
     margin-top: 2rem;
 }
@@ -1125,9 +1213,11 @@ h2 {
 
 /* Container Styling */
 #recipe-info-container,
+#recipe-introduction-container,
 #recipe-ingredients-container,
 #recipe-directions-container,
 #recipe-notes-container,
+#recipe-variations-container,
 #recipe-tags-container {
     background: white;
     border-radius: 20px;
@@ -1142,13 +1232,13 @@ h2 {
 
 /* Main Layout Improvements */
 main {
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
     min-height: 100vh;
     padding: 2rem;
 }
 
 body {
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
     font-size: 14rem;
     font-weight: 400;
@@ -1165,20 +1255,16 @@ body {
     }
 
     #recipe-info-container,
+    #recipe-introduction-container,
     #recipe-ingredients-container,
     #recipe-directions-container,
     #recipe-notes-container,
+    #recipe-variations-container,
     #recipe-tags-container {
         padding: 1.5em;
         margin: 0.5em 0;
     }
 
-    .recipe-directions-step::before {
-        left: -0.25em;
-        width: 1.5em;
-        height: 1.5em;
-        font-size: 0.8em;
-    }
 }
 """
  return css
