@@ -166,8 +166,13 @@ struct Menus: Commands {
                NotificationCenter.default.post(name: .showImportFromFileSheet, object: nil)
            }
            .disabled(sheetTracker.isAnySheetShown)
-           Button("Export to File…") {
-               NotificationCenter.default.post(name: .exportSelectedRecipes, object: nil)
+           Menu("Export…") {
+               Button("Export as Recipe File…") {
+                   NotificationCenter.default.post(name: .exportSelectedRecipes, object: nil)
+               }
+               Button("Export as HTML…") {
+                   NotificationCenter.default.post(name: .exportSelectedRecipesAsHTML, object: nil)
+               }
            }
            .disabled(sheetTracker.isAnySheetShown)
            Divider()

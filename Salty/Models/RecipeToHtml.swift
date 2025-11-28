@@ -1266,6 +1266,100 @@ body {
     }
 
 }
+
+/* Print-specific styles */
+@media print {
+    /* Prevent page breaks inside key sections */
+    #recipe-ingredients-container,
+    #recipe-directions-container,
+    #recipe-notes-container,
+    #recipe-variations-container {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+    
+    /* Prevent breaking individual ingredients/directions */
+    .recipe-ingredients-list,
+    .recipe-directions-list {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+    
+    /* Keep section headers with their content */
+    #recipe-ingredients-container h2,
+    #recipe-directions-container h2,
+    #recipe-notes-container h2,
+    #recipe-variations-container h2 {
+        page-break-after: avoid;
+        break-after: avoid;
+    }
+    
+    /* Prevent breaking individual direction steps if they're long */
+    .recipe-directions-step,
+    .recipe-directions-step-with-name {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+    
+    /* Allow page breaks between major sections */
+    #recipe-info-container,
+    #recipe-introduction-container {
+        page-break-after: auto;
+        break-after: auto;
+    }
+    
+    /* Single column layout for print */
+    main {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+    
+    #recipe-ingredients-container,
+    #recipe-directions-container {
+        grid-column: 1 !important;
+    }
+    
+    /* Reduce shadows and adjust colors for print */
+    #recipe-info-container,
+    #recipe-introduction-container,
+    #recipe-ingredients-container,
+    #recipe-directions-container,
+    #recipe-notes-container,
+    #recipe-variations-container,
+    #recipe-tags-container {
+        box-shadow: none;
+        border: 1px solid #ddd;
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+    
+    /* Ensure background colors print (if needed) */
+    body,
+    main {
+        background: white !important;
+    }
+    
+    /* Adjust margins for print */
+    body {
+        margin: 0;
+        padding: 0.5in;
+    }
+    
+    main {
+        padding: 0;
+    }
+    
+    /* Reduce font sizes slightly for print if needed */
+    #recipe-name {
+        font-size: 2em;
+    }
+    
+    /* Ensure images print well */
+    #recipe-image {
+        max-width: 100%;
+        height: auto;
+    }
+}
 """
  return css
 }

@@ -393,7 +393,12 @@ struct RecipeNavigationSplitView: View {
                         Button(action: {
                             viewModel.exportSelectedRecipes()
                         }) {
-                            Label("Export to File…", systemImage: "square.and.arrow.down")
+                            Label("Export as Recipe File…", systemImage: "square.and.arrow.down")
+                        }
+                        Button(action: {
+                            viewModel.exportSelectedRecipesAsHTML()
+                        }) {
+                            Label("Export as HTML…", systemImage: "doc.text")
                         }
                         
                         if let recipeId = viewModel.selectedRecipeIDs.first,
@@ -457,8 +462,8 @@ struct RecipeNavigationSplitView: View {
             }
             .fileExporter(
                 isPresented: $viewModel.showingExportSheet,
-                document: ExportDocument(data: viewModel.exportData ?? Data(), suggestedName: viewModel.exportFileName),
-                contentType: .saltyRecipe,
+                document: ExportDocument(data: viewModel.exportData ?? Data(), suggestedName: viewModel.exportFileName, contentType: viewModel.exportContentType),
+                contentType: viewModel.exportContentType,
                 defaultFilename: viewModel.exportFileName
             ) { result in
                 switch result {
@@ -597,6 +602,9 @@ struct RecipeNavigationSplitView: View {
         .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipes)) { _ in
             viewModel.exportSelectedRecipes()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipesAsHTML)) { _ in
+            viewModel.exportSelectedRecipesAsHTML()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
             showingImportFromFileSheet = true
         }
@@ -665,13 +673,20 @@ struct RecipeNavigationSplitView: View {
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true
         }
-        Button("Export…") {
-            // Export all selected recipes with prompt via same technique as menu item; or single recipe directly
-            if viewModel.selectedRecipeIDs.count > 1 {
-                viewModel.exportSelectedRecipes()
+        Menu("Export…") {
+            Button("Export as Recipe File…") {
+                if viewModel.selectedRecipeIDs.count > 1 {
+                    viewModel.exportSelectedRecipes()
+                } else {
+                    viewModel.exportRecipe(recipe.id)
+                }
             }
-            else {
-                viewModel.exportRecipe(recipe.id)
+            Button("Export as HTML…") {
+                if viewModel.selectedRecipeIDs.count > 1 {
+                    viewModel.exportSelectedRecipesAsHTML()
+                } else {
+                    viewModel.exportRecipeAsHTML(recipe.id)
+                }
             }
         }
         #if !os(macOS)
@@ -715,19 +730,22 @@ struct RecipeNavigationSplitView: View {
 // MARK: - Export Document
 
 struct ExportDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.saltyRecipe] }
+    static var readableContentTypes: [UTType] { [.saltyRecipe, .html] }
     
     var data: Data
     var suggestedName: String
+    var contentType: UTType
     
-    init(data: Data, suggestedName: String = "recipe") {
+    init(data: Data, suggestedName: String = "recipe", contentType: UTType = .saltyRecipe) {
         self.data = data
         self.suggestedName = suggestedName
+        self.contentType = contentType
     }
     
     init(configuration: ReadConfiguration) throws {
         data = Data()
         suggestedName = "recipe"
+        contentType = .saltyRecipe
     }
     
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {

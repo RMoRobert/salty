@@ -2,48 +2,211 @@
   "fill-specializations" : [
     {
       "value" : {
-        "automatic-gradient" : "srgb:0.01247,0.61630,1.00000,1.00000"
+        "automatic-gradient" : "extended-srgb:0.00000,0.47843,1.00000,1.00000"
       }
     },
     {
       "appearance" : "dark",
       "value" : {
-        "solid" : "srgb:0.00000,0.11087,0.20930,1.00000"
+        "solid" : "display-p3:0.07843,0.24314,0.52549,1.00000"
       }
     }
   ],
   "groups" : [
     {
+      "blend-mode-specializations" : [
+        {
+          "value" : "plus-lighter"
+        },
+        {
+          "appearance" : "dark",
+          "value" : "plus-darker"
+        },
+        {
+          "appearance" : "tinted",
+          "value" : "plus-darker"
+        }
+      ],
+      "hidden" : false,
       "layers" : [
         {
-          "blend-mode" : "normal",
-          "fill" : "none",
-          "glass" : true,
-          "image-name" : "Shaker.png",
-          "name" : "Shaker",
-          "position" : {
-            "scale" : 0.55,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
+          "image-name" : "FVR Salty L11.svg",
+          "name" : "FVR Salty L11"
         }
       ],
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    },
+    {
+      "blend-mode-specializations" : [
+        {
+          "value" : "multiply"
+        },
+        {
+          "appearance" : "dark",
+          "value" : "screen"
+        },
+        {
+          "appearance" : "tinted",
+          "value" : "normal"
+        }
+      ],
+      "hidden" : false,
+      "layers" : [
+        {
+          "blend-mode-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : "darken"
+            }
+          ],
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "extended-gray:0.50000,1.00000",
+                  "extended-gray:0.75000,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.5,
+                    "y" : 0
+                  },
+                  "stop" : {
+                    "x" : 0.5,
+                    "y" : 1.2609375
+                  }
+                }
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-gray:0.25000,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "FVR Salty L10 2.svg",
+          "name" : "FVR Salty L10 2"
+        },
+        {
+          "fill" : "automatic",
+          "hidden" : false,
+          "image-name" : "FVR Salty L9.svg",
+          "name" : "FVR Salty L9"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : false,
       "translucency" : {
         "enabled" : true,
+        "value" : 0.25
+      }
+    },
+    {
+      "blend-mode" : "screen",
+      "blur-material" : null,
+      "layers" : [
+        {
+          "image-name" : "FVR Salty L8.svg",
+          "name" : "FVR Salty L8"
+        },
+        {
+          "fill" : "automatic",
+          "image-name" : "FVR Salty L7.svg",
+          "name" : "FVR Salty L7"
+        },
+        {
+          "image-name" : "FVR Salty L6.svg",
+          "name" : "FVR Salty L6"
+        },
+        {
+          "image-name" : "FVR Salty L5.svg",
+          "name" : "FVR Salty L5"
+        }
+      ],
+      "lighting" : "individual",
+      "opacity" : 0.85,
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blend-mode" : "screen",
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "extended-gray:0.56275,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "FVR Salty L4.svg",
+          "name" : "FVR Salty L4"
+        },
+        {
+          "fill" : {
+            "solid" : "extended-gray:0.86976,1.00000"
+          },
+          "image-name" : "FVR Salty L3.svg",
+          "name" : "FVR Salty L3"
+        },
+        {
+          "fill" : {
+            "solid" : "extended-gray:0.70097,1.00000"
+          },
+          "image-name" : "FVR Salty L2.svg",
+          "name" : "FVR Salty L2"
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.90000,0.90000,0.90000,1.00000",
+              "extended-gray:1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.6685327540106952,
+                "y" : 0.9331576603325415
+              },
+              "stop" : {
+                "x" : 0.8208973930481284,
+                "y" : 0.16335733372921615
+              }
+            }
+          },
+          "image-name" : "FVR Salty L1.svg",
+          "name" : "FVR Salty L1"
+        }
+      ],
+      "opacity" : 0.9,
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
         "value" : 0.5
       }
     }
   ],
   "supported-platforms" : {
-    "circles" : [
-      "watchOS"
-    ],
     "squares" : "shared"
   }
 }

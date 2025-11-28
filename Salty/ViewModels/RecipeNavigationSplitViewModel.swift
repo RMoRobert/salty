@@ -8,6 +8,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import UniformTypeIdentifiers
 
 // MARK: - Notification Names
 
@@ -18,6 +19,7 @@ extension Notification.Name {
     static let sheetStateChanged = Notification.Name("sheetStateChanged")
     static let showRecipeInfoInspector = Notification.Name("showRecipeInfoInspector")
     static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
+    static let exportSelectedRecipesAsHTML = Notification.Name("exportSelectedRecipesAsHTML")
 }
 
 @Observable
@@ -141,6 +143,7 @@ class RecipeNavigationSplitViewModel {
     var exportFileName = ""
     var exportErrorMessage = ""
     var showingExportErrorAlert = false
+    var exportContentType: UTType = .saltyRecipe
     
 
 //    // TODO: Do more of this in database and not filtering afterwards
@@ -2188,6 +2191,7 @@ class RecipeNavigationSplitViewModel {
                 
                 await MainActor.run {
                     exportData = jsonData
+                    exportContentType = .saltyRecipe
                     exportFileName = "\(recipe.name).saltyRecipe"
                     showingExportSheet = true
                 }
@@ -2239,8 +2243,99 @@ class RecipeNavigationSplitViewModel {
                 
                 await MainActor.run {
                     exportData = jsonData
+                    exportContentType = .saltyRecipe
                     let count = recipesToExport.count
                     exportFileName = count == 1 ? "\(recipesToExport.first!.name).saltyRecipe" : "\(count)_recipes.saltyRecipe"
+                    showingExportSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingExportErrorAlert = true
+                }
+            }
+        }
+    }
+    
+    /// Exports a single recipe to HTML format
+    /// - Parameter recipeId: The ID of the recipe to export
+    func exportRecipeAsHTML(_ recipeId: String) {
+        Task {
+            do {
+                guard let recipe = recipes.first(where: { $0.id == recipeId }) else {
+                    await MainActor.run {
+                        exportErrorMessage = "Recipe not found"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                
+                let htmlString = recipe.asHtml
+                guard let htmlData = htmlString.data(using: .utf8) else {
+                    await MainActor.run {
+                        exportErrorMessage = "Failed to convert HTML to data"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                
+                await MainActor.run {
+                    exportData = htmlData
+                    exportContentType = .html
+                    exportFileName = "\(recipe.name).html"
+                    showingExportSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingExportErrorAlert = true
+                }
+            }
+        }
+    }
+    
+    /// Exports multiple selected recipes to HTML format
+    func exportSelectedRecipesAsHTML() {
+        Task {
+            do {
+                let recipesToExport = recipes.filter { selectedRecipeIDs.contains($0.id) }
+                
+                if recipesToExport.isEmpty {
+                    await MainActor.run {
+                        exportErrorMessage = "No recipes selected for export"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                
+                // For multiple recipes, create a combined HTML document
+                let htmlParts = recipesToExport.map { $0.asHtml }
+                let combinedHTML = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Exported Recipes</title>
+                </head>
+                <body>
+                    \(htmlParts.joined(separator: "<hr style='margin: 2em 0; border: none; border-top: 2px solid #ccc;'>"))
+                </body>
+                </html>
+                """
+                
+                guard let htmlData = combinedHTML.data(using: .utf8) else {
+                    await MainActor.run {
+                        exportErrorMessage = "Failed to convert HTML to data"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                
+                await MainActor.run {
+                    exportData = htmlData
+                    exportContentType = .html
+                    let count = recipesToExport.count
+                    exportFileName = count == 1 ? "\(recipesToExport.first!.name).html" : "\(count)_recipes.html"
                     showingExportSheet = true
                 }
             } catch {
