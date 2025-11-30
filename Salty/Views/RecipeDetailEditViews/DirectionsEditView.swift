@@ -18,51 +18,74 @@ struct DirectionsEditView: View {
     @FocusState private var focusedDirectionID: String?
     @Environment(\.dismiss) private var dismiss
     
+    var showToolbar: Bool = true
+    var showBottomButtons: Bool = false
+    
     var body: some View {
-        directionsScrollView
-            .navigationTitle("Edit Directions")
-            .toolbar {
-                ToolbarItemGroup(placement: .automatic) {
-                    Button {
-                        addNewStep()
-                    } label: {
-                        Label("New Step", systemImage: "plus.circle")
+        Group {
+            if showToolbar {
+                // Standalone view with toolbar (for sheet presentation)
+                directionsContent
+                    .navigationTitle("Edit Directions")
+                    .toolbar {
+                        ToolbarItemGroup(placement: .automatic) {
+                            Button {
+                                addNewStep()
+                            } label: {
+                                Label("New Step", systemImage: "plus.circle")
+                            }
+                            .keyboardShortcut("n", modifiers: [.command])
+                            
+                            Button {
+                                addNewHeading()
+                            } label: {
+                                Label("New Heading", systemImage: "folder.badge.plus")
+                            }
+                            .keyboardShortcut("n", modifiers: [.command, .shift])
+                        }
+                        
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                            .keyboardShortcut(.return, modifiers: [.command])
+                        }
                     }
-                    .keyboardShortcut("n", modifiers: [.command])
-                    
-                    Button {
-                        addNewHeading()
-                    } label: {
-                        Label("New Heading", systemImage: "folder.badge.plus")
+                    .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
+                           minHeight: 500, idealHeight: 600, maxHeight: 800)
+                    #if os(macOS)
+                    .presentationSizing(.fitted)
+                    #endif
+            } else {
+                // Embedded view (no toolbar, no frame constraints)
+                VStack(spacing: 0) {
+                    directionsContent
+                    if showBottomButtons {
+                        bottomActionButtons
                     }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-                }
-                
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .keyboardShortcut(.return, modifiers: [.command])
                 }
             }
+        }
         .onAppear {
             editingDirections = recipe.directions
         }
         .onDisappear {
             recipe.directions = editingDirections
         }
-        .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
-               minHeight: 500, idealHeight: 600, maxHeight: 800)
-        #if os(macOS)
-        .presentationSizing(.fitted)
-        #endif
     }
     
-    private var directionsScrollView: some View {
+    private var directionsContent: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                directionsList
-                    .padding()
+            Group {
+                if showToolbar {
+                    // Standalone view - add padding
+                    directionsList
+                        .padding(.horizontal)
+                        .padding(.top)
+                } else {
+                    // Embedded view - no extra padding
+                    directionsList
+                }
             }
             .onChange(of: scrollToNewItem) { _, newID in
                 if let newID = newID {
@@ -76,6 +99,26 @@ struct DirectionsEditView: View {
                     }
                 }
             }
+        }
+    }
+    
+    private var bottomActionButtons: some View {
+        HStack {
+            Button {
+                addNewStep()
+            } label: {
+                Label("New Step", systemImage: "plus.circle")
+            }
+            .keyboardShortcut("n", modifiers: [.command])
+            
+            Button {
+                addNewHeading()
+            } label: {
+                Label("New Heading", systemImage: "folder.badge.plus")
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            
+            Spacer()
         }
     }
     
@@ -120,6 +163,19 @@ struct DirectionsEditView: View {
         // Ensure index is valid before accessing - double check to prevent race conditions
         if index >= 0 && index < editingDirections.count {
             let direction = editingDirections[index]
+            // Create a safe binding that checks bounds
+            let directionBinding = Binding<Direction>(
+                get: {
+                    guard index >= 0 && index < editingDirections.count else {
+                        return direction
+                    }
+                    return editingDirections[index]
+                },
+                set: { newValue in
+                    guard index >= 0 && index < editingDirections.count else { return }
+                    editingDirections[index] = newValue
+                }
+            )
             // Calculate step number by counting non-heading directions before this index
             let stepNumber = editingDirections.prefix(index).filter { !($0.isHeading ?? false) }.count + 1
             // Alternating background colors for list effect
@@ -127,7 +183,7 @@ struct DirectionsEditView: View {
                 ? Color.clear
                 : Color(nsColor: .tertiarySystemFill)
             DirectionEditRowView(
-                direction: $editingDirections[index],
+                direction: directionBinding,
                 index: index,
                 stepNumber: (direction.isHeading ?? false) ? nil : stepNumber,
                 backgroundColor: backgroundColor,
@@ -246,17 +302,17 @@ struct DirectionEditRowView: View {
         HStack(alignment: .center, spacing: 2) {
             if let stepNumber = stepNumber {
                 Text("\(stepNumber).")
-                    .font(.title2)                    .frame(minWidth: 24, alignment: .trailing)
+                    .font(.title2)                    .frame(minWidth: 18, alignment: .trailing)
                     .padding(.trailing, 4)
             } else {
                 Spacer()
-                    .frame(width: 24)
+                    .frame(width: 18)
             }
             
             TextField("Direction", text: $direction.text, axis: .vertical)
                 .font(direction.isHeading == true ? .headline : .body)
                 .fontWeight(direction.isHeading == true ? .semibold : .regular)
-                .lineLimit(3...15)
+                .lineLimit(3...13)
                 .textFieldStyle(.squareBorder)
                 //.padding()
             
@@ -305,7 +361,7 @@ struct DirectionEditRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background(backgroundColor)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .opacity(isDragging ? 0.4 : 1.0)
         .scaleEffect(isDragging ? 0.95 : 1.0)
         .animation(.spring, value: isDragging)

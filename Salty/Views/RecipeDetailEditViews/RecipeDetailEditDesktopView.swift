@@ -273,10 +273,6 @@ struct RecipeDetailEditDesktopView: View {
                     Text("Directions:")
                         .modifier(TitleDesktopEditorStyle())
                     Spacer()
-                    Button("Edit Directions") {
-                        viewModel.showingEditDirectionsSheet.toggle()
-                    }
-                    .buttonStyle(.bordered)
                     
                     Menu {
                         Button("Edit as Text (Bulk Edit)") {
@@ -293,42 +289,7 @@ struct RecipeDetailEditDesktopView: View {
                     .buttonStyle(.plain)
                 }
                 
-                if viewModel.recipe.directions.isEmpty {
-                    Text("No directions added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(viewModel.recipe.directions.enumerated()), id: \.element.id) { index, direction in
-                            HStack(alignment: .top, spacing: 12) {
-                                if direction.isHeading != true {
-                                    Text("\(viewModel.recipe.directions.prefix(index + 1).filter { $0.isHeading != true }.count).")
-                                        .font(.body)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 24, alignment: .leading)
-                                } else {
-                                    Spacer()
-                                        .frame(width: 24)
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    if direction.isHeading == true {
-                                        Text(direction.text)
-                                            .font(.callout)
-                                            .fontWeight(.semibold)
-                                    } else {
-                                        Text(direction.text)
-                                            .font(.body)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $viewModel.showingEditDirectionsSheet) {
-                DirectionsEditView(recipe: $viewModel.recipe)
+                DirectionsEditView(recipe: $viewModel.recipe, showToolbar: false, showBottomButtons: true)
             }
             .sheet(isPresented: $viewModel.showingBulkEditDirectionsSheet) {
                 RecipeDirectionsBulkEditView(recipe: $viewModel.recipe)
