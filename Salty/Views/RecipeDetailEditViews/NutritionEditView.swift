@@ -132,54 +132,58 @@ struct NutritionEditView: View {
         }
     }
 
+    @ViewBuilder
+    private var nutritionFormContent: some View {
+        Section(header: PlatformSpecificSectionHeading(baseText: "General")) {
+            #if !os(macOS)
+            LabeledContent("Serving Size") {
+                TextField("e.g., 1 cup, 2 slices", text: $servingSizeText)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+            }
+            #else
+            TextField("Serving Size:", text: $servingSizeText)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+            #endif
+            
+            ValidatedTextField("Calories", text: $caloriesText, isValid: $isCaloriesValid)
+        }
+        
+        Section(header: PlatformSpecificSectionHeading(baseText: "Macronutrients")) {
+            ValidatedTextField("Protein (g)", text: $proteinText, isValid: $isProteinValid)
+            ValidatedTextField("Carbohydrates (g)", text: $carbohydratesText, isValid: $isCarbohydratesValid)
+            ValidatedTextField("Total Fat (g)", text: $fatText, isValid: $isFatValid)
+            ValidatedTextField("Saturated Fat (g)", text: $saturatedFatText, isValid: $isSaturatedFatValid)
+            ValidatedTextField("Trans Fat (g)", text: $transFatText, isValid: $isTransFatValid)
+            ValidatedTextField("Fiber (g)", text: $fiberText, isValid: $isFiberValid)
+            ValidatedTextField("Sugar (g)", text: $sugarText, isValid: $isSugarValid)
+            ValidatedTextField("Added Sugar (g)", text: $addedSugarText, isValid: $isAddedSugarValid)
+        }
+        
+        Section(header: PlatformSpecificSectionHeading(baseText: "Other Nutrients")) {
+            ValidatedTextField("Sodium (mg)", text: $sodiumText, isValid: $isSodiumValid)
+            ValidatedTextField("Cholesterol (mg)", text: $cholesterolText, isValid: $isCholesterolValid)
+        }
+        
+        Section(header: PlatformSpecificSectionHeading(baseText: "Vitamins and Minerals")) {
+            ValidatedTextField("Vitamin D (μg)", text: $vitaminDText, isValid: $isVitaminDValid)
+            ValidatedTextField("Calcium (mg)", text: $calciumText, isValid: $isCalciumValid)
+            ValidatedTextField("Iron (mg)", text: $ironText, isValid: $isIronValid)
+            ValidatedTextField("Potassium (mg)", text: $potassiumText, isValid: $isPotassiumValid)
+            ValidatedTextField("Vitamin A (μg)", text: $vitaminAText, isValid: $isVitaminAValid)
+            ValidatedTextField("Vitamin C (mg)", text: $vitaminCText, isValid: $isVitaminCValid)
+        }
+    }
+    
     var body: some View {
         NavigationStack {
-            Form {
-                Section(header: PlatformSpecificSectionHeading(baseText: "General")) {
-                    #if !os(macOS)
-                    LabeledContent("Serving Size") {
-                        TextField("e.g., 1 cup, 2 slices", text: $servingSizeText)
-                            .textFieldStyle(.plain)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    #else
-                    TextField("Serving Size:", text: $servingSizeText)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                    #endif
-                    
-                    ValidatedTextField("Calories", text: $caloriesText, isValid: $isCaloriesValid)
-                }
-                
-                Section(header: PlatformSpecificSectionHeading(baseText: "Macronutrients")) {
-                    ValidatedTextField("Protein (g)", text: $proteinText, isValid: $isProteinValid)
-                    ValidatedTextField("Carbohydrates (g)", text: $carbohydratesText, isValid: $isCarbohydratesValid)
-                    ValidatedTextField("Total Fat (g)", text: $fatText, isValid: $isFatValid)
-                    ValidatedTextField("Saturated Fat (g)", text: $saturatedFatText, isValid: $isSaturatedFatValid)
-                    ValidatedTextField("Trans Fat (g)", text: $transFatText, isValid: $isTransFatValid)
-                    ValidatedTextField("Fiber (g)", text: $fiberText, isValid: $isFiberValid)
-                    ValidatedTextField("Sugar (g)", text: $sugarText, isValid: $isSugarValid)
-                    ValidatedTextField("Added Sugar (g)", text: $addedSugarText, isValid: $isAddedSugarValid)
-                }
-                
-                Section(header: PlatformSpecificSectionHeading(baseText: "Other Nutrients")) {
-                    ValidatedTextField("Sodium (mg)", text: $sodiumText, isValid: $isSodiumValid)
-                    ValidatedTextField("Cholesterol (mg)", text: $cholesterolText, isValid: $isCholesterolValid)
-                }
-                
-                Section(header: PlatformSpecificSectionHeading(baseText: "Vitamins and Minerals")) {
-                    ValidatedTextField("Vitamin D (μg)", text: $vitaminDText, isValid: $isVitaminDValid)
-                    ValidatedTextField("Calcium (mg)", text: $calciumText, isValid: $isCalciumValid)
-                    ValidatedTextField("Iron (mg)", text: $ironText, isValid: $isIronValid)
-                    ValidatedTextField("Potassium (mg)", text: $potassiumText, isValid: $isPotassiumValid)
-                    ValidatedTextField("Vitamin A (μg)", text: $vitaminAText, isValid: $isVitaminAValid)
-                    ValidatedTextField("Vitamin C (mg)", text: $vitaminCText, isValid: $isVitaminCValid)
-                }
-            }
             #if os(macOS)
-            .padding()
-            #else
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            ScrollView {
+                Form {
+                    nutritionFormContent
+                }
+                .padding()
+            }
             .navigationTitle("Edit Nutrition Information")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -198,9 +202,35 @@ struct NutritionEditView: View {
             .onAppear {
                 loadInitialValues()
             }
+            #else
+            Form {
+                nutritionFormContent
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Edit Nutrition Information")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveChanges()
+                        dismiss()
+                    }
+                    .disabled(hasValidationErrors)
+                }
+            }
+            .onAppear {
+                loadInitialValues()
+            }
+            #endif
         }
         #if os(macOS)
-        .frame(minWidth: 300, minHeight: 700)
+        .frame(minWidth: 300, idealWidth: 400, maxWidth: 500,
+               minHeight: 400, idealHeight: 600, maxHeight: .infinity)
+        .presentationSizing(.fitted)
         #endif
     }
     
