@@ -214,7 +214,7 @@ struct DirectionsEditView: View {
             isHeading: false,
             text: "New step"
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingDirections.insert(newDirection, at: index + 1)
         }
         scrollToNewItem = newDirection.id
@@ -237,13 +237,13 @@ struct DirectionsEditView: View {
             }
             // If dropTarget < index, no adjustment needed
         }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingDirections.remove(at: index)
         }
     }
     
     private func moveStep(from fromIndex: Int, to toIndex: Int) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingDirections.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -254,7 +254,7 @@ struct DirectionsEditView: View {
             isHeading: false,
             text: "New step"
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingDirections.append(newDirection)
         }
         scrollToNewItem = newDirection.id
@@ -270,7 +270,7 @@ struct DirectionsEditView: View {
             isHeading: true,
             text: "New heading"
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingDirections.append(newDirection)
         }
         scrollToNewItem = newDirection.id

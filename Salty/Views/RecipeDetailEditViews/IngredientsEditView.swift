@@ -209,7 +209,7 @@ struct IngredientsEditView: View {
             isMain: false,
             text: "New ingredient"
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingIngredients.insert(newIngredient, at: index + 1)
         }
         scrollToNewItem = newIngredient.id
@@ -232,13 +232,13 @@ struct IngredientsEditView: View {
             }
             // If dropTarget < index, no adjustment needed
         }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingIngredients.remove(at: index)
         }
     }
     
     private func moveIngredient(from fromIndex: Int, to toIndex: Int) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingIngredients.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -250,7 +250,7 @@ struct IngredientsEditView: View {
             isMain: false,
             text: "New ingredient"
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingIngredients.append(newIngredient)
         }
         scrollToNewItem = newIngredient.id
@@ -267,7 +267,7 @@ struct IngredientsEditView: View {
             isMain: false,
             text: "New heading"
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation {
             editingIngredients.append(newIngredient)
         }
         scrollToNewItem = newIngredient.id

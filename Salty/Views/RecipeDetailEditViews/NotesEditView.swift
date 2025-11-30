@@ -11,166 +11,339 @@ import SwiftUI
 
 struct NotesEditView: View {
     @Binding var recipe: Recipe
-    @State private var selectedIndices: Set<Int> = []
     @State private var editingNotes: [Note] = []
-    @State private var hasChanges: Bool = false
+    @State private var draggedItem: Note?
+    @State private var dropTargetIndex: Int?
+    @State private var scrollToNewItem: String?
+    @FocusState private var focusedNoteID: String?
     @Environment(\.dismiss) private var dismiss
     
-    private func deleteNote(at index: Int) {
-        guard index < editingNotes.count else { return }
-        editingNotes.remove(at: index)
-        hasChanges = true
-        
-        // Update selection indices after deletion
-        var newSelection: Set<Int> = []
-        for selectedIndex in selectedIndices {
-            if selectedIndex < index {
-                // Keep indices before the deleted item unchanged
-                newSelection.insert(selectedIndex)
-            } else if selectedIndex > index {
-                // Decrement indices after the deleted item
-                newSelection.insert(selectedIndex - 1)
-            }
-            // Don't add the deleted index
-        }
-        selectedIndices = newSelection
-    }
-    
-    private var notesList: some View {
-        List(selection: $selectedIndices) {
-            ForEach(Array(editingNotes.enumerated()), id: \.element.id) { index, note in
-                VStack(alignment: .leading) {
-                    if !note.title.isEmpty {
-                        Text(note.title)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    Text(note.content)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
-                }
-                .tag(index)
-            }
-            .onDelete { indexSet in
-                for index in indexSet.sorted(by: >) {
-                    deleteNote(at: index)
-                }
-            }
-            .onMove { from, to in
-                editingNotes.move(fromOffsets: from, toOffset: to)
-                hasChanges = true
-            }
-        }
-        .listStyle(.bordered)
-        .alternatingRowBackgrounds()
-    }
+    var showToolbar: Bool = true
+    var showBottomButtons: Bool = false
     
     var body: some View {
-        VSplitView {
-            // Top section: List of notes
-            VStack {
-                notesList
-                
-                // Add and Delete buttons
-                HStack {
-                    Button {
-                        editingNotes.append(Note(
-                            id: UUID().uuidString,
-                            title: "New note",
-                            content: ""
-                        ))
-                        hasChanges = true
-                        selectedIndices = [editingNotes.count - 1]
-                    } label: {
-                        Label("Add Note", systemImage: "plus")
-                    }
-                    .padding(.trailing)
-                    
-                    Spacer()
-                    
-                    Button(role: .destructive) {
-                        for index in selectedIndices.sorted(by: >) {
-                            deleteNote(at: index)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .disabled(selectedIndices.isEmpty)
-                }
-            }
-            .padding()
-            .frame(minHeight: 250, idealHeight: 350)
-            
-            // Bottom section: Detail editor
-            VStack {
-                if selectedIndices.count == 1, let firstSelectedIndex = selectedIndices.min(), firstSelectedIndex < editingNotes.count {
-                    NoteDetailEditView(
-                        note: Binding(
-                            get: { editingNotes[firstSelectedIndex] },
-                            set: { newValue in
-                                editingNotes[firstSelectedIndex] = newValue
-                                hasChanges = true
+        Group {
+            if showToolbar {
+                // Standalone view with toolbar (for sheet presentation)
+                notesContent
+                    .navigationTitle("Edit Notes")
+                    .toolbar {
+                        ToolbarItemGroup(placement: .automatic) {
+                            Button {
+                                addNewNote()
+                            } label: {
+                                Label("New Note", systemImage: "plus.circle")
                             }
-                        )
-                    )
-                } else {
-                    ContentUnavailableView {
-                        Text(selectedIndices.count > 1 ?
-                             "Select a single note to edit text" : "Select a note to edit"
-                        )
-                        .font(.body)
+                            .keyboardShortcut("n", modifiers: [.command])
+                        }
+                        
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                            .keyboardShortcut(.return, modifiers: [.command])
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .frame(minHeight: 100, idealHeight: 150, maxHeight: 800)
-            .padding()
-        }
-        .navigationTitle("Edit Notes")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") {
-                    dismiss()
+                    .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
+                           minHeight: 500, idealHeight: 600, maxHeight: 800)
+                    .presentationSizing(.fitted)
+            } else {
+                // Embedded view (no toolbar, no frame constraints)
+                VStack(spacing: 0) {
+                    notesContent
+                    if showBottomButtons {
+                        bottomActionButtons
+                            .padding(.top, 4)
+                    }
                 }
             }
         }
         .onAppear {
             editingNotes = recipe.notes
         }
-        .onChange(of: editingNotes) { _, _ in
+        .onDisappear {
             recipe.notes = editingNotes
         }
-        .frame(minWidth: 500, maxWidth: .infinity,
-               minHeight: 500, maxHeight: .infinity)
-#if os(macOS)
-        .presentationSizing(.fitted)
-#endif
+    }
+    
+    private var notesContent: some View {
+        ScrollViewReader { proxy in
+            Group {
+                if showToolbar {
+                    // Standalone view - add padding
+                    notesList
+                        .padding(.horizontal)
+                        .padding(.top)
+                } else {
+                    // Embedded view - no extra padding
+                    notesList
+                }
+            }
+            .onChange(of: scrollToNewItem) { _, newID in
+                if let newID = newID {
+                    withAnimation {
+                        proxy.scrollTo(newID, anchor: .center)
+                    }
+                    // Set focus after scrolling
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        focusedNoteID = newID
+                        scrollToNewItem = nil
+                    }
+                }
+            }
+        }
+    }
+    
+    private var bottomActionButtons: some View {
+        HStack {
+            Button {
+                addNewNote()
+            } label: {
+                Label("New Note", systemImage: "plus.circle")
+            }
+            .keyboardShortcut("n", modifiers: [.command])
+            
+            Spacer()
+        }
+    }
+    
+    private var notesList: some View {
+        VStack(spacing: 0) {
+            ForEach(editingNotes, id: \.id) { note in
+                if let index = editingNotes.firstIndex(where: { $0.id == note.id }),
+                   index < editingNotes.count {
+                    dropIndicator(for: index)
+                    noteRow(at: index)
+                }
+            }
+            dropIndicatorAtEnd
+        }
+    }
+    
+    @ViewBuilder
+    private func dropIndicator(for index: Int) -> some View {
+        if let dropTarget = dropTargetIndex, dropTarget == index {
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 3)
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+    
+    @ViewBuilder
+    private var dropIndicatorAtEnd: some View {
+        let currentCount = editingNotes.count
+        if let dropTarget = dropTargetIndex, dropTarget == currentCount, currentCount >= 0 {
+            Rectangle()
+                .fill(Color.primary)
+                .frame(height: 2)
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+    
+    @ViewBuilder
+    private func noteRow(at index: Int) -> some View {
+        // Ensure index is valid before accessing
+        if index >= 0 && index < editingNotes.count {
+            let note = editingNotes[index]
+            // Create a safe binding that checks bounds
+            let noteBinding = Binding<Note>(
+                get: {
+                    guard index >= 0 && index < editingNotes.count else {
+                        return note
+                    }
+                    return editingNotes[index]
+                },
+                set: { newValue in
+                    guard index >= 0 && index < editingNotes.count else { return }
+                    editingNotes[index] = newValue
+                }
+            )
+            // Alternating background colors for list effect
+            let backgroundColor = (index % 2 == 0 || editingNotes.count < 3)
+                ? Color.clear
+                : Color(nsColor: .tertiarySystemFill)
+            NoteEditRowView(
+                note: noteBinding,
+                index: index,
+                backgroundColor: backgroundColor,
+                onAdd: { addNoteAfter(index) },
+                onDelete: { deleteNote(at: index) },
+                onMove: { fromIndex, toIndex in
+                    moveNote(from: fromIndex, to: toIndex)
+                },
+                onDragStart: {
+                    draggedItem = note
+                },
+                onDragEnd: {
+                    draggedItem = nil
+                    dropTargetIndex = nil
+                },
+                onDropTargetChanged: { targetIndex in
+                    dropTargetIndex = targetIndex
+                }
+            )
+            .focused($focusedNoteID, equals: note.id)
+            .id(note.id)
+        }
+    }
+    
+    private func addNoteAfter(_ index: Int) {
+        let newNote = Note(
+            id: UUID().uuidString,
+            title: "",
+            content: ""
+        )
+        withAnimation {
+            editingNotes.insert(newNote, at: index + 1)
+        }
+        scrollToNewItem = newNote.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedNoteID = newNote.id
+        }
+    }
+    
+    private func deleteNote(at index: Int) {
+        guard index >= 0 && index < editingNotes.count else { return }
+        // Clear or adjust drop target if needed
+        if let dropTarget = dropTargetIndex {
+            if dropTarget == index {
+                dropTargetIndex = nil
+            } else if dropTarget > index {
+                dropTargetIndex = dropTarget - 1
+            }
+        }
+        withAnimation {
+            editingNotes.remove(at: index)
+        }
+    }
+    
+    private func moveNote(from fromIndex: Int, to toIndex: Int) {
+        withAnimation {
+            editingNotes.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
+        }
+    }
+    
+    private func addNewNote() {
+        let newNote = Note(
+            id: UUID().uuidString,
+            title: "",
+            content: ""
+        )
+        withAnimation {
+            editingNotes.append(newNote)
+        }
+        scrollToNewItem = newNote.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedNoteID = newNote.id
+        }
     }
 }
 
-struct NoteDetailEditView: View {
+// MARK: - Note Edit Row View
+
+struct NoteEditRowView: View {
     @Binding var note: Note
+    let index: Int
+    let backgroundColor: Color
+    let onAdd: () -> Void
+    let onDelete: () -> Void
+    let onMove: (Int, Int) -> Void
+    let onDragStart: () -> Void
+    let onDragEnd: () -> Void
+    let onDropTargetChanged: (Int?) -> Void
+    
+    @State private var isDragging = false
+    @State private var isDropTarget = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Note")
-                .font(.headline)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Title:")
-                TextField("Note title", text: $note.title)
-                    .textFieldStyle(.roundedBorder)
+        HStack {
+            VStack {
+                HStack {
+                    // Icon
+                    Image(systemName: "list.triangle")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    // Title field
+                    TextField("Note Title", text: $note.title)
+                        .textFieldStyle(.squareBorder)
+                        .fontWeight(.semibold)
+                }
+                HStack {
+                    // Icon
+                    Image(systemName: "list.triangle")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                        .opacity(0)
+                    // Content field (multiline)
+                    TextField("Note content", text: $note.content, axis: .vertical)
+                        .textFieldStyle(.squareBorder)
+                        .lineLimit(2...6)
+                }
             }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Content:")
-                TextEditor(text: $note.content)
-                    .frame(minHeight: 60)
-                    .border(Color.secondary.opacity(0.3))
+            // Action buttons
+            HStack(spacing: 4) {
+                Button {
+                    onAdd()
+                } label: {
+                    Label("Add", systemImage: "plus.circle.fill")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                
+                Button {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "minus.circle.fill")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                
+                // Drag handle
+                Label("Drag to Move", systemImage: "line.3.horizontal")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.tertiary)
+                    .draggable(String(index)) {
+                        Label("Drag to Move", systemImage: "line.3.horizontal")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .onDrag {
+                        isDragging = true
+                        onDragStart()
+                        return NSItemProvider(object: String(index) as NSString)
+                    }
             }
         }
-        .padding()
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .background(backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .opacity(isDragging ? 0.4 : 1.0)
+        .scaleEffect(isDragging ? 0.95 : 1.0)
+        .animation(.spring, value: isDragging)
+        .dropDestination(for: String.self) { draggedIndices, location in
+            guard let draggedIndexString = draggedIndices.first,
+                  let draggedIndex = Int(draggedIndexString),
+                  draggedIndex != index else {
+                isDragging = false
+                onDragEnd()
+                return false
+            }
+            onMove(draggedIndex, draggedIndex < index ? index + 1 : index)
+            isDragging = false
+            onDragEnd()
+            return true
+        } isTargeted: { isTargeted in
+            isDropTarget = isTargeted
+            onDropTargetChanged(isTargeted ? index : nil)
+        }
     }
 }
 

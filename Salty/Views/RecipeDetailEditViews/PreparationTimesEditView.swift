@@ -9,175 +9,318 @@
 import SwiftUI
 
 struct PreparationTimesEditView: View {
-    //@Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
-    @State private var selectedIndices: Set<Int> = []
     @State private var editingPreparationTimes: [PreparationTime] = []
-    @State private var hasChanges: Bool = false
-    @State private var topSectionHeight: CGFloat = 300
+    @State private var draggedItem: PreparationTime?
+    @State private var dropTargetIndex: Int?
+    @State private var scrollToNewItem: String?
+    @FocusState private var focusedPreparationTimeID: String?
     @Environment(\.dismiss) private var dismiss
     
-    private func deletePreparationTime(at index: Int) {
-        guard index < editingPreparationTimes.count else { return }
-        editingPreparationTimes.remove(at: index)
-        hasChanges = true
-        
-        // Update selection indices after deletion
-        var newSelection: Set<Int> = []
-        for selectedIndex in selectedIndices {
-            if selectedIndex < index {
-                // Keep indices before the deleted item unchanged
-                newSelection.insert(selectedIndex)
-            } else if selectedIndex > index {
-                // Decrement indices after the deleted item
-                newSelection.insert(selectedIndex - 1)
-            }
-            // Don't add the deleted index
-        }
-        selectedIndices = newSelection
-    }
+    var showToolbar: Bool = true
+    var showBottomButtons: Bool = false
     
     var body: some View {
-            VSplitView {
-                // Top Section
-                VStack {
-                    preparationTimesList
-                    
-                    //Add Button
-                    HStack {
-                        Button {
-                            editingPreparationTimes.append(PreparationTime(
-                                id: UUID().uuidString,
-                                type: "New time",
-                                timeString: "0 minutes"
-                            ))
-                            hasChanges = true
-                            selectedIndices = [editingPreparationTimes.count - 1]
-                        } label: {
-                            Label("Add Preparation Time", systemImage: "plus")
-                        }
-                        Spacer()
-                        Button(role: .destructive) {
-                        for index in selectedIndices.sorted(by: >) {
-                            deletePreparationTime(at: index)
-                        }
-                    }
-                    label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .disabled(selectedIndices.isEmpty)
-                        
-                    }
+        Group {
+            if showToolbar {
+                // Standalone view with toolbar (for sheet presentation)
+                preparationTimesContent
+                    .navigationTitle("Edit Preparation Times")
+                    .toolbar {
+                        ToolbarItemGroup(placement: .automatic) {
+                            Button {
+                                addNewPreparationTime()
+                            } label: {
+                                Label("New Time", systemImage: "plus.circle")
                             }
-            .padding()
-            .frame(minHeight: 250, idealHeight: 350)
-            
-            // Bottom Section
-                VStack {
-                    if selectedIndices.count == 1, let firstSelectedIndex = selectedIndices.min(), firstSelectedIndex < editingPreparationTimes.count {
-                        PreparationTimeDetailEditView(
-                            preparationTime: selectedPreparationTimeBinding
-                        )
-                    } else {
-                        ContentUnavailableView {
-                            Text(selectedIndices.count > 1 ?
-                                 "Select a single item to edit" : "Select a time to edit"
-                            )
-                                .font(.body)
+                            .keyboardShortcut("n", modifiers: [.command])
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                            .keyboardShortcut(.return, modifiers: [.command])
+                        }
+                    }
+                    .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
+                           minHeight: 500, idealHeight: 600, maxHeight: 800)
+                    .presentationSizing(.fitted)
+            } else {
+                // Embedded view (no toolbar, no frame constraints)
+                VStack(spacing: 0) {
+                    preparationTimesContent
+                    if showBottomButtons {
+                        bottomActionButtons
                     }
                 }
-                .frame(minHeight: 75, idealHeight: 90, maxHeight: 400)
-                .padding()
-            }
-        
-        .navigationTitle("Edit Preparation Times")
-        .onAppear {
-            editingPreparationTimes = recipe.preparationTimes
-        }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Done") {
-                    dismiss()
-                }
             }
         }
         .onAppear {
             editingPreparationTimes = recipe.preparationTimes
         }
-        .onChange(of: editingPreparationTimes) { _, _ in
+        .onDisappear {
             recipe.preparationTimes = editingPreparationTimes
         }
-        .frame(minWidth: 400, maxWidth: .infinity, 
-               minHeight: 400, maxHeight: .infinity)
-//        #if os(macOS)
-//        .presentationSizing(.fitted)
-//        #endif
     }
-
     
-    private var preparationTimesList: some View {
-        List(selection: $selectedIndices) {
-            ForEach(Array(editingPreparationTimes.enumerated()), id: \.element.id) { index, preparationTime in
-                HStack {
-                    Label("\(preparationTime.type): \(preparationTime.timeString)", systemImage: "clock")
-                    Spacer()
+    private var preparationTimesContent: some View {
+        ScrollViewReader { proxy in
+            Group {
+                if showToolbar {
+                    // Standalone view - add padding
+                    preparationTimesList
+                        .padding(.horizontal)
+                        .padding(.top)
+                } else {
+                    // Embedded view - no extra padding
+                    preparationTimesList
                 }
-                .tag(index)
             }
-            .onDelete { indexSet in
-                for index in indexSet.sorted(by: >) {
-                    deletePreparationTime(at: index)
+            .onChange(of: scrollToNewItem) { _, newID in
+                if let newID = newID {
+                    withAnimation {
+                        proxy.scrollTo(newID, anchor: .center)
+                    }
+                    // Set focus after scrolling
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        focusedPreparationTimeID = newID
+                        scrollToNewItem = nil
+                    }
                 }
-            }
-            .onMove { from, to in
-                editingPreparationTimes.move(fromOffsets: from, toOffset: to)
-                hasChanges = true
             }
         }
-        .listStyle(.bordered)
-        .alternatingRowBackgrounds()
     }
     
+    private var bottomActionButtons: some View {
+        HStack {
+            Button {
+                addNewPreparationTime()
+            } label: {
+                Label("New Time", systemImage: "plus.circle")
+            }
+            .keyboardShortcut("n", modifiers: [.command])
+            
+            Spacer()
+        }
+    }
     
-    private var selectedPreparationTimeBinding: Binding<PreparationTime> {
-        Binding(
-            get: { 
-                if let index = selectedIndices.min(), index < editingPreparationTimes.count {
-                    return editingPreparationTimes[index]
-                }
-                return PreparationTime(id: "", type: "", timeString: "")
-            },
-            set: { newValue in
-                if let index = selectedIndices.min(), index < editingPreparationTimes.count {
-                    editingPreparationTimes[index] = newValue
-                    hasChanges = true
+    private var preparationTimesList: some View {
+        VStack(spacing: 0) {
+            Grid(alignment: .center, horizontalSpacing: 0, verticalSpacing: 0) {
+                ForEach(editingPreparationTimes, id: \.id) { preparationTime in
+                    if let index = editingPreparationTimes.firstIndex(where: { $0.id == preparationTime.id }),
+                       index < editingPreparationTimes.count {
+                        dropIndicator(for: index)
+                        preparationTimeRow(at: index)
+                    }
                 }
             }
+            dropIndicatorAtEnd
+        }
+    }
+    
+    @ViewBuilder
+    private func dropIndicator(for index: Int) -> some View {
+        if let dropTarget = dropTargetIndex, dropTarget == index {
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 3)
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+    
+    @ViewBuilder
+    private var dropIndicatorAtEnd: some View {
+        let currentCount = editingPreparationTimes.count
+        if let dropTarget = dropTargetIndex, dropTarget == currentCount, currentCount >= 0 {
+            Rectangle()
+                .fill(Color.primary)
+                .frame(height: 2)
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+    
+    @ViewBuilder
+    private func preparationTimeRow(at index: Int) -> some View {
+        // Ensure index is valid before accessing
+        if index >= 0 && index < editingPreparationTimes.count {
+            let preparationTime = editingPreparationTimes[index]
+            // Create a safe binding that checks bounds
+            let preparationTimeBinding = Binding<PreparationTime>(
+                get: {
+                    guard index >= 0 && index < editingPreparationTimes.count else {
+                        return preparationTime
+                    }
+                    return editingPreparationTimes[index]
+                },
+                set: { newValue in
+                    guard index >= 0 && index < editingPreparationTimes.count else { return }
+                    editingPreparationTimes[index] = newValue
+                }
+            )
+            PreparationTimeEditRowView(
+                preparationTime: preparationTimeBinding,
+                index: index,
+                onAdd: { addPreparationTimeAfter(index) },
+                onDelete: { deletePreparationTime(at: index) },
+                onMove: { fromIndex, toIndex in
+                    movePreparationTime(from: fromIndex, to: toIndex)
+                },
+                onDragStart: {
+                    draggedItem = preparationTime
+                },
+                onDragEnd: {
+                    draggedItem = nil
+                    dropTargetIndex = nil
+                },
+                onDropTargetChanged: { targetIndex in
+                    dropTargetIndex = targetIndex
+                }
+            )
+            .focused($focusedPreparationTimeID, equals: preparationTime.id)
+            .id(preparationTime.id)
+        }
+    }
+    
+    private func addPreparationTimeAfter(_ index: Int) {
+        let newPreparationTime = PreparationTime(
+            id: UUID().uuidString,
+            type: "New time",
+            timeString: "0 minutes"
         )
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingPreparationTimes.insert(newPreparationTime, at: index + 1)
+        }
+        scrollToNewItem = newPreparationTime.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedPreparationTimeID = newPreparationTime.id
+        }
+    }
+    
+    private func deletePreparationTime(at index: Int) {
+        guard index >= 0 && index < editingPreparationTimes.count else { return }
+        // Clear or adjust drop target if needed
+        if let dropTarget = dropTargetIndex {
+            if dropTarget == index {
+                dropTargetIndex = nil
+            } else if dropTarget > index {
+                dropTargetIndex = dropTarget - 1
+            }
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingPreparationTimes.remove(at: index)
+        }
+    }
+    
+    private func movePreparationTime(from fromIndex: Int, to toIndex: Int) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingPreparationTimes.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
+        }
+    }
+    
+    private func addNewPreparationTime() {
+        let newPreparationTime = PreparationTime(
+            id: UUID().uuidString,
+            type: "New time",
+            timeString: "0 minutes"
+        )
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingPreparationTimes.append(newPreparationTime)
+        }
+        scrollToNewItem = newPreparationTime.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedPreparationTimeID = newPreparationTime.id
+        }
     }
 }
 
-struct PreparationTimeDetailEditView: View {
+// MARK: - Preparation Time Edit Row View
+
+struct PreparationTimeEditRowView: View {
     @Binding var preparationTime: PreparationTime
+    let index: Int
+    let onAdd: () -> Void
+    let onDelete: () -> Void
+    let onMove: (Int, Int) -> Void
+    let onDragStart: () -> Void
+    let onDragEnd: () -> Void
+    let onDropTargetChanged: (Int?) -> Void
+    
+    @State private var isDragging = false
+    @State private var isDropTarget = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Preparation Time")
-                .font(.headline)
+        GridRow(alignment: .center) {
+            // Type field
+            TextField("Type", text: $preparationTime.type)
+                .textFieldStyle(.squareBorder)
             
-            HStack {
-                Text("Type:")
-                    .frame(width: 60, alignment: .leading)
-                TextField("Type", text: $preparationTime.type)
-            }
+            // Time field
+            TextField("Time", text: $preparationTime.timeString)
+                .textFieldStyle(.squareBorder)
+                .gridCellColumns(2)
             
-            HStack {
-                Text("Time:")
-                    .frame(width: 60, alignment: .leading)
-                TextField("Time", text: $preparationTime.timeString)
+            // Action buttons
+            HStack(spacing: 4) {
+                Button {
+                    onAdd()
+                } label: {
+                    Label("Add", systemImage: "plus.circle.fill")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                
+                Button {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "minus.circle.fill")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                
+                // Drag handle
+                Label("Drag to Move", systemImage: "line.3.horizontal")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.tertiary)
+                    .draggable(String(index)) {
+                        Label("Drag to Move", systemImage: "line.3.horizontal")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .onDrag {
+                        isDragging = true
+                        onDragStart()
+                        return NSItemProvider(object: String(index) as NSString)
+                    }
             }
+        }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 3)
+        .opacity(isDragging ? 0.4 : 1.0)
+        .scaleEffect(isDragging ? 0.95 : 1.0)
+        .animation(.spring, value: isDragging)
+        .dropDestination(for: String.self) { draggedIndices, location in
+            guard let draggedIndexString = draggedIndices.first,
+                  let draggedIndex = Int(draggedIndexString),
+                  draggedIndex != index else {
+                isDragging = false
+                onDragEnd()
+                return false
+            }
+            onMove(draggedIndex, draggedIndex < index ? index + 1 : index)
+            isDragging = false
+            onDragEnd()
+            return true
+        } isTargeted: { isTargeted in
+            isDropTarget = isTargeted
+            onDropTargetChanged(isTargeted ? index : nil)
         }
     }
 }

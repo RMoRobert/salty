@@ -284,30 +284,9 @@ struct RecipeDetailEditDesktopView: View {
                     Text("Preparation Times:")
                         .modifier(TitleDesktopEditorStyle())
                     Spacer()
-                    Button("Edit Times") {
-                        viewModel.showingEditPreparationTimes.toggle()
-                    }
-                    .buttonStyle(.bordered)
                 }
                 
-                if viewModel.recipe.preparationTimes.isEmpty {
-                    Text("No preparation times added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(viewModel.recipe.preparationTimes) { preparationTime in
-                            HStack {
-                                Text("\(preparationTime.type):")
-                                    .fontWeight(.semibold)
-                                Text("\(preparationTime.timeString)")
-                            }
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $viewModel.showingEditPreparationTimes) {
-                PreparationTimesEditView(recipe: $viewModel.recipe)
+                PreparationTimesEditView(recipe: $viewModel.recipe, showToolbar: false, showBottomButtons: true)
             }
             .padding(.bottom, 8)
         }
@@ -323,36 +302,11 @@ struct RecipeDetailEditDesktopView: View {
                     Text("Notes:")
                         .modifier(TitleDesktopEditorStyle())
                     Spacer()
-                    Button("Edit Notes") {
-                        viewModel.showingEditNotesSheet.toggle()
-                    }
-                    .buttonStyle(.bordered)
                 }
                 
-                if viewModel.recipe.notes.isEmpty {
-                    Text("No notes added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.recipe.notes) { note in
-                            VStack(alignment: .leading, spacing: 4) {
-                                if !note.title.isEmpty {
-                                    Text(note.title)
-                                        .fontWeight(.semibold)
-                                }
-                                Text(note.content)
-                                    .font(.body)
-                                    .lineLimit(6)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
+                NotesEditView(recipe: $viewModel.recipe, showToolbar: false, showBottomButtons: true)
             }
-            .sheet(isPresented: $viewModel.showingEditNotesSheet) {
-                NotesEditView(recipe: $viewModel.recipe)
-            }
+            .padding(.bottom, 8)
         }
     }
     
@@ -366,36 +320,11 @@ struct RecipeDetailEditDesktopView: View {
                     Text("Variations:")
                         .modifier(TitleDesktopEditorStyle())
                     Spacer()
-                    Button("Edit Variations") {
-                        viewModel.showingEditVariationsSheet.toggle()
-                    }
-                    .buttonStyle(.bordered)
                 }
                 
-                if viewModel.recipe.variations.isEmpty {
-                    Text("No variations added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.recipe.variations) { variation in
-                            VStack(alignment: .leading, spacing: 4) {
-                                if !variation.variationName.isEmpty {
-                                    Text(variation.variationName)
-                                        .fontWeight(.semibold)
-                                }
-                                Text(variation.text)
-                                    .font(.body)
-                                    .lineLimit(6)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
+                VariationsEditView(recipe: $viewModel.recipe, showToolbar: false, showBottomButtons: true)
             }
-            .sheet(isPresented: $viewModel.showingEditVariationsSheet) {
-                VariationsEditView(recipe: $viewModel.recipe)
-            }
+            .padding(.bottom, 8)
         }
     }
     
