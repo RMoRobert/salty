@@ -53,9 +53,7 @@ struct IngredientsEditView: View {
                     }
                     .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
                            minHeight: 500, idealHeight: 600, maxHeight: 800)
-                    #if os(macOS)
                     .presentationSizing(.fitted)
-                    #endif
             } else {
                 // Embedded view (no toolbar, no frame constraints)
                 VStack(spacing: 0) {
@@ -126,11 +124,13 @@ struct IngredientsEditView: View {
     
     private var ingredientsList: some View {
         VStack(spacing: 0) {
-            ForEach(editingIngredients, id: \.id) { ingredient in
-                if let index = editingIngredients.firstIndex(where: { $0.id == ingredient.id }),
-                   index < editingIngredients.count {
-                    dropIndicator(for: index)
-                    ingredientRow(at: index)
+            Grid(alignment: .center, horizontalSpacing: 0, verticalSpacing: 0) {
+                ForEach(editingIngredients, id: \.id) { ingredient in
+                    if let index = editingIngredients.firstIndex(where: { $0.id == ingredient.id }),
+                       index < editingIngredients.count {
+                        dropIndicator(for: index)
+                        ingredientRow(at: index)
+                    }
                 }
             }
             dropIndicatorAtEnd
@@ -294,75 +294,69 @@ struct IngredientEditRowView: View {
     @State private var isDropTarget = false
     
     var body: some View {
-        HStack() {
+        GridRow(alignment: .center) {
+            // Text field column
             TextField("Ingredient", text: $ingredient.text, axis: .vertical)
                 .font(ingredient.isHeading == true ? .headline : .body)
                 .fontWeight(ingredient.isHeading == true ? .semibold : .regular)
                 .lineLimit(1...3)
                 .textFieldStyle(.squareBorder)
-        
             
-            Spacer()
-                .frame(width: 2)
+            // Star icon column
+            Group {
+                if !ingredient.isHeading {
+                    Toggle(isOn: $ingredient.isMain) {
+                        Label("Is main ingredient?", systemImage: ingredient.isMain ? "star.fill" : "star")
+                    }
+                    .toggleStyle(.button)
+                    .buttonStyle(.plain)
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(ingredient.isMain ? .yellow : .secondary)
+                }
+                else {
+                    Spacer()
+                        .frame(width: 4, height: 4)
+                }
+            }
             
-            // Action buttons - centered vertically
-            VStack {
-                HStack(spacing: 4) {
-                    // Is Main/Star:
-                    if ingredient.isHeading {
-                        Spacer()
-                            .frame(width: 4)
-                    }
-                    else {
-                        Button {
-                            ingredient.isMain.toggle()
-                        } label: {
-                            Label("Mark as main ingredient", systemImage: ingredient.isMain ? "star.fill" : "star")
-                        }
-                        .buttonStyle(.plain)
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(ingredient.isMain ? .yellow : .secondary)
-                    }
-                    // Add
-                    Button {
-                        onAdd()
-                    } label: {
-                        Label("Add", systemImage: "plus.circle.fill")
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                    // Delete:
-                    Button {
-                        onDelete()
-                    } label: {
-                        Label("Delete", systemImage: "minus.circle.fill")
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.red)
-                    
-                    // Drag handle - only this can drag
+            // Add button column
+            Button {
+                onAdd()
+            } label: {
+                Label("Add", systemImage: "plus.circle.fill")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            
+            // Delete button column
+            Button {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "minus.circle.fill")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(.red)
+            
+            // Drag handle column - only this can drag
+            Label("Drag to Move", systemImage: "line.3.horizontal")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.tertiary)
+                .draggable(String(index)) {
                     Label("Drag to Move", systemImage: "line.3.horizontal")
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.tertiary)
-                        .draggable(String(index)) {
-                            Label("Drag to Move", systemImage: "line.3.horizontal")
-                                .labelStyle(.iconOnly)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .onDrag {
-                            isDragging = true
-                            onDragStart()
-                            return NSItemProvider(object: String(index) as NSString)
-                        }
                 }
-            }
-            .frame(alignment: .center)
+                .onDrag {
+                    isDragging = true
+                    onDragStart()
+                    return NSItemProvider(object: String(index) as NSString)
+                }
+            
         }
         .padding(.vertical, 2)
-        //.padding(.horizontal, 2)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(.horizontal, 3)
         .opacity(isDragging ? 0.4 : 1.0)
         .scaleEffect(isDragging ? 0.95 : 1.0)
         .animation(.spring, value: isDragging)
