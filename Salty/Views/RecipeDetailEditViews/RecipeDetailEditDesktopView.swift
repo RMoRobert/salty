@@ -213,10 +213,6 @@ struct RecipeDetailEditDesktopView: View {
                     Text("Ingredients:")
                         .modifier(TitleDesktopEditorStyle())
                     Spacer()
-                    Button("Edit Ingredients") {
-                        viewModel.showingEditIngredientsSheet.toggle()
-                    }
-                    .buttonStyle(.bordered)
                     
                     Menu {
                         Button("Edit as Text (Bulk Edit)") {
@@ -233,28 +229,8 @@ struct RecipeDetailEditDesktopView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if viewModel.recipe.ingredients.isEmpty {
-                    Text("No ingredients added")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(viewModel.recipe.ingredients) { ingredient in
-                            if ingredient.isHeading {
-                                Text(ingredient.text)
-                                    .font(.callout)
-                                    .fontWeight(.semibold)
-                                    .padding(.top, 2)
-                            } else {
-                                Text(ingredient.text)
-                                    .font(.body)
-                            }
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $viewModel.showingEditIngredientsSheet) {
-                IngredientsEditView(recipe: $viewModel.recipe)
+                
+                IngredientsEditView(recipe: $viewModel.recipe, showToolbar: false, showBottomButtons: true)
             }
             .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
                 RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
@@ -511,8 +487,9 @@ struct RecipeDetailEditDesktopView: View {
     struct TitleDesktopEditorStyle: ViewModifier {
         func body(content: Content) -> some View {
             content
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(.title3.smallCaps())
+                .foregroundStyle(.secondary)
+                //.fontWeight(.semibold)
         }
     }
 }

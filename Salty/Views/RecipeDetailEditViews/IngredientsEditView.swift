@@ -1,5 +1,5 @@
 //
-//  DirectionsView.swift
+//  IngredientsEditView.swift
 //  Salty
 //
 //  Created by Robert on 7/4/23.
@@ -11,184 +11,377 @@ import SwiftUI
 
 struct IngredientsEditView: View {
     @Binding var recipe: Recipe
-    @State private var selectedIndices: Set<Int> = []
     @State private var editingIngredients: [Ingredient] = []
-    @State private var hasChanges: Bool = false
-    @State private var scrollToNewItem: Bool = false
+    @State private var draggedItem: Ingredient?
+    @State private var dropTargetIndex: Int?
+    @State private var scrollToNewItem: String?
+    @FocusState private var focusedIngredientID: String?
     @Environment(\.dismiss) private var dismiss
     
-    private func deleteIngredient(at index: Int) {
-        guard index < editingIngredients.count else { return }
-        editingIngredients.remove(at: index)
-        hasChanges = true
-        
-        // Update selection indices after deletion
-        var newSelection: Set<Int> = []
-        for selectedIndex in selectedIndices {
-            if selectedIndex < index {
-                // Keep indices before the deleted item unchanged
-                newSelection.insert(selectedIndex)
-            } else if selectedIndex > index {
-                // Decrement indices after the deleted item
-                newSelection.insert(selectedIndex - 1)
-            }
-            // Don't add the deleted index
-        }
-        selectedIndices = newSelection
-    }
-    
-    private var ingredientsList: some View {
-        ScrollViewReader { proxy in
-            List(selection: $selectedIndices) {
-                ForEach(Array(editingIngredients.enumerated()), id: \.element.id) { index, ingredient in
-                    HStack {
-                        if ingredient.isHeading {
-                            Text(ingredient.text)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        } else {
-                            Text(ingredient.text)
-                        }
-                        Spacer()
-                    }
-                    .tag(index)
-                    .id(index)
-                }
-                .onDelete { indexSet in
-                    for index in indexSet.sorted(by: >) {
-                        deleteIngredient(at: index)
-                    }
-                }
-                .onMove { from, to in
-                    editingIngredients.move(fromOffsets: from, toOffset: to)
-                    hasChanges = true
-                }
-            }
-            .listStyle(.bordered)
-            .alternatingRowBackgrounds()
-            .onChange(of: scrollToNewItem) { _, shouldScroll in
-                if shouldScroll, let lastIndex = editingIngredients.indices.last {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(lastIndex, anchor: .bottom)
-                    }
-                    scrollToNewItem = false
-                }
-            }
-        }
-    }
+    var showToolbar: Bool = true
+    var showBottomButtons: Bool = false
     
     var body: some View {
-        VSplitView {
-                // Top section: List of ingredients
-                VStack {
-                    ingredientsList
-                    
-                    // Add and Delete buttons
-                    HStack {
-                        Button {
-                            editingIngredients.append(Ingredient(
-                                id: UUID().uuidString,
-                                isHeading: false,
-                                text: "New ingredient"
-                            ))
-                            hasChanges = true
-                            selectedIndices = [editingIngredients.count - 1]
-                            scrollToNewItem = true
-                        } label: {
-                            Label("Add Ingredient", systemImage: "plus")
-                        }
-                        .padding(.trailing)
-                        
-                        Button {
-                            editingIngredients.append(Ingredient(
-                                id: UUID().uuidString,
-                                isHeading: true,
-                                text: "New heading"
-                            ))
-                            hasChanges = true
-                            selectedIndices = [editingIngredients.count - 1]
-                            scrollToNewItem = true
-                        } label: {
-                            Label("Add Heading", systemImage: "folder.badge.plus")
-                        }
-                        
-                        Spacer()
-                        
-                        Button(role: .destructive) {
-                            for index in selectedIndices.sorted(by: >) {
-                                deleteIngredient(at: index)
+        Group {
+            if showToolbar {
+                // Standalone view with toolbar (for sheet presentation)
+                ingredientsContent
+                    .navigationTitle("Edit Ingredients")
+                    .toolbar {
+                        ToolbarItemGroup(placement: .automatic) {
+                            Button {
+                                addNewIngredient()
+                            } label: {
+                                Label("New Ingredient", systemImage: "plus.circle")
                             }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+                            .keyboardShortcut("n", modifiers: [.command])
+                            
+                            Button {
+                                addNewHeading()
+                            } label: {
+                                Label("New Heading", systemImage: "folder.badge.plus")
+                            }
+                            .keyboardShortcut("n", modifiers: [.command, .shift])
                         }
-                        .disabled(selectedIndices.isEmpty)
-                    }
-                }
-                .padding()
-                .frame(minHeight: 250, idealHeight: 350)
-                
-                // Bottom section: Detail editor
-                VStack {
-                    if selectedIndices.count == 1, let firstSelectedIndex = selectedIndices.min(), firstSelectedIndex < editingIngredients.count {
-                        IngredientDetailEditView(
-                            ingredient: Binding(
-                                get: { editingIngredients[firstSelectedIndex] },
-                                set: { newValue in
-                                    editingIngredients[firstSelectedIndex] = newValue
-                                    hasChanges = true
-                                }
-                            )
-                        )
-                    } else {
-                        ContentUnavailableView {
-                            Text(selectedIndices.count > 1 ?
-                                 "Select a single item to edit" : "Select an ingredient to edit"
-                            )
-                                .font(.body)
+                        
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                            .keyboardShortcut(.return, modifiers: [.command])
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                }
-                .frame(minHeight: 75, idealHeight: 90, maxHeight: 400)
-                .padding()
-            }
-            .navigationTitle("Edit Ingredients")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
+                    .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
+                           minHeight: 500, idealHeight: 600, maxHeight: 800)
+                    #if os(macOS)
+                    .presentationSizing(.fitted)
+                    #endif
+            } else {
+                // Embedded view (no toolbar, no frame constraints)
+                VStack(spacing: 0) {
+                    ingredientsContent
+                    if showBottomButtons {
+                        bottomActionButtons
+                            .padding(.top, 4)
                     }
                 }
             }
+        }
         .onAppear {
             editingIngredients = recipe.ingredients
         }
-        .onChange(of: editingIngredients) { _, _ in
+        .onDisappear {
             recipe.ingredients = editingIngredients
         }
-        .frame(minWidth: 500, minHeight: 500)
     }
-}
-
-struct IngredientDetailEditView: View {
-    @Binding var ingredient: Ingredient
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Ingredient")
-                .font(.headline)
-           
-            VStack(alignment: .leading, spacing: 8) {
-                Text(ingredient.isHeading ? "Heading Text:" : "Ingredient:")
-                HStack {
-                    TextField("Ingredient:", text: $ingredient.text)
-                    if (!ingredient.isHeading) {
-                        Toggle("Is Main", isOn: $ingredient.isMain)
+    private var ingredientsContent: some View {
+        ScrollViewReader { proxy in
+            Group {
+                if showToolbar {
+                    // Standalone view - add padding
+                    ingredientsList
+                        .padding(.horizontal)
+                        .padding(.top)
+                } else {
+                    // Embedded view - no extra padding
+                    ingredientsList
+                }
+            }
+            .onChange(of: scrollToNewItem) { _, newID in
+                if let newID = newID {
+                    withAnimation {
+                        proxy.scrollTo(newID, anchor: .center)
+                    }
+                    // Set focus after scrolling
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        focusedIngredientID = newID
+                        scrollToNewItem = nil
                     }
                 }
             }
         }
-        .padding()
+    }
+    
+    private var bottomActionButtons: some View {
+        HStack {
+            Button {
+                addNewIngredient()
+            } label: {
+                Label("New Ingredient", systemImage: "plus.circle")
+            }
+            .keyboardShortcut("n", modifiers: [.command])
+            
+            Button {
+                addNewHeading()
+            } label: {
+                Label("New Heading", systemImage: "folder.badge.plus")
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+    
+    private var ingredientsList: some View {
+        VStack(spacing: 0) {
+            ForEach(editingIngredients, id: \.id) { ingredient in
+                if let index = editingIngredients.firstIndex(where: { $0.id == ingredient.id }),
+                   index < editingIngredients.count {
+                    dropIndicator(for: index)
+                    ingredientRow(at: index)
+                }
+            }
+            dropIndicatorAtEnd
+        }
+    }
+    
+    @ViewBuilder
+    private func dropIndicator(for index: Int) -> some View {
+        if let dropTarget = dropTargetIndex, dropTarget == index {
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 3)
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+    
+    @ViewBuilder
+    private var dropIndicatorAtEnd: some View {
+        let currentCount = editingIngredients.count
+        if let dropTarget = dropTargetIndex, dropTarget == currentCount, currentCount >= 0 {
+            Rectangle()
+                .fill(Color.primary)
+                .frame(height: 2)
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+    
+    @ViewBuilder
+    private func ingredientRow(at index: Int) -> some View {
+        // Ensure index is valid before accessing - double check to prevent race conditions
+        if index >= 0 && index < editingIngredients.count {
+            let ingredient = editingIngredients[index]
+            // Create a safe binding that checks bounds
+            let ingredientBinding = Binding<Ingredient>(
+                get: {
+                    guard index >= 0 && index < editingIngredients.count else {
+                        return ingredient
+                    }
+                    return editingIngredients[index]
+                },
+                set: { newValue in
+                    guard index >= 0 && index < editingIngredients.count else { return }
+                    editingIngredients[index] = newValue
+                }
+            )
+            IngredientEditRowView(
+                ingredient: ingredientBinding,
+                index: index,
+                onAdd: { addIngredientAfter(index) },
+                onDelete: { deleteIngredient(at: index) },
+                onMove: { fromIndex, toIndex in
+                    moveIngredient(from: fromIndex, to: toIndex)
+                },
+                onDragStart: {
+                    draggedItem = ingredient
+                },
+                onDragEnd: {
+                    draggedItem = nil
+                    dropTargetIndex = nil
+                },
+                onDropTargetChanged: { targetIndex in
+                    dropTargetIndex = targetIndex
+                }
+            )
+            .focused($focusedIngredientID, equals: ingredient.id)
+            .id(ingredient.id)
+        }
+    }
+    
+    private func addIngredientAfter(_ index: Int) {
+        let newIngredient = Ingredient(
+            id: UUID().uuidString,
+            isHeading: false,
+            isMain: false,
+            text: "New ingredient"
+        )
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingIngredients.insert(newIngredient, at: index + 1)
+        }
+        scrollToNewItem = newIngredient.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedIngredientID = newIngredient.id
+        }
+    }
+    
+    private func deleteIngredient(at index: Int) {
+        guard index >= 0 && index < editingIngredients.count else { return }
+        // Clear or adjust drop target if needed
+        if let dropTarget = dropTargetIndex {
+            if dropTarget == index {
+                // Clear if deleting the drop target itself
+                dropTargetIndex = nil
+            } else if dropTarget > index {
+                // Adjust drop target index if item before it is deleted
+                dropTargetIndex = dropTarget - 1
+            }
+            // If dropTarget < index, no adjustment needed
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingIngredients.remove(at: index)
+        }
+    }
+    
+    private func moveIngredient(from fromIndex: Int, to toIndex: Int) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingIngredients.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
+        }
+    }
+    
+    private func addNewIngredient() {
+        let newIngredient = Ingredient(
+            id: UUID().uuidString,
+            isHeading: false,
+            isMain: false,
+            text: "New ingredient"
+        )
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingIngredients.append(newIngredient)
+        }
+        scrollToNewItem = newIngredient.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedIngredientID = newIngredient.id
+        }
+    }
+    
+    private func addNewHeading() {
+        let newIngredient = Ingredient(
+            id: UUID().uuidString,
+            isHeading: true,
+            isMain: false,
+            text: "New heading"
+        )
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            editingIngredients.append(newIngredient)
+        }
+        scrollToNewItem = newIngredient.id
+        // Set focus after a brief delay to ensure the view is rendered
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusedIngredientID = newIngredient.id
+        }
+    }
+}
+
+// MARK: - Ingredient Edit Row View
+
+struct IngredientEditRowView: View {
+    @Binding var ingredient: Ingredient
+    let index: Int
+    let onAdd: () -> Void
+    let onDelete: () -> Void
+    let onMove: (Int, Int) -> Void
+    let onDragStart: () -> Void
+    let onDragEnd: () -> Void
+    let onDropTargetChanged: (Int?) -> Void
+    
+    @State private var isDragging = false
+    @State private var isDropTarget = false
+    
+    var body: some View {
+        HStack() {
+            TextField("Ingredient", text: $ingredient.text, axis: .vertical)
+                .font(ingredient.isHeading == true ? .headline : .body)
+                .fontWeight(ingredient.isHeading == true ? .semibold : .regular)
+                .lineLimit(1...3)
+                .textFieldStyle(.squareBorder)
+        
+            
+            Spacer()
+                .frame(width: 2)
+            
+            // Action buttons - centered vertically
+            VStack {
+                HStack(spacing: 4) {
+                    // Is Main/Star:
+                    if ingredient.isHeading {
+                        Spacer()
+                            .frame(width: 4)
+                    }
+                    else {
+                        Button {
+                            ingredient.isMain.toggle()
+                        } label: {
+                            Label("Mark as main ingredient", systemImage: ingredient.isMain ? "star.fill" : "star")
+                        }
+                        .buttonStyle(.plain)
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(ingredient.isMain ? .yellow : .secondary)
+                    }
+                    // Add
+                    Button {
+                        onAdd()
+                    } label: {
+                        Label("Add", systemImage: "plus.circle.fill")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    // Delete:
+                    Button {
+                        onDelete()
+                    } label: {
+                        Label("Delete", systemImage: "minus.circle.fill")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                    
+                    // Drag handle - only this can drag
+                    Label("Drag to Move", systemImage: "line.3.horizontal")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.tertiary)
+                        .draggable(String(index)) {
+                            Label("Drag to Move", systemImage: "line.3.horizontal")
+                                .labelStyle(.iconOnly)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .onDrag {
+                            isDragging = true
+                            onDragStart()
+                            return NSItemProvider(object: String(index) as NSString)
+                        }
+                }
+            }
+            .frame(alignment: .center)
+        }
+        .padding(.vertical, 2)
+        //.padding(.horizontal, 2)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .opacity(isDragging ? 0.4 : 1.0)
+        .scaleEffect(isDragging ? 0.95 : 1.0)
+        .animation(.spring, value: isDragging)
+        .dropDestination(for: String.self) { draggedIndices, location in
+            guard let draggedIndexString = draggedIndices.first,
+                  let draggedIndex = Int(draggedIndexString),
+                  draggedIndex != index else {
+                isDragging = false
+                onDragEnd()
+                return false
+            }
+            onMove(draggedIndex, draggedIndex < index ? index + 1 : index)
+            isDragging = false
+            onDragEnd()
+            return true
+        } isTargeted: { isTargeted in
+            isDropTarget = isTargeted
+            onDropTargetChanged(isTargeted ? index : nil)
+        }
     }
 }
 

@@ -304,6 +304,7 @@ struct DirectionEditRowView: View {
                 Text("\(stepNumber).")
                     .font(.title2)                    .frame(minWidth: 18, alignment: .trailing)
                     .padding(.trailing, 4)
+                    .foregroundStyle(.secondary)
             } else {
                 Spacer()
                     .frame(width: 18)
