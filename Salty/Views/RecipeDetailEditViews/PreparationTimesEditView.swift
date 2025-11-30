@@ -52,12 +52,16 @@ struct PreparationTimesEditView: View {
                     preparationTimesContent
                     if showBottomButtons {
                         bottomActionButtons
+                            .padding(.top, 4)
                     }
                 }
             }
         }
         .onAppear {
             editingPreparationTimes = recipe.preparationTimes
+        }
+        .onChange(of: editingPreparationTimes) { _, newValue in
+            recipe.preparationTimes = newValue
         }
         .onDisappear {
             recipe.preparationTimes = editingPreparationTimes

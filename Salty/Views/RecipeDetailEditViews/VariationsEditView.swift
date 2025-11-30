@@ -61,6 +61,9 @@ struct VariationsEditView: View {
         .onAppear {
             editingVariations = recipe.variations
         }
+        .onChange(of: editingVariations) { _, newValue in
+            recipe.variations = newValue
+        }
         .onDisappear {
             recipe.variations = editingVariations
         }

@@ -68,6 +68,9 @@ struct IngredientsEditView: View {
         .onAppear {
             editingIngredients = recipe.ingredients
         }
+        .onChange(of: editingIngredients) { _, newValue in
+            recipe.ingredients = newValue
+        }
         .onDisappear {
             recipe.ingredients = editingIngredients
         }

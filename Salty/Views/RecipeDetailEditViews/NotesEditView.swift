@@ -61,6 +61,9 @@ struct NotesEditView: View {
         .onAppear {
             editingNotes = recipe.notes
         }
+        .onChange(of: editingNotes) { _, newValue in
+            recipe.notes = newValue
+        }
         .onDisappear {
             recipe.notes = editingNotes
         }

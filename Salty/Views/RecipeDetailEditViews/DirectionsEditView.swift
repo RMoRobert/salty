@@ -62,12 +62,16 @@ struct DirectionsEditView: View {
                     directionsContent
                     if showBottomButtons {
                         bottomActionButtons
+                            .padding(.top, 4)
                     }
                 }
             }
         }
         .onAppear {
             editingDirections = recipe.directions
+        }
+        .onChange(of: editingDirections) { _, newValue in
+            recipe.directions = newValue
         }
         .onDisappear {
             recipe.directions = editingDirections
@@ -313,7 +317,7 @@ struct DirectionEditRowView: View {
             TextField("Direction", text: $direction.text, axis: .vertical)
                 .font(direction.isHeading == true ? .headline : .body)
                 .fontWeight(direction.isHeading == true ? .semibold : .regular)
-                .lineLimit(3...13)
+                .lineLimit(direction.isHeading == true ? 1...2 : 3...13)
                 .textFieldStyle(.squareBorder)
                 //.padding()
             
