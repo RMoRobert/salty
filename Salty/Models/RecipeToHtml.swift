@@ -12,6 +12,10 @@ import UniformTypeIdentifiers
 
 extension Recipe {
     var asHtml: String {
+        return asHtmlWithOptions(options: HTMLExportOptions())
+    }
+    
+    func asHtmlWithOptions(options: HTMLExportOptions) -> String {
         let doc = Document(.html) {
             Html {
                 Head {
@@ -41,7 +45,7 @@ extension Recipe {
                                 }
                                 .class("recipe-yield-and-servings-container")
                                 
-                                if rating != .notSet {
+                                if options.includeRating && rating != .notSet {
                                     Div {
                                         Span("\(rating.rawValue)")
                                             .id("recipe-rating-raw-number")
@@ -68,7 +72,7 @@ extension Recipe {
                                     .id("recipe-rating-star-container")
                                 }
 
-                                if difficulty != .notSet {
+                                if options.includeDifficulty && difficulty != .notSet {
                                     P {
                                         Span("Difficulty:")
                                             .id("recipe-difficulty-label")
@@ -78,7 +82,7 @@ extension Recipe {
                                     .id("recipe-difficulty-container")
                                 }
                                 
-                                if preparationTimes.count > 0 {
+                                if options.includePreparationTimes && preparationTimes.count > 0 {
                                     Section {
                                     H2("Preparation Time").id("recipe-prep-times-heading")
                                         Ul {
@@ -96,7 +100,7 @@ extension Recipe {
                             }
                             .class("recipe-content-area")
                             
-                            if let imageAsBase64 = self.imageAsBase64 {
+                            if options.includeImage, let imageAsBase64 = self.imageAsBase64 {
                                 Section {
                                     Img(src: "data:image/jpeg;base64, \(imageAsBase64)", alt: "User-provided photograph of recipe")
                                         .id("recipe-image")
@@ -106,7 +110,7 @@ extension Recipe {
                         }
                         .id("recipe-info-container")
                         
-                        if !introduction.isEmpty {
+                        if options.includeIntroduction && !introduction.isEmpty {
                             Section {
                                 P(introduction)
                                     .class("recipe-introduction")
@@ -114,50 +118,54 @@ extension Recipe {
                             .id("recipe-introduction-container")
                         }
 
-                        Section {
-                            H2("Ingredients").id("recipe-ingredients-heading")
+                        if options.includeIngredients {
+                            Section {
+                                H2("Ingredients").id("recipe-ingredients-heading")
+                                    Ul {
+                                        for ingredient in ingredients {
+                                            if ingredient.isHeading {
+                                                Li(ingredient.text)
+                                                    .class("recipe-ingredient-heading")
+                                            }
+                                            else {
+                                                Li(ingredient.text)
+                                                    .class("recipe-ingredient")
+                                            }
+                                        }
+                                    }
+                                    .class("recipe-ingredients-list")
+                            }
+                            .id("recipe-ingredients-container")
+                        }
+                        
+                        if options.includeDirections {
+                            Section {
+                                H2("Directions").id("recipe-directions-heading")
                                 Ul {
-                                    for ingredient in ingredients {
-                                        if ingredient.isHeading {
-                                            Li(ingredient.text)
-                                                .class("recipe-ingredient-heading")
+                                    for (index, direction) in directions.enumerated() {
+                                        if let isHeading = direction.isHeading, isHeading {
+                                                Li(direction.text)
+                                                    .class("recipe-directions-heading")
                                         }
                                         else {
-                                            Li(ingredient.text)
-                                                .class("recipe-ingredient")
+                                            let stepNumber = directions.prefix(index + 1).filter { $0.isHeading != true }.count
+                                            Li {
+                                                Span("\(stepNumber).")
+                                                    .class("recipe-directions-step-number")
+                                                Span(direction.text)
+                                                    .class("recipe-directions-step-text")
+                                            }
+                                            .class("recipe-directions-step")
                                         }
                                     }
                                 }
-                                .class("recipe-ingredients-list")
-                        }
-                        .id("recipe-ingredients-container")
-                        
-                        Section {
-                            H2("Directions").id("recipe-directions-heading")
-                            Ul {
-                                for (index, direction) in directions.enumerated() {
-                                    if let isHeading = direction.isHeading, isHeading {
-                                            Li(direction.text)
-                                                .class("recipe-directions-heading")
-                                    }
-                                    else {
-                                        let stepNumber = directions.prefix(index + 1).filter { $0.isHeading != true }.count
-                                        Li {
-                                            Span("\(stepNumber).")
-                                                .class("recipe-directions-step-number")
-                                            Span(direction.text)
-                                                .class("recipe-directions-step-text")
-                                        }
-                                        .class("recipe-directions-step")
-                                    }
-                                }
+                                .class("recipe-directions-list")
                             }
-                            .class("recipe-directions-list")
+                            .id("recipe-directions-container")
                         }
-                        .id("recipe-directions-container")
                         
                         
-                        if notes.count > 0 {
+                        if options.includeNotes && notes.count > 0 {
                             Section {
                                 H2("Notes").id("recipe-notes")
                                 for note in notes {
@@ -173,7 +181,7 @@ extension Recipe {
                             .id("recipe-notes-container")
                         }
                         
-                        if variations.count > 0 {
+                        if options.includeVariations && variations.count > 0 {
                             Section {
                                 H2("Variations").id("recipe-variations-heading")
                                 for variation in variations {
@@ -241,6 +249,10 @@ extension Recipe {
 }
 
 func getDefaultCSS() -> String {
+    return getCSSForHTML()
+}
+
+func getCSSForHTML() -> String {
 let css =
 """
 /*! normalize.css v8.0.1 | MIT License | github.com/necolas/normalize.css */
@@ -703,7 +715,7 @@ body {
     line-height: 1.2;
     color: #222;
     padding: 2rem;
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    background: white;
     color: rgb(25, 25, 25);
     max-width: 1200px;
     margin: 0 auto;
@@ -773,6 +785,8 @@ main {
 #recipe-image {
    width: 150px;
    height: 150px;
+   max-width: 400px;
+   max-height: 400px;
    object-fit: cover;
    border-radius: 16px;
    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -1232,13 +1246,13 @@ h2 {
 
 /* Main Layout Improvements */
 main {
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    background: white;
     min-height: 100vh;
     padding: 2rem;
 }
 
 body {
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    background: white;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
     font-size: 14rem;
     font-weight: 400;
@@ -1264,48 +1278,97 @@ body {
         padding: 1.5em;
         margin: 0.5em 0;
     }
-
 }
 
 /* Print-specific styles */
 @media print {
-    /* Prevent page breaks inside key sections */
+    /* Allow page breaks inside all containers - be aggressive about breaking */
+    #recipe-info-container,
+    #recipe-introduction-container,
     #recipe-ingredients-container,
     #recipe-directions-container,
     #recipe-notes-container,
-    #recipe-variations-container {
-        page-break-inside: avoid;
-        break-inside: avoid;
+    #recipe-variations-container,
+    #recipe-tags-container {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        border: none !important;
+        box-shadow: none !important;
+        /* Reduce padding/margin to make breaking more likely */
+        padding: 0.5em 1em !important;
+        margin: 0.5em 0 !important;
+        /* Allow orphans and widows to help with breaking */
+        orphans: 1 !important;
+        widows: 1 !important;
     }
     
-    /* Prevent breaking individual ingredients/directions */
-    .recipe-ingredients-list,
-    .recipe-directions-list {
-        page-break-inside: avoid;
-        break-inside: avoid;
-    }
-    
-    /* Keep section headers with their content */
+    /* Allow section headers to break freely */
     #recipe-ingredients-container h2,
     #recipe-directions-container h2,
     #recipe-notes-container h2,
     #recipe-variations-container h2 {
-        page-break-after: avoid;
-        break-after: avoid;
+        break-after: auto !important;
+        page-break-after: auto !important;
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        orphans: 1 !important;
+        widows: 1 !important;
     }
     
-    /* Prevent breaking individual direction steps if they're long */
+    /* Allow lists to break across pages aggressively */
+    .recipe-ingredients-list,
+    .recipe-directions-list {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        orphans: 1 !important;
+        widows: 1 !important;
+    }
+    
+    /* Allow the Section elements themselves to break */
+    #recipe-ingredients-container,
+    #recipe-directions-container,
+    #recipe-notes-container,
+    #recipe-variations-container {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        orphans: 1 !important;
+        widows: 1 !important;
+    }
+    
+    /* Ensure Section elements (HTML <section> tags) can break */
+    section {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        orphans: 1 !important;
+        widows: 1 !important;
+    }
+    
+    /* Prevent breaking individual list items (ingredients/directions) */
+    .recipe-ingredients-list li,
+    .recipe-directions-list li {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    
+    /* Prevent breaking individual direction steps */
     .recipe-directions-step,
     .recipe-directions-step-with-name {
-        page-break-inside: avoid;
         break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    
+    /* Prevent breaking individual notes and variations */
+    .recipe-note-container,
+    .recipe-variation-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
     }
     
     /* Allow page breaks between major sections */
     #recipe-info-container,
     #recipe-introduction-container {
-        page-break-after: auto;
         break-after: auto;
+        page-break-after: auto;
     }
     
     /* Single column layout for print */
@@ -1319,27 +1382,11 @@ body {
         grid-column: 1 !important;
     }
     
-    /* Reduce shadows and adjust colors for print */
-    #recipe-info-container,
-    #recipe-introduction-container,
-    #recipe-ingredients-container,
-    #recipe-directions-container,
-    #recipe-notes-container,
-    #recipe-variations-container,
-    #recipe-tags-container {
-        box-shadow: none;
-        border: 1px solid #ddd;
-        page-break-inside: avoid;
-        break-inside: avoid;
-    }
-    
-    /* Ensure background colors print (if needed) */
     body,
     main {
         background: white !important;
     }
     
-    /* Adjust margins for print */
     body {
         margin: 0;
         padding: 0.5in;
@@ -1352,12 +1399,21 @@ body {
     /* Reduce font sizes slightly for print if needed */
     #recipe-name {
         font-size: 2em;
+        /* Override gradient background for print - use solid black text */
+        background: none !important;
+        -webkit-background-clip: unset !important;
+        -webkit-text-fill-color: unset !important;
+        background-clip: unset !important;
+        color: #000 !important;
     }
     
     /* Ensure images print well */
     #recipe-image {
-        max-width: 100%;
+        max-width: 400px;
+        max-height: 400px;
+        width: auto;
         height: auto;
+        object-fit: contain;
     }
 }
 """

@@ -396,7 +396,7 @@ struct RecipeNavigationSplitView: View {
                             Label("Export as Recipe File…", systemImage: "square.and.arrow.down")
                         }
                         Button(action: {
-                            viewModel.exportSelectedRecipesAsHTML()
+                            viewModel.showHTMLExportSettings()
                         }) {
                             Label("Export as HTML…", systemImage: "doc.text")
                         }
@@ -603,7 +603,12 @@ struct RecipeNavigationSplitView: View {
             viewModel.exportSelectedRecipes()
         }
         .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipesAsHTML)) { _ in
-            viewModel.exportSelectedRecipesAsHTML()
+            viewModel.showHTMLExportSettings()
+        }
+        .sheet(isPresented: $viewModel.showingHTMLExportSettings) {
+            HTMLExportSettingsView(options: $viewModel.htmlExportOptions) {
+                viewModel.performHTMLExport()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
             showingImportFromFileSheet = true
@@ -683,9 +688,9 @@ struct RecipeNavigationSplitView: View {
             }
             Button("Export as HTML…") {
                 if viewModel.selectedRecipeIDs.count > 1 {
-                    viewModel.exportSelectedRecipesAsHTML()
+                    viewModel.showHTMLExportSettings()
                 } else {
-                    viewModel.exportRecipeAsHTML(recipe.id)
+                    viewModel.showHTMLExportSettingsForRecipe(recipe.id)
                 }
             }
         }
