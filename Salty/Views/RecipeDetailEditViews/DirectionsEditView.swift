@@ -93,7 +93,7 @@ struct DirectionsEditView: View {
             }
             .onChange(of: scrollToNewItem) { _, newID in
                 if let newID = newID {
-                    withAnimation {
+                    withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
@@ -218,7 +218,7 @@ struct DirectionsEditView: View {
             isHeading: false,
             text: "New step"
         )
-        withAnimation {
+        withAnimation(.easeIn) {
             editingDirections.insert(newDirection, at: index + 1)
         }
         scrollToNewItem = newDirection.id
@@ -241,13 +241,13 @@ struct DirectionsEditView: View {
             }
             // If dropTarget < index, no adjustment needed
         }
-        withAnimation {
+        withAnimation(.easeIn) {
             editingDirections.remove(at: index)
         }
     }
     
     private func moveStep(from fromIndex: Int, to toIndex: Int) {
-        withAnimation {
+        withAnimation(.easeIn) {
             editingDirections.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -258,7 +258,7 @@ struct DirectionsEditView: View {
             isHeading: false,
             text: "New step"
         )
-        withAnimation {
+        withAnimation(.easeIn) {
             editingDirections.append(newDirection)
         }
         scrollToNewItem = newDirection.id
@@ -274,7 +274,7 @@ struct DirectionsEditView: View {
             isHeading: true,
             text: "New heading"
         )
-        withAnimation {
+        withAnimation(.easeIn) {
             editingDirections.append(newDirection)
         }
         scrollToNewItem = newDirection.id

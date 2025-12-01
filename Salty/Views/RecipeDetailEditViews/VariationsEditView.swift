@@ -84,7 +84,7 @@ struct VariationsEditView: View {
             }
             .onChange(of: scrollToNewItem) { _, newID in
                 if let newID = newID {
-                    withAnimation {
+                    withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
@@ -191,10 +191,10 @@ struct VariationsEditView: View {
     private func addVariationAfter(_ index: Int) {
         let newVariation = Variation(
             id: UUID().uuidString,
-            variationName: "New variation",
+            variationName: "",
             text: ""
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingVariations.insert(newVariation, at: index + 1)
         }
         scrollToNewItem = newVariation.id
@@ -214,13 +214,13 @@ struct VariationsEditView: View {
                 dropTargetIndex = dropTarget - 1
             }
         }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingVariations.remove(at: index)
         }
     }
     
     private func moveVariation(from fromIndex: Int, to toIndex: Int) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingVariations.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -228,10 +228,10 @@ struct VariationsEditView: View {
     private func addNewVariation() {
         let newVariation = Variation(
             id: UUID().uuidString,
-            variationName: "New variation",
+            variationName: "",
             text: ""
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingVariations.append(newVariation)
         }
         scrollToNewItem = newVariation.id

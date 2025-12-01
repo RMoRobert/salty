@@ -84,7 +84,7 @@ struct NotesEditView: View {
             }
             .onChange(of: scrollToNewItem) { _, newID in
                 if let newID = newID {
-                    withAnimation {
+                    withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
@@ -199,7 +199,7 @@ struct NotesEditView: View {
             title: "",
             content: ""
         )
-        withAnimation {
+        withAnimation(.easeIn) {
             editingNotes.insert(newNote, at: index + 1)
         }
         scrollToNewItem = newNote.id
@@ -219,13 +219,13 @@ struct NotesEditView: View {
                 dropTargetIndex = dropTarget - 1
             }
         }
-        withAnimation {
+        withAnimation(.easeIn) {
             editingNotes.remove(at: index)
         }
     }
     
     private func moveNote(from fromIndex: Int, to toIndex: Int) {
-        withAnimation {
+        withAnimation(.easeIn) {
             editingNotes.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -236,7 +236,7 @@ struct NotesEditView: View {
             title: "",
             content: ""
         )
-        withAnimation {
+        withAnimation(.easeIn) {
             editingNotes.append(newNote)
         }
         scrollToNewItem = newNote.id

@@ -28,9 +28,9 @@ struct PreparationTimesEditView: View {
                     .navigationTitle("Edit Preparation Times")
                     .toolbar {
                         ToolbarItemGroup(placement: .automatic) {
-                            Button {
+                        Button {
                                 addNewPreparationTime()
-                            } label: {
+                        } label: {
                                 Label("New Time", systemImage: "plus.circle")
                             }
                             .keyboardShortcut("n", modifiers: [.command])
@@ -83,11 +83,11 @@ struct PreparationTimesEditView: View {
             }
             .onChange(of: scrollToNewItem) { _, newID in
                 if let newID = newID {
-                    withAnimation {
+                    withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         focusedPreparationTimeID = newID
                         scrollToNewItem = nil
                     }
@@ -154,37 +154,50 @@ struct PreparationTimesEditView: View {
             let preparationTime = editingPreparationTimes[index]
             // Create a safe binding that checks bounds
             let preparationTimeBinding = Binding<PreparationTime>(
-                get: {
+            get: { 
                     guard index >= 0 && index < editingPreparationTimes.count else {
                         return preparationTime
                     }
                     return editingPreparationTimes[index]
-                },
-                set: { newValue in
+            },
+            set: { newValue in
                     guard index >= 0 && index < editingPreparationTimes.count else { return }
                     editingPreparationTimes[index] = newValue
                 }
             )
-            PreparationTimeEditRowView(
-                preparationTime: preparationTimeBinding,
-                index: index,
-                onAdd: { addPreparationTimeAfter(index) },
-                onDelete: { deletePreparationTime(at: index) },
-                onMove: { fromIndex, toIndex in
-                    movePreparationTime(from: fromIndex, to: toIndex)
-                },
-                onDragStart: {
-                    draggedItem = preparationTime
-                },
-                onDragEnd: {
-                    draggedItem = nil
-                    dropTargetIndex = nil
-                },
-                onDropTargetChanged: { targetIndex in
-                    dropTargetIndex = targetIndex
-                }
-            )
-            .focused($focusedPreparationTimeID, equals: preparationTime.id)
+            GridRow(alignment: .center) {
+                // Type field - apply focus directly here
+                TextField("Type (e.g., \"Bake\")", text: preparationTimeBinding.type)
+                    .textFieldStyle(.squareBorder)
+                    .focused($focusedPreparationTimeID, equals: preparationTime.id)
+                
+                // Time field
+                TextField("Time (e.g., \"1 hr, 30 min\")", text: preparationTimeBinding.timeString)
+                    .textFieldStyle(.squareBorder)
+                    .gridCellColumns(2)
+                
+                // Action buttons
+                PreparationTimeActionButtons(
+                    index: index,
+                    onAdd: { addPreparationTimeAfter(index) },
+                    onDelete: { deletePreparationTime(at: index) },
+                    onMove: { fromIndex, toIndex in
+                        movePreparationTime(from: fromIndex, to: toIndex)
+                    },
+                    onDragStart: {
+                        draggedItem = preparationTime
+                    },
+                    onDragEnd: {
+                        draggedItem = nil
+                        dropTargetIndex = nil
+                    },
+                    onDropTargetChanged: { targetIndex in
+                        dropTargetIndex = targetIndex
+                    }
+                )
+            }
+            .padding(.vertical, 2)
+            .padding(.horizontal, 3)
             .id(preparationTime.id)
         }
     }
@@ -192,10 +205,10 @@ struct PreparationTimesEditView: View {
     private func addPreparationTimeAfter(_ index: Int) {
         let newPreparationTime = PreparationTime(
             id: UUID().uuidString,
-            type: "New time",
-            timeString: "0 minutes"
+            type: "",
+            timeString: ""
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingPreparationTimes.insert(newPreparationTime, at: index + 1)
         }
         scrollToNewItem = newPreparationTime.id
@@ -215,13 +228,13 @@ struct PreparationTimesEditView: View {
                 dropTargetIndex = dropTarget - 1
             }
         }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingPreparationTimes.remove(at: index)
         }
     }
     
     private func movePreparationTime(from fromIndex: Int, to toIndex: Int) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingPreparationTimes.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -229,10 +242,10 @@ struct PreparationTimesEditView: View {
     private func addNewPreparationTime() {
         let newPreparationTime = PreparationTime(
             id: UUID().uuidString,
-            type: "New time",
-            timeString: "0 minutes"
+            type: "",
+            timeString: ""
         )
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.easeIn) {
             editingPreparationTimes.append(newPreparationTime)
         }
         scrollToNewItem = newPreparationTime.id
@@ -243,10 +256,9 @@ struct PreparationTimesEditView: View {
     }
 }
 
-// MARK: - Preparation Time Edit Row View
+// MARK: - Preparation Time Action Buttons
 
-struct PreparationTimeEditRowView: View {
-    @Binding var preparationTime: PreparationTime
+struct PreparationTimeActionButtons: View {
     let index: Int
     let onAdd: () -> Void
     let onDelete: () -> Void
@@ -259,54 +271,40 @@ struct PreparationTimeEditRowView: View {
     @State private var isDropTarget = false
     
     var body: some View {
-        GridRow(alignment: .center) {
-            // Type field
-            TextField("Type", text: $preparationTime.type)
-                .textFieldStyle(.squareBorder)
-            
-            // Time field
-            TextField("Time", text: $preparationTime.timeString)
-                .textFieldStyle(.squareBorder)
-                .gridCellColumns(2)
-            
-            // Action buttons
-            HStack(spacing: 4) {
-                Button {
-                    onAdd()
-                } label: {
-                    Label("Add", systemImage: "plus.circle.fill")
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
-                
-                Button {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "minus.circle.fill")
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
-                
-                // Drag handle
-                Label("Drag to Move", systemImage: "line.3.horizontal")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.tertiary)
-                    .draggable(String(index)) {
-                        Label("Drag to Move", systemImage: "line.3.horizontal")
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .onDrag {
-                        isDragging = true
-                        onDragStart()
-                        return NSItemProvider(object: String(index) as NSString)
-                    }
+        HStack(spacing: 4) {
+            Button {
+                onAdd()
+            } label: {
+                Label("Add", systemImage: "plus.circle.fill")
             }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            
+            Button {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "minus.circle.fill")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(.red)
+            
+            // Drag handle
+            Label("Drag to Move", systemImage: "line.3.horizontal")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.tertiary)
+                .draggable(String(index)) {
+                    Label("Drag to Move", systemImage: "line.3.horizontal")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.tertiary)
+                }
+                .onDrag {
+                    isDragging = true
+                    onDragStart()
+                    return NSItemProvider(object: String(index) as NSString)
+                }
         }
-        .padding(.vertical, 2)
-        .padding(.horizontal, 3)
         .opacity(isDragging ? 0.4 : 1.0)
         .scaleEffect(isDragging ? 0.95 : 1.0)
         .animation(.spring, value: isDragging)

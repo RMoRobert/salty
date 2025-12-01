@@ -91,7 +91,7 @@ struct IngredientsEditView: View {
             }
             .onChange(of: scrollToNewItem) { _, newID in
                 if let newID = newID {
-                    withAnimation {
+                    withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
@@ -212,7 +212,7 @@ struct IngredientsEditView: View {
             isMain: false,
             text: "New ingredient"
         )
-        withAnimation {
+        withAnimation(.easeIn) {
             editingIngredients.insert(newIngredient, at: index + 1)
         }
         scrollToNewItem = newIngredient.id
@@ -235,13 +235,13 @@ struct IngredientsEditView: View {
             }
             // If dropTarget < index, no adjustment needed
         }
-        withAnimation {
+        withAnimation(.easeIn)  {
             editingIngredients.remove(at: index)
         }
     }
     
     private func moveIngredient(from fromIndex: Int, to toIndex: Int) {
-        withAnimation {
+        withAnimation(.easeIn)  {
             editingIngredients.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
         }
     }
@@ -253,7 +253,7 @@ struct IngredientsEditView: View {
             isMain: false,
             text: "New ingredient"
         )
-        withAnimation {
+        withAnimation(.easeIn)  {
             editingIngredients.append(newIngredient)
         }
         scrollToNewItem = newIngredient.id
@@ -270,7 +270,7 @@ struct IngredientsEditView: View {
             isMain: false,
             text: "New heading"
         )
-        withAnimation {
+        withAnimation(.easeIn)  {
             editingIngredients.append(newIngredient)
         }
         scrollToNewItem = newIngredient.id
