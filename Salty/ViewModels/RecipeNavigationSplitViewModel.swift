@@ -9,6 +9,13 @@ import Foundation
 import OSLog
 import SQLiteData
 import UniformTypeIdentifiers
+#if os(macOS)
+import WebKit
+import AppKit
+import ObjectiveC
+import QuartzCore
+import PDFKit
+#endif
 
 // MARK: - Notification Names
 
@@ -20,6 +27,7 @@ extension Notification.Name {
     static let showRecipeInfoInspector = Notification.Name("showRecipeInfoInspector")
     static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
     static let exportSelectedRecipesAsHTML = Notification.Name("exportSelectedRecipesAsHTML")
+    static let printSelectedRecipes = Notification.Name("printSelectedRecipes")
 }
 
 @Observable
@@ -149,6 +157,11 @@ class RecipeNavigationSplitViewModel {
     var showingHTMLExportSettings = false
     var htmlExportOptions = HTMLExportOptions()
     var htmlExportRecipeId: String? // Store recipe ID for single recipe export
+    
+    // Print state (no longer needed for direct printing, but kept for potential future use)
+    // var showingPrintView = false
+    // var printRecipeId: String?
+    // var printHTML: String?
     
 
 //    // TODO: Do more of this in database and not filtering afterwards
@@ -2381,6 +2394,386 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    /// Prints the selected recipe(s)
+    func printSelectedRecipes() {
+        logger.info("printSelectedRecipes called, selectedRecipeIDs: \(self.selectedRecipeIDs)")
+        let recipesToPrint = recipes.filter { selectedRecipeIDs.contains($0.id) }
+        
+        logger.info("Found \(recipesToPrint.count) recipes to print")
+        
+        if recipesToPrint.isEmpty {
+            logger.warning("No recipes selected for printing")
+            exportErrorMessage = "No recipes selected for printing"
+            showingExportErrorAlert = true
+            return
+        }
+        
+        // For now, print only the first selected recipe
+        // TODO: Support printing multiple recipes
+        let recipe = recipesToPrint.first!
+        logger.info("Printing recipe: \(recipe.name)")
+        let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions)
+        
+        // Print directly using WKWebView without a sheet
+        #if os(macOS)
+        printRecipeDirectly(htmlContent: htmlString, recipeName: recipe.name)
+        #endif
+    }
+    
+    #if os(macOS)
+    /// Prints HTML content directly using a temporary WKWebView
+    private func printRecipeDirectly(htmlContent: String, recipeName: String) {
+        logger.info("Starting print operation")
+        
+        // Get paper size first
+        let printInfo = NSPrintInfo.shared
+        let paperSize = printInfo.paperSize
+        
+        let configuration = WKWebViewConfiguration()
+        
+        // Create webView with a larger frame to allow full content rendering
+        // The webView needs to be able to show all content, not just one page
+        let webViewFrame = NSRect(x: 0, y: 0, width: paperSize.width, height: 2000) // Tall enough for multiple pages
+        let webView = WKWebView(frame: webViewFrame, configuration: configuration)
+        
+        // Create a visible preview window
+        let windowFrame = NSRect(x: 0, y: 0, width: 800, height: 1000)
+        let window = NSWindow(
+            contentRect: windowFrame,
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Print Preview"
+        window.center()
+        
+        // Create a scroll view to contain the webView
+        let scrollView = NSScrollView(frame: window.contentView!.bounds)
+        scrollView.autoresizingMask = [.width, .height]
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        
+        webView.frame = webViewFrame
+        webView.autoresizingMask = [.width] // Allow width to resize, but height stays at content size
+        
+        scrollView.documentView = webView
+        window.contentView = scrollView
+        window.makeKeyAndOrderFront(nil)
+        
+        // Create a coordinator to handle printing after load
+        let coordinator = PrintCoordinator(webView: webView, window: window, logger: logger, recipeName: recipeName)
+        webView.navigationDelegate = coordinator
+        
+        // Store coordinator in window's userInfo to retain it
+        objc_setAssociatedObject(window, "printCoordinator", coordinator, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        
+        logger.info("Loading HTML content for printing")
+        // Load the HTML content
+        webView.loadHTMLString(htmlContent, baseURL: nil)
+    }
+    
+    private class PrintCoordinator: NSObject, WKNavigationDelegate {
+        let webView: WKWebView
+        let window: NSWindow
+        let logger: Logger
+        let recipeName: String
+        
+        init(webView: WKWebView, window: NSWindow, logger: Logger, recipeName: String) {
+            self.webView = webView
+            self.window = window
+            self.logger = logger
+            self.recipeName = recipeName
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            logger.info("WebView finished loading, waiting for rendering")
+            
+            // Ensure the window is visible and on-screen
+            window.makeKeyAndOrderFront(nil)
+            window.displayIfNeeded()
+            
+            // Wait for rendering to complete - give it more time to ensure proper layout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                // Force the webView to update its display
+                webView.setNeedsDisplay(webView.bounds)
+                webView.displayIfNeeded()
+                
+                // Force the window to update
+                self.window.displayIfNeeded()
+                
+                // Wait for the next run loop to ensure layout is complete
+                DispatchQueue.main.async {
+                    // Wait a bit more for layout to complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.printWebView(webView)
+                    }
+                }
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            logger.error("WebView failed to load: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.window.close()
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            logger.error("WebView failed provisional navigation: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.window.close()
+            }
+        }
+        
+        private func printWebView(_ webView: WKWebView) {
+            logger.info("Starting print operation")
+            
+            // Ensure the webView has a valid frame before printing
+            guard webView.frame.width > 0 && webView.frame.height > 0 else {
+                logger.error("WebView frame is invalid: width=\(webView.frame.width), height=\(webView.frame.height)")
+                DispatchQueue.main.async {
+                    self.window.close()
+                }
+                return
+            }
+            
+            logger.info("WebView frame: width=\(webView.frame.width), height=\(webView.frame.height)")
+            
+            // Ensure window and webView are visible and laid out
+            window.makeKeyAndOrderFront(nil)
+            window.displayIfNeeded()
+            webView.setNeedsDisplay(webView.bounds)
+            webView.displayIfNeeded()
+            
+            // Use JavaScript to ensure the document is fully ready and force a reflow
+            // Also wait for images to load if any
+            webView.evaluateJavaScript("""
+                (function() {
+                    // Force a reflow
+                    document.body.offsetHeight;
+                    var style = window.getComputedStyle(document.body);
+                    style.width;
+                    
+                    // Wait for images to load
+                    var images = document.getElementsByTagName('img');
+                    var promises = Array.from(images).map(function(img) {
+                        if (img.complete) return Promise.resolve();
+                        return new Promise(function(resolve, reject) {
+                            img.onload = resolve;
+                            img.onerror = resolve; // Resolve even on error
+                            setTimeout(resolve, 2000); // Timeout after 2 seconds
+                        });
+                    });
+                    
+                    return Promise.all(promises).then(function() {
+                        return document.readyState;
+                    });
+                })();
+            """) { [weak self] result, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    self.logger.error("JavaScript evaluation error: \(error.localizedDescription)")
+                }
+                
+                // Force multiple layout passes to ensure everything is ready
+                DispatchQueue.main.async {
+                    // Ensure window is key and visible
+                    self.window.makeKeyAndOrderFront(nil)
+                    self.window.displayIfNeeded()
+                    
+                    // Force the webView to update
+                    webView.setNeedsDisplay(webView.bounds)
+                    webView.displayIfNeeded()
+                    
+                    // Run through multiple run loops to ensure layout is complete
+                    DispatchQueue.main.async {
+                        DispatchQueue.main.async {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self.createPrintOperation(webView: webView, recipeName: self.recipeName)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        private func createPrintOperation(webView: WKWebView, recipeName: String) {
+            logger.info("Creating print operation")
+            
+            // Get and configure print info
+            let printInfo = NSPrintInfo.shared
+            
+            // Configure print settings
+            printInfo.orientation = .portrait
+            printInfo.verticalPagination = .automatic
+            printInfo.horizontalPagination = .automatic
+            printInfo.isVerticallyCentered = false
+            printInfo.isHorizontallyCentered = false
+            
+            // Ensure paper size matches webView frame
+            let paperSize = printInfo.paperSize
+            logger.info("Paper size: width=\(paperSize.width), height=\(paperSize.height)")
+            logger.info("WebView frame: width=\(webView.frame.width), height=\(webView.frame.height)")
+            
+            // Verify webView frame matches paper size
+            if abs(webView.frame.width - paperSize.width) > 1.0 || abs(webView.frame.height - paperSize.height) > 1.0 {
+                logger.warning("WebView frame doesn't match paper size - adjusting")
+                webView.frame = NSRect(x: webView.frame.origin.x, y: webView.frame.origin.y, width: paperSize.width, height: paperSize.height)
+                webView.setNeedsDisplay(webView.bounds)
+                webView.displayIfNeeded()
+                
+                // Wait for frame adjustment
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.performPrint(webView: webView, printInfo: printInfo, recipeName: recipeName)
+                }
+            } else {
+                performPrint(webView: webView, printInfo: printInfo, recipeName: recipeName)
+            }
+        }
+        
+        private func performPrint(webView: WKWebView, printInfo: NSPrintInfo, recipeName: String) {
+            logger.info("Performing print operation")
+            
+            // Ensure webView is fully visible and rendered
+            window.makeKeyAndOrderFront(nil)
+            window.displayIfNeeded()
+            
+            // Force the webView to render by taking a snapshot
+            // This ensures the backing store is fully initialized
+            let snapshotConfig = WKSnapshotConfiguration()
+            snapshotConfig.rect = webView.bounds
+            
+            webView.takeSnapshot(with: snapshotConfig) { [weak self] image, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    self.logger.error("Snapshot error: \(error.localizedDescription)")
+                } else {
+                    self.logger.info("Snapshot taken successfully, webView is rendered")
+                }
+                
+                // Now create the print operation after we know the webView is rendered
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.logger.info("Creating print operation after snapshot")
+                    self.printAsPDF(webView: webView, printInfo: printInfo)
+                }
+            }
+        }
+        
+        /// Generate PDF and save to temporary directory
+        private func printAsPDF(webView: WKWebView, printInfo: NSPrintInfo) {
+            logger.info("Generating PDF for printing")
+            
+            let paperSize = printInfo.paperSize
+            
+            // Get the actual content size from the webView
+            webView.evaluateJavaScript("""
+                ({
+                    width: Math.max(document.body.scrollWidth, document.body.offsetWidth, document.documentElement.clientWidth, document.documentElement.scrollWidth, document.documentElement.offsetWidth),
+                    height: Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight)
+                })
+            """) { [weak self] contentSize, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    self.logger.error("Failed to get content size: \(error.localizedDescription)")
+                }
+                
+                var contentWidth = paperSize.width
+                var contentHeight: CGFloat = 2000
+                
+                if let sizeDict = contentSize as? [String: Any],
+                   let width = sizeDict["width"] as? CGFloat,
+                   let height = sizeDict["height"] as? CGFloat {
+                    contentWidth = width
+                    contentHeight = height
+                    self.logger.info("Content size: width=\(width), height=\(height)")
+                }
+                
+                // Update webView frame to match content size
+                DispatchQueue.main.async {
+                    // Ensure webView is sized to paper width and full content height
+                    let finalHeight = max(contentHeight, 2000)
+                    webView.frame = NSRect(x: 0, y: 0, width: paperSize.width, height: finalHeight)
+                    webView.setNeedsDisplay(webView.bounds)
+                    webView.displayIfNeeded()
+                    
+                    // Force the scroll view to update
+                    if let scrollView = webView.superview as? NSScrollView {
+                        scrollView.documentView = webView
+                        scrollView.needsLayout = true
+                    }
+                    
+                    // Wait for layout, then generate PDF
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        // Configure PDF - use webView's full bounds to capture all content
+                        let pdfConfig = WKPDFConfiguration()
+                        // Set rect to capture the full webView content
+                        // Width should be paper width, height should be full content
+                        pdfConfig.rect = NSRect(x: 0, y: 0, width: paperSize.width, height: finalHeight)
+                        
+                        self.logger.info("PDF config rect: width=\(paperSize.width), height=\(finalHeight)")
+                        self.logger.info("Paper size: width=\(paperSize.width), height=\(paperSize.height)")
+                        self.logger.info("WebView frame: width=\(webView.frame.width), height=\(webView.frame.height)")
+                        
+                        webView.createPDF(configuration: pdfConfig) { [weak self] result in
+                    guard let self = self else { return }
+                    
+                    switch result {
+                    case .success(let pdfData):
+                        self.logger.info("PDF generated successfully, size: \(pdfData.count) bytes")
+                        
+                        // Check how many pages were generated
+                        if let pdfDoc = PDFDocument(data: pdfData) {
+                            self.logger.info("PDF has \(pdfDoc.pageCount) pages")
+                        }
+                        
+                        DispatchQueue.main.async {
+                        // Save PDF to temporary directory
+                        let tempDir = FileManager.default.temporaryDirectory
+                        // Sanitize filename
+                        let sanitizedName = self.recipeName.replacingOccurrences(of: "/", with: "-")
+                            .replacingOccurrences(of: ":", with: "-")
+                            .replacingOccurrences(of: "\\", with: "-")
+                        let fileName = "\(sanitizedName).pdf"
+                        let fileURL = tempDir.appendingPathComponent(fileName)
+                        
+                        do {
+                            try pdfData.write(to: fileURL)
+                            self.logger.info("PDF saved to: \(fileURL.path)")
+                            
+                            // Show success message or open the file
+                            #if os(macOS)
+                            NSWorkspace.shared.open(fileURL)
+                            #endif
+                            
+                            // Close the preview window
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                self.window.close()
+                            }
+                        } catch {
+                            self.logger.error("Failed to save PDF: \(error.localizedDescription)")
+                            self.window.close()
+                        }
+                    }
+                    
+                    case .failure(let error):
+                        self.logger.error("PDF generation failed: \(error.localizedDescription)")
+                        DispatchQueue.main.async {
+                            self.window.close()
+                        }
+                    }
+                    }
+                    }
+                }
+            }
+        }
+    }
+    #endif
+    
     /// Imports sample recipes from the app Resources directory
     func importSampleRecipes() async {
         let x =  Bundle.main.url(forResource: "DemoRecipes", withExtension: "saltyRecipe")
@@ -2419,7 +2812,7 @@ class RecipeNavigationSplitViewModel {
                         recipeId: recipeId,
                         categoryId: categoryId
                     )
-                    try RecipeCategory.insert(recipeCategory).execute(db)
+                    try RecipeCategory.insert { recipeCategory }.execute(db)
                     logger.info("Added recipe \(recipeId) to category \(categoryId)")
                 } else {
                     logger.info("Recipe \(recipeId) is already in category \(categoryId)")

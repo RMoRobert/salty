@@ -70,6 +70,12 @@ struct DirectionsEditView: View {
         .onAppear {
             editingDirections = recipe.directions
         }
+        .onChange(of: recipe.directions) { _, newValue in
+            // Update local state when recipe changes (e.g., from bulk edit)
+            if editingDirections != newValue {
+                editingDirections = newValue
+            }
+        }
         .onChange(of: editingDirections) { _, newValue in
             recipe.directions = newValue
         }
@@ -302,11 +308,36 @@ struct DirectionEditRowView: View {
     @State private var isDragging = false
     @State private var isDropTarget = false
     
+    private var directionDragPreview: some View {
+        HStack(alignment: .center, spacing: 8) {
+            if let stepNumber = stepNumber {
+                Text("\(stepNumber).")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Text(direction.text)
+                .font(direction.isHeading == true ? .headline : .body)
+                .fontWeight(direction.isHeading == true ? .semibold : .regular)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        )
+        .frame(maxWidth: 300)
+    }
+    
     var body: some View {
         HStack(alignment: .center, spacing: 2) {
             if let stepNumber = stepNumber {
                 Text("\(stepNumber).")
-                    .font(.title2)                    .frame(minWidth: 18, alignment: .trailing)
+                    .font(.title2)
+                    .frame(minWidth: 18, alignment: .trailing)
                     .padding(.trailing, 4)
                     .foregroundStyle(.secondary)
             } else {
@@ -334,7 +365,7 @@ struct DirectionEditRowView: View {
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.green)
                     
                     Button {
                         onDelete()

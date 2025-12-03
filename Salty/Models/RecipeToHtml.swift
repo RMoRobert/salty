@@ -21,6 +21,7 @@ extension Recipe {
                 Head {
                     Title(name)
                     Meta().charset("utf-8")
+                    Meta().name("viewport").content("width=device-width, initial-scale=1.0")
                     //let cssPath = Bundle.main.path(forResource: "recipe-default", ofType: "css") ?? ""
                     //Link(rel: .stylesheet).href(cssPath)
                     Style(getDefaultCSS())

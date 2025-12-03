@@ -610,6 +610,11 @@ struct RecipeNavigationSplitView: View {
                 viewModel.performHTMLExport()
             }
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: .printSelectedRecipes)) { _ in
+            viewModel.printSelectedRecipes()
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
             showingImportFromFileSheet = true
         }

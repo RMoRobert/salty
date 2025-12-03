@@ -87,7 +87,7 @@ struct PreparationTimesEditView: View {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         focusedPreparationTimeID = newID
                         scrollToNewItem = nil
                     }
@@ -279,7 +279,7 @@ struct PreparationTimeActionButtons: View {
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(Color.green)
             
             Button {
                 onDelete()

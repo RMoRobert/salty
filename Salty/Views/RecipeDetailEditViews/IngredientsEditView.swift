@@ -68,6 +68,12 @@ struct IngredientsEditView: View {
         .onAppear {
             editingIngredients = recipe.ingredients
         }
+        .onChange(of: recipe.ingredients) { _, newValue in
+            // Update local state when recipe changes (e.g., from bulk edit)
+            if editingIngredients != newValue {
+                editingIngredients = newValue
+            }
+        }
         .onChange(of: editingIngredients) { _, newValue in
             recipe.ingredients = newValue
         }
@@ -95,7 +101,7 @@ struct IngredientsEditView: View {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         focusedIngredientID = newID
                         scrollToNewItem = nil
                     }
@@ -184,6 +190,8 @@ struct IngredientsEditView: View {
             IngredientEditRowView(
                 ingredient: ingredientBinding,
                 index: index,
+                focusedIngredientID: $focusedIngredientID,
+                ingredientID: ingredient.id,
                 onAdd: { addIngredientAfter(index) },
                 onDelete: { deleteIngredient(at: index) },
                 onMove: { fromIndex, toIndex in
@@ -200,7 +208,6 @@ struct IngredientsEditView: View {
                     dropTargetIndex = targetIndex
                 }
             )
-            .focused($focusedIngredientID, equals: ingredient.id)
             .id(ingredient.id)
         }
     }
@@ -286,6 +293,8 @@ struct IngredientsEditView: View {
 struct IngredientEditRowView: View {
     @Binding var ingredient: Ingredient
     let index: Int
+    var focusedIngredientID: FocusState<String?>.Binding
+    let ingredientID: String
     let onAdd: () -> Void
     let onDelete: () -> Void
     let onMove: (Int, Int) -> Void
@@ -304,6 +313,7 @@ struct IngredientEditRowView: View {
                 .fontWeight(ingredient.isHeading == true ? .semibold : .regular)
                 .lineLimit(1...3)
                 .textFieldStyle(.squareBorder)
+                .focused(focusedIngredientID, equals: ingredientID)
             
             // Star icon column
             Group {
@@ -330,7 +340,7 @@ struct IngredientEditRowView: View {
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(Color.green)
             
             // Delete button column
             Button {

@@ -297,7 +297,7 @@ struct NoteEditRowView: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.green)
                 
                 Button {
                     onDelete()
