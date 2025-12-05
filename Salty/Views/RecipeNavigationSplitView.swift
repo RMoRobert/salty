@@ -700,12 +700,14 @@ struct RecipeNavigationSplitView: View {
                     viewModel.showHTMLExportSettingsForRecipe(recipe.id)
                 }
             }
-                // Putting here since can't seem to get to show on share sheet, but could be addressed in future:
+            #if !os(macOS)
+                // Putting here (iOS only) since can't seem to get to show on share sheet, but could be addressed in future:
                 Button(action: {
                     viewModel.printRecipe(by: recipe.id)
                 }) {
                     Label("Print…", systemImage: "printer")
                 }
+            #endif
         }
         #if !os(macOS)
         // Is in toolbar on macOS, but keep in context menu on iOS:
@@ -797,5 +799,8 @@ private struct RecipeInfoInspectorView: View {
         .padding()
     }
 }
+
+
+
 
 

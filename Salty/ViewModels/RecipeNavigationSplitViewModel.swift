@@ -2066,7 +2066,6 @@ class RecipeNavigationSplitViewModel {
             }
         }
         catch {
-            print("Error fetching recipes: \(error)")
             logger.error("Error fetching recipes: \(error)")
         }
     }
