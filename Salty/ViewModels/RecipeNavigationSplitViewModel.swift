@@ -9,6 +9,13 @@ import Foundation
 import OSLog
 import SQLiteData
 import UniformTypeIdentifiers
+#if os(macOS)
+import WebKit
+import AppKit
+import ObjectiveC
+import QuartzCore
+import PDFKit
+#endif
 
 // MARK: - Notification Names
 
@@ -20,6 +27,7 @@ extension Notification.Name {
     static let showRecipeInfoInspector = Notification.Name("showRecipeInfoInspector")
     static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
     static let exportSelectedRecipesAsHTML = Notification.Name("exportSelectedRecipesAsHTML")
+    static let printSelectedRecipes = Notification.Name("printSelectedRecipes")
 }
 
 @Observable
@@ -149,6 +157,11 @@ class RecipeNavigationSplitViewModel {
     var showingHTMLExportSettings = false
     var htmlExportOptions = HTMLExportOptions()
     var htmlExportRecipeId: String? // Store recipe ID for single recipe export
+    
+    // Print state (no longer needed for direct printing, but kept for potential future use)
+    // var showingPrintView = false
+    // var printRecipeId: String?
+    // var printHTML: String?
     
 
 //    // TODO: Do more of this in database and not filtering afterwards
@@ -2381,6 +2394,185 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    /// Prints the selected recipe(s)
+    func printSelectedRecipes() {
+        logger.info("printSelectedRecipes called, selectedRecipeIDs: \(self.selectedRecipeIDs)")
+        let recipesToPrint = recipes.filter { selectedRecipeIDs.contains($0.id) }
+        
+        logger.info("Found \(recipesToPrint.count) recipes to print")
+        
+        if recipesToPrint.isEmpty {
+            logger.warning("No recipes selected for printing")
+            exportErrorMessage = "No recipes selected for printing"
+            showingExportErrorAlert = true
+            return
+        }
+        
+        // For now, print only the first selected recipe
+        // TODO: Support printing multiple recipes
+        let recipe = recipesToPrint.first!
+        logger.info("Printing recipe: \(recipe.name)")
+        let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions)
+        
+        // Print directly using WKWebView without a sheet
+        #if os(macOS)
+        printRecipeDirectly(htmlContent: htmlString, recipeName: recipe.name)
+        #endif
+    }
+    
+    #if os(macOS)
+    /// Prints HTML content using WKWebView - simplified approach based on working example
+    private func printRecipeDirectly(htmlContent: String, recipeName: String) {
+        logger.info("Starting print operation")
+        
+        // Get the current window (or main window as fallback)
+        let window: NSWindow?
+        if let keyWindow = NSApplication.shared.keyWindow {
+            window = keyWindow
+        } else if let mainWindow = NSApplication.shared.mainWindow {
+            window = mainWindow
+        } else {
+            // Try to get any window
+            window = NSApplication.shared.windows.first
+        }
+        
+        guard let targetWindow = window else {
+            logger.error("No window available for printing")
+            return
+        }
+        
+        // Create and configure the HTML print view
+        // Store it in a property to retain it until printing is complete
+        let printView = HTMLPrintView()
+        printView.printView(htmlContent: htmlContent, window: targetWindow, logger: logger)
+        
+        // Retain the print view by storing it (it will be released when printing completes)
+        // We can use a static storage or associate it with the window
+        objc_setAssociatedObject(targetWindow, "htmlPrintView", printView, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+    
+    // Simplified HTML print view based on working example - no headers/footers
+    private class HTMLPrintView: WKWebView, WKNavigationDelegate {
+        private var printOperation: NSPrintOperation?
+        private var htmlContent: String?
+        private var targetWindow: NSWindow?
+        private var logger: Logger?
+        
+        override init(frame: NSRect, configuration: WKWebViewConfiguration) {
+            super.init(frame: frame, configuration: configuration)
+        }
+        
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+        
+        convenience init() {
+            let configuration = WKWebViewConfiguration()
+            let frame = NSRect(x: 0, y: 0, width: 612, height: 792) // US Letter size
+            self.init(frame: frame, configuration: configuration)
+        }
+        
+        func printView(htmlContent: String, window: NSWindow, logger: Logger) {
+            self.navigationDelegate = self
+            self.htmlContent = htmlContent
+            self.targetWindow = window
+            self.logger = logger
+            
+            logger.info("HTMLPrintView: Loading HTML content, length: \(htmlContent.count) characters")
+            
+            // Load the HTML content
+            self.loadHTMLString(htmlContent, baseURL: nil)
+        }
+        
+        // MARK: Callback when page loaded
+        public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            logger?.info("HTMLPrintView: didFinish navigation called")
+            
+            guard let htmlContent = self.htmlContent,
+                  let targetWindow = self.targetWindow,
+                  let logger = self.logger else {
+                logger?.error("HTMLPrintView: Missing required properties in didFinish")
+                return
+            }
+            
+            DispatchQueue.main.async {
+                logger.info("HTMLPrintView: Creating print operation")
+                
+                // Create a new NSPrintInfo instance (not shared) - this is important for pagination
+                let printInfo = NSPrintInfo()
+                
+                // Configure print info - using .fit for pagination (as in the example)
+                printInfo.horizontalPagination = .fit
+                printInfo.verticalPagination = .fit
+                printInfo.topMargin = 36  // 0.5 inch
+                printInfo.bottomMargin = 36
+                printInfo.leftMargin = 36
+                printInfo.rightMargin = 36
+                printInfo.isVerticallyCentered = false
+                printInfo.isHorizontallyCentered = false
+                printInfo.orientation = .portrait
+                
+                logger.info("HTMLPrintView: Print info configured, paper size: \(printInfo.paperSize.width)x\(printInfo.paperSize.height)")
+                
+                // Create print operation from WKWebView
+                self.printOperation = self.printOperation(with: printInfo)
+                
+                guard let pop = self.printOperation else {
+                    logger.error("HTMLPrintView: Failed to create print operation")
+                    return
+                }
+                
+                logger.info("HTMLPrintView: Print operation created successfully")
+                
+                // Configure print panel options
+                pop.printPanel.options.insert(.showsPaperSize)
+                pop.printPanel.options.insert(.showsOrientation)
+                pop.printPanel.options.insert(.showsPreview)
+                pop.printPanel.options.insert(.showsPageRange)
+                pop.printPanel.options.insert(.showsCopies)
+                pop.printPanel.options.insert(.showsScaling)
+                
+                // Set a reasonable frame size for the print view (as in the example)
+                pop.view?.frame = NSRect(x: 0.0, y: 0.0, width: 612.0, height: 792.0) // US Letter size
+                
+                logger.info("HTMLPrintView: About to show print dialog")
+                
+                // Run the print operation using runModal (as in the example)
+                pop.runModal(
+                    for: targetWindow,
+                    delegate: self,
+                    didRun: #selector(self.didRun),
+                    contextInfo: nil
+                )
+                
+                logger.info("HTMLPrintView: runModal returned")
+            }
+        }
+        
+        // MARK: Error handling
+        public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            logger?.error("HTMLPrintView: Navigation failed: \(error.localizedDescription)")
+        }
+        
+        public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            logger?.error("HTMLPrintView: Provisional navigation failed: \(error.localizedDescription)")
+        }
+        
+        @objc func didRun() {
+            logger?.info("HTMLPrintView: didRun called - print operation completed")
+            
+            // Release the associated object before clearing targetWindow
+            if let window = self.targetWindow {
+                objc_setAssociatedObject(window, "htmlPrintView", nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            }
+            
+            self.htmlContent = nil
+            self.targetWindow = nil
+            self.printOperation = nil
+        }
+    }
+    #endif
+    
     /// Imports sample recipes from the app Resources directory
     func importSampleRecipes() async {
         let x =  Bundle.main.url(forResource: "DemoRecipes", withExtension: "saltyRecipe")
@@ -2419,7 +2611,7 @@ class RecipeNavigationSplitViewModel {
                         recipeId: recipeId,
                         categoryId: categoryId
                     )
-                    try RecipeCategory.insert(recipeCategory).execute(db)
+                    try RecipeCategory.insert { recipeCategory }.execute(db)
                     logger.info("Added recipe \(recipeId) to category \(categoryId)")
                 } else {
                     logger.info("Recipe \(recipeId) is already in category \(categoryId)")

@@ -21,6 +21,7 @@ extension Recipe {
                 Head {
                     Title(name)
                     Meta().charset("utf-8")
+                    Meta().name("viewport").content("width=device-width, initial-scale=1.0")
                     //let cssPath = Bundle.main.path(forResource: "recipe-default", ofType: "css") ?? ""
                     //Link(rel: .stylesheet).href(cssPath)
                     Style(getDefaultCSS())
@@ -1282,7 +1283,39 @@ body {
 
 /* Print-specific styles */
 @media print {
-    /* Allow page breaks inside all containers - be aggressive about breaking */
+    /* Global font size reduction to 90% */
+    html {
+        font-size: 0.9rem !important;
+    }
+    
+    body {
+        font-size: 90% !important;
+        line-height: 1.4 !important; /* Reduce line height for tighter spacing */
+        margin: 0;
+        padding: 0.5in;
+    }
+    
+    /* Reduce spacing for all text elements */
+    p, li, div, span {
+        line-height: 1.4 !important;
+    }
+    
+    /* Reduce margins and padding throughout */
+    main {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important; /* Reduced from 1rem */
+        padding: 0;
+    }
+    
+    /* Prevent lines of text from being cut in half - avoid breaking inside text elements */
+    p, span, .recipe-introduction, .recipe-directions-step-text, .recipe-note-text, .recipe-variation-text {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        orphans: 2 !important; /* Keep at least 2 lines together */
+        widows: 2 !important; /* Keep at least 2 lines together */
+    }
+    
+    /* Allow page breaks inside all containers - but prevent breaking text lines */
     #recipe-info-container,
     #recipe-introduction-container,
     #recipe-ingredients-container,
@@ -1294,12 +1327,9 @@ body {
         page-break-inside: auto !important;
         border: none !important;
         box-shadow: none !important;
-        /* Reduce padding/margin to make breaking more likely */
+        /* Reduce padding/margin */
         padding: 0.5em 1em !important;
         margin: 0.5em 0 !important;
-        /* Allow orphans and widows to help with breaking */
-        orphans: 1 !important;
-        widows: 1 !important;
     }
     
     /* Allow section headers to break freely */
@@ -1309,59 +1339,82 @@ body {
     #recipe-variations-container h2 {
         break-after: auto !important;
         page-break-after: auto !important;
-        break-inside: auto !important;
-        page-break-inside: auto !important;
-        orphans: 1 !important;
-        widows: 1 !important;
+        break-inside: avoid !important; /* Don't break headers themselves */
+        page-break-inside: avoid !important;
+        margin-top: 0.5em !important; /* Reduce top margin */
+        margin-bottom: 0.25em !important; /* Reduce bottom margin */
     }
     
-    /* Allow lists to break across pages aggressively */
+    /* Make Ingredients and Directions headings larger */
+    #recipe-ingredients-container h2,
+    #recipe-directions-container h2 {
+        font-size: 1.1em !important; /* Larger than other h2 elements */
+        font-weight: 700 !important; /* Bolder */
+    }
+    
+    /* Allow lists to break across pages, but keep list items intact */
     .recipe-ingredients-list,
     .recipe-directions-list {
         break-inside: auto !important;
         page-break-inside: auto !important;
-        orphans: 1 !important;
-        widows: 1 !important;
-    }
-    
-    /* Allow the Section elements themselves to break */
-    #recipe-ingredients-container,
-    #recipe-directions-container,
-    #recipe-notes-container,
-    #recipe-variations-container {
-        break-inside: auto !important;
-        page-break-inside: auto !important;
-        orphans: 1 !important;
-        widows: 1 !important;
-    }
-    
-    /* Ensure Section elements (HTML <section> tags) can break */
-    section {
-        break-inside: auto !important;
-        page-break-inside: auto !important;
-        orphans: 1 !important;
-        widows: 1 !important;
+        margin: 0.25em 0 !important; /* Reduce list margins */
+        padding: 0 !important;
     }
     
     /* Prevent breaking individual list items (ingredients/directions) */
-    .recipe-ingredients-list li,
     .recipe-directions-list li {
-        break-inside: avoid;
-        page-break-inside: avoid;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        margin: 0.15em 0 !important; /* Reduce spacing between list items */
+        padding: 0.1em 0 !important;
+    }
+    
+    /* Fix ingredient bullets - ensure they appear to the left of text */
+    .recipe-ingredients-list li {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        margin: 0.15em 0 !important;
+        padding: 0.1em 0 0.1em 1.2em !important; /* Ensure enough padding for bullet */
+        position: relative !important;
+    }
+    
+    .recipe-ingredient {
+        padding-left: 1.2em !important; /* Ensure enough space for bullet */
+    }
+    
+    .recipe-ingredient::before {
+        content: '•' !important;
+        position: absolute !important;
+        left: 0.2em !important; /* Position bullet slightly to the right of left edge */
     }
     
     /* Prevent breaking individual direction steps */
     .recipe-directions-step,
     .recipe-directions-step-with-name {
-        break-inside: avoid;
-        page-break-inside: avoid;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        margin: 0.5em 0 !important; /* Reduce spacing between steps */
     }
     
     /* Prevent breaking individual notes and variations */
     .recipe-note-container,
     .recipe-variation-container {
-        break-inside: avoid;
-        page-break-inside: avoid;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        margin: 0.75em 0 !important; /* Reduce spacing */
+        padding: 0.5em 1em !important; /* Reduce padding */
+    }
+    
+    /* Reduce spacing for ingredient headings */
+    .recipe-ingredient-heading,
+    .recipe-directions-heading {
+        margin-top: 0.5em !important;
+        margin-bottom: 0.25em !important;
+    }
+    
+    /* Reduce spacing for introduction */
+    .recipe-introduction {
+        margin: 0.5em 0 !important;
     }
     
     /* Allow page breaks between major sections */
@@ -1369,12 +1422,6 @@ body {
     #recipe-introduction-container {
         break-after: auto;
         page-break-after: auto;
-    }
-    
-    /* Single column layout for print */
-    main {
-        grid-template-columns: 1fr !important;
-        gap: 1rem !important;
     }
     
     #recipe-ingredients-container,
@@ -1387,30 +1434,39 @@ body {
         background: white !important;
     }
     
-    body {
-        margin: 0;
-        padding: 0.5in;
+    /* Reduce font sizes to 90% for all headings */
+    h1, h2, h3, h4, h5, h6 {
+        font-size: 90% !important;
     }
     
-    main {
-        padding: 0;
+    /* Make direction step text and ingredient text smaller */
+    .recipe-directions-step-text,
+    .recipe-ingredient {
+        font-size: 0.9em !important; /* Smaller than body text */
     }
     
-    /* Reduce font sizes slightly for print if needed */
     #recipe-name {
-        font-size: 2em;
+        font-size: 1.8em !important; /* 90% of 2em */
         /* Override gradient background for print - use solid black text */
         background: none !important;
         -webkit-background-clip: unset !important;
         -webkit-text-fill-color: unset !important;
         background-clip: unset !important;
         color: #000 !important;
+        margin: 0.5em 0 !important; /* Reduce margins */
     }
     
-    /* Ensure images print well */
+    /* Reduce spacing for source info and make it darker for better readability */
+    #recipe-source,
+    #recipe-sourceDetails {
+        margin: 0.25em 0 !important;
+        color: #555555 !important; /* Darker gray - was #86868b, now darker for better readability */
+    }
+    
+    /* Ensure images print well - reduced size */
     #recipe-image {
-        max-width: 400px;
-        max-height: 400px;
+        max-width: 300px !important; /* Reduced from 400px */
+        max-height: 300px !important; /* Reduced from 400px */
         width: auto;
         height: auto;
         object-fit: contain;
