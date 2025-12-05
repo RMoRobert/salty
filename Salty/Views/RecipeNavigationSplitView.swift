@@ -11,6 +11,9 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+#if !os(macOS)
+import UIKit
+#endif
 
 // MARK: - Conditional List Row Background Modifier
 
@@ -400,26 +403,27 @@ struct RecipeNavigationSplitView: View {
                         }) {
                             Label("Export as HTML…", systemImage: "doc.text")
                         }
-                        
-                        if let recipeId = viewModel.selectedRecipeIDs.first,
-                           let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
-                           let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
-                            // Would like this to work with plain text fallback, but can't get to...
-                            // ShareLink(item: shareableRecipe,
-                            //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                            //           message: Text(shareableRecipe.plainTextRepresentation),
-                            //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                            // )
-                            ShareLink(item: shareableRecipe.plainTextRepresentation + "\n\nShared from Salty Recipe Manager for iOS and macOS",
-                                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                                      message: Text(shareableRecipe.plainTextRepresentation),
-                                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                            )
-                        }
                     } label: {
-                        Label("Share Recipe", systemImage: "square.and.arrow.up")
+                        Label("Export", systemImage: "square.and.arrow.up")
                     }
                     .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    
+                    if let recipeId = viewModel.selectedRecipeIDs.first,
+                       let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
+                       let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+                        // Would like this to work with plain text fallback, but can't get to...
+                        // ShareLink(item: shareableRecipe,
+                        //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                        //           message: Text(shareableRecipe.plainTextRepresentation),
+                        //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                        // )
+                        ShareLink(item: shareableRecipe.plainTextRepresentation + "\n\nShared from Salty Recipe Manager for iOS and macOS",
+                                  subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                                  message: Text(shareableRecipe.plainTextRepresentation),
+                                  preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                        )
+                        .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    }
                     
                     Button(role: .destructive, action: {
                         showingDeleteConfirmation = true
@@ -610,11 +614,9 @@ struct RecipeNavigationSplitView: View {
                 viewModel.performHTMLExport()
             }
         }
-        #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .printSelectedRecipes)) { _ in
             viewModel.printSelectedRecipes()
         }
-        #endif
         .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
             showingImportFromFileSheet = true
         }
@@ -679,7 +681,7 @@ struct RecipeNavigationSplitView: View {
     
     @ViewBuilder
     private func contextMenuForRecipe(_ recipe: Recipe) -> some View {
-        Button("Edit") {
+        Button("Edit", systemImage: "pencil") {
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true
         }
@@ -698,6 +700,12 @@ struct RecipeNavigationSplitView: View {
                     viewModel.showHTMLExportSettingsForRecipe(recipe.id)
                 }
             }
+                // Putting here since can't seem to get to show on share sheet, but could be addressed in future:
+                Button(action: {
+                    viewModel.printRecipe(by: recipe.id)
+                }) {
+                    Label("Print…", systemImage: "printer")
+                }
         }
         #if !os(macOS)
         // Is in toolbar on macOS, but keep in context menu on iOS:
@@ -721,11 +729,11 @@ struct RecipeNavigationSplitView: View {
                 }
             }
         }) {
-            Text("Delete")
+            Label("Delete", systemImage: "trash")
         }
         .keyboardShortcut(.delete, modifiers: [.command])
         Divider()
-        Button("Get Info") {
+        Button("Get Info", systemImage: "info.circle") {
             recipeIDForInspector = recipe.id
         }
     }
