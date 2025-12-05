@@ -175,12 +175,12 @@ struct Menus: Commands {
                }
            }
            .disabled(sheetTracker.isAnySheetShown)
-           #if os(macOS)
            Divider()
            Button("Print…") {
                NotificationCenter.default.post(name: .printSelectedRecipes, object: nil)
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           #if os(macOS)
            .keyboardShortcut("p", modifiers: [.command])
            #endif
            Divider()

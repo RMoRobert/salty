@@ -15,6 +15,10 @@ import AppKit
 import ObjectiveC
 import QuartzCore
 import PDFKit
+#else
+import UIKit
+import WebKit
+import ObjectiveC
 #endif
 
 // MARK: - Notification Names
@@ -2411,12 +2415,28 @@ class RecipeNavigationSplitViewModel {
         // For now, print only the first selected recipe
         // TODO: Support printing multiple recipes
         let recipe = recipesToPrint.first!
+        printRecipe(by: recipe.id)
+    }
+    
+    /// Prints a recipe by its ID
+    func printRecipe(by recipeId: String) {
+        logger.info("printRecipe called for recipe ID: \(recipeId)")
+        
+        guard let recipe = recipes.first(where: { $0.id == recipeId }) else {
+            logger.warning("Recipe not found for ID: \(recipeId)")
+            exportErrorMessage = "Recipe not found"
+            showingExportErrorAlert = true
+            return
+        }
+        
         logger.info("Printing recipe: \(recipe.name)")
         let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions)
         
-        // Print directly using WKWebView without a sheet
+        // Print using platform-specific implementation
         #if os(macOS)
         printRecipeDirectly(htmlContent: htmlString, recipeName: recipe.name)
+        #else
+        printRecipeOniOS(htmlContent: htmlString, recipeName: recipe.name)
         #endif
     }
     
@@ -2569,6 +2589,105 @@ class RecipeNavigationSplitViewModel {
             self.htmlContent = nil
             self.targetWindow = nil
             self.printOperation = nil
+        }
+    }
+    #endif
+    
+    #if !os(macOS)
+    /// Prints HTML content on iOS using UIPrintInteractionController
+    func printRecipeOniOS(htmlContent: String, recipeName: String) {
+        logger.info("Starting iOS print operation")
+        
+        // Create a WKWebView to render the HTML
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 612, height: 792), configuration: configuration)
+        
+        // Create a coordinator to handle printing after the web view loads
+        let coordinator = iOSPrintCoordinator(webView: webView, htmlContent: htmlContent, logger: logger)
+        webView.navigationDelegate = coordinator
+        
+        // Load the HTML content
+        webView.loadHTMLString(htmlContent, baseURL: nil)
+        
+        // Retain the coordinator and webView
+        objc_setAssociatedObject(webView, "printCoordinator", coordinator, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+    
+    private class iOSPrintCoordinator: NSObject, WKNavigationDelegate {
+        let webView: WKWebView
+        let htmlContent: String
+        let logger: Logger
+        
+        init(webView: WKWebView, htmlContent: String, logger: Logger) {
+            self.webView = webView
+            self.htmlContent = htmlContent
+            self.logger = logger
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            logger.info("iOSPrintCoordinator: WebView finished loading")
+            
+            // Wait a moment for rendering to complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.showPrintDialog()
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            logger.error("iOSPrintCoordinator: Navigation failed: \(error.localizedDescription)")
+        }
+        
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            logger.error("iOSPrintCoordinator: Provisional navigation failed: \(error.localizedDescription)")
+        }
+        
+        private func showPrintDialog() {
+            // Create print formatter from web view
+            let printFormatter = webView.viewPrintFormatter()
+            
+            // Configure print info
+            let printInfo = UIPrintInfo.printInfo()
+            printInfo.outputType = .general
+            printInfo.jobName = "Recipe"
+            printInfo.orientation = .portrait
+            printInfo.duplex = .none
+            
+            // Create print interaction controller
+            let printController = UIPrintInteractionController.shared
+            printController.printInfo = printInfo
+            printController.printFormatter = printFormatter
+            printController.showsNumberOfCopies = true
+            printController.showsPaperSelectionForLoadedPapers = true
+            
+            // Get the current view controller to present from
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+                
+                // Find the topmost presented view controller
+                var topViewController = rootViewController
+                while let presented = topViewController.presentedViewController {
+                    topViewController = presented
+                }
+                
+                logger.info("iOSPrintCoordinator: Presenting print dialog")
+                
+                // Present print dialog
+                printController.present(animated: true) { [weak self] printController, completed, error in
+                    if let error = error {
+                        self?.logger.error("iOSPrintCoordinator: Print error: \(error.localizedDescription)")
+                    } else if completed {
+                        self?.logger.info("iOSPrintCoordinator: Print completed successfully")
+                    } else {
+                        self?.logger.info("iOSPrintCoordinator: Print was cancelled")
+                    }
+                    
+                    // Clean up
+                    objc_setAssociatedObject(self?.webView as Any, "printCoordinator", nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                }
+            } else {
+                logger.error("iOSPrintCoordinator: Could not find view controller to present from")
+            }
         }
     }
     #endif
