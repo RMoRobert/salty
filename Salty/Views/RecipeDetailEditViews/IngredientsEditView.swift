@@ -319,12 +319,14 @@ struct IngredientEditRowView: View {
             Group {
                 if !ingredient.isHeading {
                     Toggle(isOn: $ingredient.isMain) {
-                        Label("Is main ingredient?", systemImage: ingredient.isMain ? "star.fill" : "star")
+                        Label("Is main ingredient?", systemImage: ingredient.isMain ? "medal.fill" : "medal")
                     }
+                    .help("Is main ingredient?")
                     .toggleStyle(.button)
                     .buttonStyle(.plain)
                     .labelStyle(.iconOnly)
-                    .foregroundStyle(ingredient.isMain ? .yellow : .secondary)
+                    .foregroundStyle(ingredient.isMain ? Color.blue : .secondary)
+                    .opacity(ingredient.isMain ? 1 : 0.7)
                 }
                 else {
                     Spacer()

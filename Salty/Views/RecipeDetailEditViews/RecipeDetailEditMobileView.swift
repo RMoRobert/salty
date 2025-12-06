@@ -193,9 +193,21 @@ struct RecipeDetailEditMobileView: View {
         var body: some View {
             Section("Ingredients") {
                 ForEach($viewModel.recipe.ingredients) { $ingredient in
-                    TextField("Ingredient", text: $ingredient.text)
-                        .font(ingredient.isHeading ? .headline : .body)
-                        .fontWeight(ingredient.isHeading ? .semibold : .regular)
+                    let placeholderText = ingredient.isHeading ? "Heading Name" : (ingredient.isMain ? "Main Ingredient Name" : "Ingredient Name")
+                    HStack {
+                        TextField(placeholderText, text: $ingredient.text)
+                            .font(ingredient.isHeading ? .headline : .body)
+                            .fontWeight(ingredient.isHeading ? .semibold : .regular)
+                        Group {
+                            if ingredient.isMain {
+                                Image(systemName: "medal")
+                                    .foregroundStyle(.blue)
+                            }
+                            else {
+                                EmptyView()
+                            }
+                        }
+                    }
                 }
                 .onDelete { indexSet in
                     viewModel.recipe.ingredients.remove(atOffsets: indexSet)
@@ -210,7 +222,7 @@ struct RecipeDetailEditMobileView: View {
                             id: UUID().uuidString,
                             isHeading: false,
                             isMain: false,
-                            text: "New ingredient"
+                            text: ""
                         ))
                     }) {
                         Label("Add Ingredient", systemImage: "plus.circle.fill")
@@ -224,10 +236,25 @@ struct RecipeDetailEditMobileView: View {
                                 id: UUID().uuidString,
                                 isHeading: true,
                                 isMain: false,
-                                text: "New Heading"
+                                text: ""
                             ))
                         }) {
                             Label("Add Heading", systemImage: "folder.badge.plus")
+                        }
+                        
+                        Button(action: {
+                            viewModel.recipe.ingredients.append(Ingredient(
+                                id: UUID().uuidString,
+                                isHeading: false,
+                                isMain: true,
+                                text: ""
+                            ))
+                        }) {
+                            Label {
+                                Text("Add Main Ingredient")
+                            } icon: {
+                                Image("recipe-new-main-ingredient-image")
+                            }
                         }
                         
                         Button(action: {
@@ -259,7 +286,7 @@ struct RecipeDetailEditMobileView: View {
         var body: some View {
             Section("Directions") {
                 ForEach($viewModel.recipe.directions) { $direction in
-                    TextField("Direction", text: $direction.text)
+                    TextField(direction.isHeading == true ? "Heading Name" : "Direction Text", text: $direction.text)
                         .font(direction.isHeading == true ? .headline : .body)
                         .fontWeight(direction.isHeading == true ? .semibold : .regular)
                 }
@@ -274,7 +301,7 @@ struct RecipeDetailEditMobileView: View {
                         viewModel.recipe.directions.append(Direction(
                             id: UUID().uuidString,
                             isHeading: false,
-                            text: "New step"
+                            text: ""
                         ))
                     }) {
                         Label("Add Step", systemImage: "plus.circle.fill")
@@ -288,7 +315,7 @@ struct RecipeDetailEditMobileView: View {
                             viewModel.recipe.directions.append(Direction(
                                 id: UUID().uuidString,
                                 isHeading: true,
-                                text: "New Heading"
+                                text: ""
                             ))
                         }) {
                             Label("Add Heading", systemImage: "folder.badge.plus")
@@ -324,10 +351,10 @@ struct RecipeDetailEditMobileView: View {
             Section("Preparation Time") {
                 ForEach($viewModel.recipe.preparationTimes) { $preparationTime in
                     HStack {
-                        TextField("Type", text: $preparationTime.type)
+                        TextField("Type (e.g., \"Bake\")", text: $preparationTime.type)
                             .font(.headline)
                             .fontWeight(.semibold)
-                        TextField("Time", text: $preparationTime.timeString)
+                        TextField("Time (e.g., \"30 minutes\")", text: $preparationTime.timeString)
                             .font(.body)
                     }
                 }
@@ -342,8 +369,8 @@ struct RecipeDetailEditMobileView: View {
                     Button(action: {
                         viewModel.recipe.preparationTimes.append(PreparationTime(
                             id: UUID().uuidString,
-                            type: "New Time",
-                            timeString: "0 minutes"
+                            type: "",
+                            timeString: ""
                         ))
                     }) {
                         Label("Add Time", systemImage: "plus.circle.fill")
@@ -384,7 +411,7 @@ struct RecipeDetailEditMobileView: View {
                         viewModel.recipe.notes.append(Note(
                             id: UUID().uuidString,
                             title: "",
-                            content: "New note content"
+                            content: ""
                         ))
                     }) {
                         Label("Add Note", systemImage: "plus.circle.fill")
@@ -425,7 +452,7 @@ struct RecipeDetailEditMobileView: View {
                         viewModel.recipe.variations.append(Variation(
                             id: UUID().uuidString,
                             variationName: "",
-                            text: "New variation text"
+                            text: ""
                         ))
                     }) {
                         Label("Add Variation", systemImage: "plus.circle.fill")
