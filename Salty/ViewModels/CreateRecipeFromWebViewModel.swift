@@ -108,7 +108,7 @@ class CreateRecipeFromWebViewModel {
     private func convertTextToStructuredData() {
         // Convert ingredients text to structured ingredients
         if !ingredientsText.isEmpty {
-            recipe.ingredients = IngredientTextParser.parseIngredients(from: ingredientsText, preservingMainStatusFrom: recipe.ingredients)
+            recipe.ingredients = IngredientTextParser.parseIngredients(from: ingredientsText)
         }
         
         // Convert directions text to structured directions

@@ -19,7 +19,6 @@ struct RecipeDirectionsBulkEditView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Edit Directions")
-                    .font(.title2)
                     .fontWeight(.semibold)
                 
                 TextEditor(text: $textContent)
@@ -44,8 +43,8 @@ struct RecipeDirectionsBulkEditView: View {
                     Button("Help", systemImage: "questionmark.circle") {
                         showingHelp = true
                     }
+                    .buttonStyle(.plain)
                     .padding([.trailing])
-                    .controlSize(.small)
                     .labelStyle(.iconOnly)
                     .alert("How to Use Editor", isPresented: $showingHelp) {
                         Button("OK", role: .cancel) {}

@@ -11,19 +11,11 @@ import Foundation
 struct IngredientTextParser {
     
     /// Parses bulk text into Ingredient objects
-    /// - Parameters:
-    ///   - text: Raw text input with ingredients
-    ///   - existingIngredients: Existing ingredients to preserve isMain property
-    /// - Returns: Array of Ingredient objects, including attempt to match isMain status from existing names
-    static func parseIngredients(from text: String, preservingMainStatusFrom existingIngredients: [Ingredient] = []) -> [Ingredient] {
+    /// - Parameter text: Raw text input with ingredients
+    /// - Returns: Array of Ingredient objects. Main ingredients are marked with [*] at the end of the line.
+    static func parseIngredients(from text: String) -> [Ingredient] {
         let lines = text.components(separatedBy: .newlines)
         var ingredients: [Ingredient] = []
-        
-        // Create a mapping of existing ingredient text to isMain value for preservation
-        var isMainPreservation: [String: Bool] = [:]
-        for ingredient in existingIngredients {
-            isMainPreservation[ingredient.text] = ingredient.isMain
-        }
         
         var i = 0
         while i < lines.count {
@@ -45,10 +37,18 @@ struct IngredientTextParser {
             }
             let isHeading = isHeadingByLine || isHeadingByColon
             
+            // Check for [*] marker at the end of the line to indicate main ingredient
+            var isMain = false
+            if !isHeading && line.hasSuffix("[*]") {
+                isMain = true
+                // Remove the [*] marker from the text
+                line = String(line.dropLast(3)).trimmingCharacters(in: .whitespaces)
+            }
+            
             let ingredient = Ingredient(
                 id: UUID().uuidString,
                 isHeading: isHeading,
-                isMain: (isMainPreservation[line] ?? false) && !isHeading, // Preserve isMain if possible
+                isMain: isMain,
                 text: line
             )
             
@@ -61,7 +61,7 @@ struct IngredientTextParser {
     
     /// Formats Ingredient objects into text for editing
     /// - Parameter ingredients: Array of Ingredient objects
-    /// - Returns: Formatted text string
+    /// - Returns: Formatted text string. Main ingredients are marked with [*] at the end of the line.
     static func formatIngredients(_ ingredients: [Ingredient]) -> String {
         var lines: [String] = []
         
@@ -71,7 +71,9 @@ struct IngredientTextParser {
                 lines.append("")
                 lines.append(ingredient.text)
             } else {
-                lines.append(ingredient.text)
+                // Append [*] marker for main ingredients
+                let text = ingredient.isMain ? "\(ingredient.text) [*]" : ingredient.text
+                lines.append(text)
             }
         }
         

@@ -19,7 +19,6 @@ struct RecipeIngredientsBulkEditView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Edit Ingredients")
-                    .font(.title2)
                     .fontWeight(.semibold)
                 
                 TextEditor(text: $textContent)
@@ -45,13 +44,12 @@ struct RecipeIngredientsBulkEditView: View {
                         showingHelp = true
                     }
                     .padding([.trailing])
-                    .controlSize(.small)
                     .buttonStyle(.plain)
                     .labelStyle(.iconOnly)
                     .alert("How to Use Editor", isPresented: $showingHelp) {
                         Button("OK", role: .cancel) {}
                     } message: {
-                        Text("Edit ingredients as plain text. Each line represents one ingredient. Add a blank line before any lines that are to be interpreted as headings, or end those lines with a colon. Select \"Clean Up\" to remove list delimiters and trim whitespace.")
+                        Text("Each line represents one ingredient (or heading). Add a blank line before any lines that are to be interpreted as headings, or end those lines with a colon. Ingredient lines ending with \"[*]\" (no quotes) will be marked as main ingredients. Select \"Clean Up\" to remove common list delimiter characters and trim whitespace.")
                     }
                     
                     
@@ -82,7 +80,7 @@ struct RecipeIngredientsBulkEditView: View {
     }
     
     private func saveIngredients() {
-        recipe.ingredients = IngredientTextParser.parseIngredients(from: textContent, preservingMainStatusFrom: recipe.ingredients)
+        recipe.ingredients = IngredientTextParser.parseIngredients(from: textContent)
         hasChanges = false
     }
     
