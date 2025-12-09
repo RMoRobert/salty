@@ -25,7 +25,6 @@ struct IngredientsEditView: View {
         Group {
             if showToolbar {
                 // Standalone view with toolbar (for sheet presentation)
-                            .keyboardShortcut("n", modifiers: [.command])
                 IngredientsContentView(
                     editingIngredients: $editingIngredients,
                     showToolbar: showToolbar,
