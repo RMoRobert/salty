@@ -222,7 +222,7 @@ struct DirectionsEditView: View {
         let newDirection = Direction(
             id: UUID().uuidString,
             isHeading: false,
-            text: "New step"
+            text: ""
         )
         withAnimation(.easeIn) {
             editingDirections.insert(newDirection, at: index + 1)
@@ -262,7 +262,7 @@ struct DirectionsEditView: View {
         let newDirection = Direction(
             id: UUID().uuidString,
             isHeading: false,
-            text: "New step"
+            text: ""
         )
         withAnimation(.easeIn) {
             editingDirections.append(newDirection)
@@ -278,7 +278,7 @@ struct DirectionsEditView: View {
         let newDirection = Direction(
             id: UUID().uuidString,
             isHeading: true,
-            text: "New heading"
+            text: ""
         )
         withAnimation(.easeIn) {
             editingDirections.append(newDirection)
@@ -345,7 +345,7 @@ struct DirectionEditRowView: View {
                     .frame(width: 18)
             }
             
-            TextField("Direction", text: $direction.text, axis: .vertical)
+            TextField(direction.isHeading == true ? "Heading Name" : "Direction text", text: $direction.text, axis: .vertical)
                 .font(direction.isHeading == true ? .headline : .body)
                 .fontWeight(direction.isHeading == true ? .semibold : .regular)
                 .lineLimit(direction.isHeading == true ? 1...2 : 3...13)
