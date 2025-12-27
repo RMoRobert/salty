@@ -44,7 +44,6 @@ struct IngredientsEditView: View {
                         } label: {
                             Label("New Ingredient", systemImage: "plus.circle")
                         }
-                        .keyboardShortcut("n", modifiers: [.command])
                         
                         Button {
                             addNewHeading()
@@ -81,6 +80,7 @@ struct IngredientsEditView: View {
                     if showBottomButtons {
                         BottomActionButtonsView(
                             onAddNewIngredient: { addNewIngredient() },
+                            onAddNewMainIngredient: { addNewMainIngredient() },
                             onAddNewHeading: { addNewHeading() }
                         )
                         .padding(.top, 4)
@@ -146,11 +146,11 @@ struct IngredientsEditView: View {
         }
     }
     
-    private func addNewIngredient() {
+    private func addNewIngredient(isMain: Bool, isHeading: Bool) {
         let newIngredient = Ingredient(
             id: UUID().uuidString,
-            isHeading: false,
-            isMain: false,
+            isHeading: isMain ? false : isHeading,
+            isMain: isMain,
             text: ""
         )
         withAnimation(.easeIn)  {
@@ -163,21 +163,16 @@ struct IngredientsEditView: View {
         }
     }
     
+    private func addNewIngredient() {
+        addNewIngredient(isMain: false, isHeading: false)
+    }
+    
+    private func addNewMainIngredient() {
+        addNewIngredient(isMain: true, isHeading: false)
+    }
+    
     private func addNewHeading() {
-        let newIngredient = Ingredient(
-            id: UUID().uuidString,
-            isHeading: true,
-            isMain: false,
-            text: ""
-        )
-        withAnimation(.easeIn)  {
-            editingIngredients.append(newIngredient)
-        }
-        scrollToNewItem = newIngredient.id
-        // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            focusedIngredientID = newIngredient.id
-        }
+        addNewIngredient(isMain: false, isHeading: true)
     }
 }
 
@@ -241,15 +236,20 @@ struct IngredientsContentView: View {
 
 struct BottomActionButtonsView: View {
     let onAddNewIngredient: () -> Void
+    let onAddNewMainIngredient: () -> Void
     let onAddNewHeading: () -> Void
     
     var body: some View {
         HStack {
-            Button {
-                onAddNewIngredient()
-            } label: {
-                Label("New Ingredient", systemImage: "plus.circle")
-            }
+            ComboButtonRepresentable(
+                title: "New Ingredient",
+                image: NSImage(systemSymbolName: "plus.circle", accessibilityDescription: nil),
+                menuItems: [
+                    MenuItem(title: "Add New Main Ingredient", image: NSImage(named: "recipe-new-main-ingredient-image"), action: onAddNewMainIngredient)
+                ],
+                onPrimaryAction: onAddNewIngredient
+            )
+            .fixedSize()
             .keyboardShortcut("n", modifiers: [.command])
             
             Button {
@@ -263,6 +263,12 @@ struct BottomActionButtonsView: View {
         }
         .padding(.top, 2)
     }
+}
+
+struct MenuItem {
+    let title: String
+    let image: NSImage?
+    let action: () -> Void
 }
 
 struct IngredientsListView: View {
@@ -508,8 +514,100 @@ struct IngredientEditRowView: View {
     }
 }
 
+
+struct ComboButtonRepresentable: NSViewRepresentable {
+    var title: String
+    var image: NSImage?
+    var style: NSComboButton.Style = .split // or .unified
+    var menuItems: [MenuItem]
+    var onPrimaryAction: () -> Void
+    
+    // Helper to create an image with leading padding -- matches SwiftUI button labels with images better:
+    private func paddedImage(from image: NSImage?, leadingPadding: CGFloat = 6) -> NSImage? {
+        guard let originalImage = image else { return image }
+        
+        let padding: CGFloat = leadingPadding
+        let newSize = NSSize(width: originalImage.size.width + padding, height: originalImage.size.height)
+        let paddedImage = NSImage(size: newSize)
+        
+        paddedImage.lockFocus()
+        originalImage.draw(
+            at: NSPoint(x: padding, y: 0),
+            from: NSRect(origin: .zero, size: originalImage.size),
+            operation: .sourceOver,
+            fraction: 1.0
+        )
+        paddedImage.unlockFocus()
+        
+        return paddedImage
+    }
+
+    func makeNSView(context: Context) -> NSComboButton {
+        let menu = NSMenu()
+        for (index, menuItem) in menuItems.enumerated() {
+            let nsMenuItem = NSMenuItem(title: menuItem.title, action: #selector(Coordinator.menuItemAction(_:)), keyEquivalent: "")
+            nsMenuItem.target = context.coordinator
+            nsMenuItem.tag = index
+            nsMenuItem.image = menuItem.image
+            menu.addItem(nsMenuItem)
+        }
+        context.coordinator.menuActions = menuItems.map { $0.action }
+        
+        let comboButton = NSComboButton(title: title, menu: menu, target: context.coordinator, action: #selector(Coordinator.primaryAction))
+        comboButton.style = style
+        if let image = image {
+            comboButton.image = paddedImage(from: image)
+        }
+        return comboButton
+    }
+
+    func updateNSView(_ nsView: NSComboButton, context: Context) {
+        nsView.title = title
+        nsView.image = paddedImage(from: image)
+        nsView.style = style
+        
+        // Update menu
+        let menu = NSMenu()
+        for (index, menuItem) in menuItems.enumerated() {
+            let nsMenuItem = NSMenuItem(title: menuItem.title, action: #selector(Coordinator.menuItemAction(_:)), keyEquivalent: "")
+            nsMenuItem.target = context.coordinator
+            nsMenuItem.tag = index
+            nsMenuItem.image = menuItem.image
+            menu.addItem(nsMenuItem)
+        }
+        nsView.menu = menu
+        context.coordinator.menuActions = menuItems.map { $0.action }
+        context.coordinator.onPrimaryAction = onPrimaryAction
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onPrimaryAction: onPrimaryAction, menuActions: menuItems.map { $0.action })
+    }
+
+    class Coordinator: NSObject {
+        var onPrimaryAction: () -> Void
+        var menuActions: [() -> Void] = []
+
+        init(onPrimaryAction: @escaping () -> Void, menuActions: [() -> Void] = []) {
+            self.onPrimaryAction = onPrimaryAction
+            self.menuActions = menuActions
+        }
+
+        @objc func primaryAction() {
+            onPrimaryAction()
+        }
+        
+        @objc func menuItemAction(_ sender: NSMenuItem) {
+            let index = sender.tag
+            if index >= 0 && index < menuActions.count {
+                menuActions[index]()
+            }
+        }
+    }
+}
+
 #Preview {
-    IngredientsEditView(recipe: .constant(SampleData.sampleRecipes[0]))
+    IngredientsEditView(recipe: .constant(SampleData.sampleRecipes[0]), showToolbar: false, showBottomButtons: true)
 }
 
 #endif

@@ -13,7 +13,7 @@ struct RatingEditView: View {
     
     var body: some View {
         Picker("Rating", selection: $recipe.rating) {
-            Text("Not Rated")
+            Text("(no rating)")
                 .tag(Rating.notSet)
             
             Text("⭐")
