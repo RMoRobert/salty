@@ -14,6 +14,7 @@
 		D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78A02DFF7E950067A88D /* WebViewKit */; };
 		D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = D47AF4B62E25D3E30001E4D4 /* SwiftSoup */; };
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
+		D48AB7422F20966800184122 /* UUIDV7 in Frameworks */ = {isa = PBXBuildFile; productRef = D48AB7412F20966800184122 /* UUIDV7 */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,6 +86,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D48AB7422F20966800184122 /* UUIDV7 in Frameworks */,
 				D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */,
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
 				D402E0692E7F253600B020D5 /* SQLiteData in Frameworks */,
@@ -166,6 +168,7 @@
 				D45D78A02DFF7E950067A88D /* WebViewKit */,
 				D47AF4B62E25D3E30001E4D4 /* SwiftSoup */,
 				D402E0682E7F253600B020D5 /* SQLiteData */,
+				D48AB7412F20966800184122 /* UUIDV7 */,
 			);
 			productName = Salty;
 			productReference = D47F8FDF2DF35EB300A64304 /* Salty.app */;
@@ -256,6 +259,7 @@
 				D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */,
 				D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */,
+				D48AB7402F20966800184122 /* XCRemoteSwiftPackageReference "swift-uuidv7" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D47F8FE02DF35EB300A64304 /* Products */;
@@ -758,6 +762,14 @@
 				minimumVersion = 2.9.5;
 			};
 		};
+		D48AB7402F20966800184122 /* XCRemoteSwiftPackageReference "swift-uuidv7" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mhayes853/swift-uuidv7";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.4.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -790,6 +802,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
 			productName = SwiftSoup;
+		};
+		D48AB7412F20966800184122 /* UUIDV7 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D48AB7402F20966800184122 /* XCRemoteSwiftPackageReference "swift-uuidv7" */;
+			productName = UUIDV7;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

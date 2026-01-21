@@ -9,6 +9,7 @@ import SQLiteData
 import GRDB
 import OSLog
 import Foundation
+import UUIDV7
 
 #if os(iOS)
 import UIKit
@@ -214,7 +215,7 @@ struct PreparationTime: Codable, Hashable, Equatable, Identifiable  {
 }
 
 struct NutritionInformation: Codable, Hashable, Equatable, Identifiable {
-    var id: String = UUID().uuidString
+    var id: String = UUIDV7().uuidString
     var servingSize: String? = nil
     var calories: Double? = nil
     var protein: Double? = nil // grams
@@ -458,18 +459,18 @@ func appDatabase() throws -> any DatabaseWriter {
         logger.info("Running 'Create initial tables' migration")
 
         try db.create(table: "course") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             
             t.column("name", .text)
         }
         
         try db.create(table: "category") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
         }
         
         try db.create(table: "recipe") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text).notNull()
             t.column("createdDate", .datetime)
             t.column("lastModifiedDate", .datetime)
@@ -494,24 +495,24 @@ func appDatabase() throws -> any DatabaseWriter {
         }
         
         try db.create(table: "recipeCategory") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
         }
         
         try db.create(table: "tag") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
         }
         
         try db.create(table: "recipeTag") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("tagId", .text).notNull().indexed().references("tag", onDelete: .cascade)
         }
         
         try db.create(table: "shoppingList") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUID().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
             t.column("isFreeform", .boolean)
             t.column("contentsForList", .jsonText)
@@ -528,7 +529,7 @@ func appDatabase() throws -> any DatabaseWriter {
             //, "Quick", "Vegetarian",  "Beverage"   // <- considered and could do; skipping as demo recieps have nothing for these categories
         ]
         for categoryName in defaultCategories {
-            let category = Category(id: UUID().uuidString, name: categoryName)
+            let category = Category(id: UUIDV7().uuidString, name: categoryName)
             try Category.insert { category }.execute(db)
         }
         
@@ -538,12 +539,12 @@ func appDatabase() throws -> any DatabaseWriter {
             "Side Dish", "Bread", "Sauce"
         ]
         for courseName in defaultCourses {
-            let course = Course(id: UUID().uuidString, name: courseName)
+            let course = Course(id: UUIDV7().uuidString, name: courseName)
             try Course.insert { course }.execute(db)
         }
         
         // Add one shopping list (freeform with example format) to database
-        let shoppingList = ShoppingList(id: UUID().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
+        let shoppingList = ShoppingList(id: UUIDV7().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
         try ShoppingList.insert { shoppingList }.execute(db)
     }
     

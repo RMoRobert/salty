@@ -9,6 +9,7 @@ import Foundation
 import SQLiteData
 import UniformTypeIdentifiers
 import CoreTransferable
+import UUIDV7
 
 extension UTType {
     static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe", conformingTo:  .json)
@@ -395,7 +396,7 @@ extension SaltyRecipeExport {
     /// - Returns: Recipe object with matching data from the SaltyRecipeExport
     func convertToRecipe() -> Recipe {
         let recipe = Recipe(
-            id: UUID().uuidString, // Generate new ID for import
+            id: UUIDV7().uuidString, // Generate new ID for import
             name: name,
             createdDate: createdDate ?? Date(),
             lastModifiedDate: lastModifiedDate ?? Date(),

@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SQLiteData
 import UniformTypeIdentifiers
+import UUIDV7
 #if os(macOS)
 import WebKit
 import AppKit
@@ -2073,7 +2074,7 @@ class RecipeNavigationSplitViewModel {
     // MARK: - Public Methods
     func addNewRecipe() {
         let newRecipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "New Recipe",
             createdDate: Date(),
             lastModifiedDate: Date(),
@@ -2725,7 +2726,7 @@ class RecipeNavigationSplitViewModel {
                 if existingRelationship == nil {
                     // Create relationship only if it doesn't already exist
                     let recipeCategory = RecipeCategory(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         recipeId: recipeId,
                         categoryId: categoryId
                     )
@@ -2752,7 +2753,7 @@ class RecipeNavigationSplitViewModel {
                 if existingRelationship == nil {
                     // Create relationship only if it doesn't already exist
                     let recipeTag = RecipeTag(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         recipeId: recipeId,
                         tagId: tagId
                     )

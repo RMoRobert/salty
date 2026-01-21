@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import SQLiteData
+import UUIDV7
 
 @MainActor
 class LibraryCategoriesEditViewModel: ObservableObject {
@@ -130,7 +131,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             }
             
             // Create the new category
-            let newCategory = Category(id: UUID().uuidString, name: trimmedName)
+            let newCategory = Category(id: UUIDV7().uuidString, name: trimmedName)
             try database.write { db in
                 try Category.insert {
                     newCategory

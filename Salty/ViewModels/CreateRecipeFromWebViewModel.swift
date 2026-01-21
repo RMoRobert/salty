@@ -7,6 +7,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import UUIDV7
 
 @Observable
 @MainActor
@@ -70,7 +71,7 @@ class CreateRecipeFromWebViewModel {
     // MARK: - Initialization
     init() {
         self.recipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "",
             createdDate: Date(),
             lastModifiedDate: Date()
@@ -120,7 +121,7 @@ class CreateRecipeFromWebViewModel {
     
     func resetRecipe() {
         recipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "",
             createdDate: Date(),
             lastModifiedDate: Date()

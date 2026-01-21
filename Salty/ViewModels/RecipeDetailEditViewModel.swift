@@ -8,6 +8,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import UUIDV7
 
 @Observable
 @MainActor
@@ -137,7 +138,7 @@ class RecipeDetailEditViewModel {
                     // Add new category relationships
                     for categoryId in selectedCategoryIDs {
                         let recipeCategory = RecipeCategory(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             recipeId: recipe.id,
                             categoryId: categoryId
                         )
@@ -179,7 +180,7 @@ class RecipeDetailEditViewModel {
                 tagToUse = existing
             } else {
                 // Create new tag
-                tagToUse = Tag(id: UUID().uuidString, name: trimmedName)
+                tagToUse = Tag(id: UUIDV7().uuidString, name: trimmedName)
                 try database.write { db in
                     try Tag.insert{ tagToUse }.execute(db)
                 }
@@ -194,7 +195,7 @@ class RecipeDetailEditViewModel {
             
             if existingRecipeTag == nil {
                 // Add tag to recipe
-                let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagToUse.id)
+                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagToUse.id)
                 try database.write { db in
                     try RecipeTag.insert{ recipeTag }.execute(db)
                 }

@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import SQLiteData
+import UUIDV7
 
 @MainActor
 @Observable
@@ -127,7 +128,7 @@ class LibraryTagsEditViewModel {
             }
             
             // Create the new tag
-            let newTag = Tag(id: UUID().uuidString, name: trimmedName)
+            let newTag = Tag(id: UUIDV7().uuidString, name: trimmedName)
             try database.write { db in
                 try Tag.insert(newTag).execute(db)
             }

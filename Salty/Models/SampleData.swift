@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UUIDV7
 
 // MARK: - Shared Sample Data
 
@@ -34,7 +35,7 @@ struct SampleData {
     static let sampleRecipes = [
         // Main sample recipe
         Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "My Recipe",
             createdDate: Date(timeIntervalSinceNow: -60*24*30),
             lastModifiedDate: Date(),
@@ -81,7 +82,7 @@ struct SampleData {
         
         // Minimal sample recipe
         Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "Simple Recipe",
             source: "Preview Kitchen",
             introduction: "A simple recipe for preview purposes",
@@ -90,7 +91,7 @@ struct SampleData {
         
         // Complex sample recipe
         Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "Complex Recipe with Long Name That Might Wrap to Multiple Lines",
             createdDate: Date(),
             lastModifiedDate: Date(),
@@ -140,23 +141,23 @@ struct SampleData {
     // MARK: - Sample Categories
     
     static let sampleCategories = [
-        Category(id: UUID().uuidString, name: "Breakfast"),
-        Category(id: UUID().uuidString, name: "Quick"),
-        Category(id: UUID().uuidString, name: "Vegetarian"),
-        Category(id: UUID().uuidString, name: "Vegan"),
-        Category(id: UUID().uuidString, name: "Beverage"),
-        Category(id: UUID().uuidString, name: "Burger"),
-        Category(id: UUID().uuidString, name: "Soup"),
-        Category(id: UUID().uuidString, name: "Pasta"),
-        Category(id: UUID().uuidString, name: "Gluten-Free"),
-        Category(id: UUID().uuidString, name: "Dairy-Free"),
-        Category(id: UUID().uuidString, name: "Low-Carb"),
-        Category(id: UUID().uuidString, name: "Slow Cooker"),
-        Category(id: UUID().uuidString, name: "Instant Pot"),
-        Category(id: UUID().uuidString, name: "No-Cook"),
-        Category(id: UUID().uuidString, name: "Kid-Friendly"),
-        Category(id: UUID().uuidString, name: "Holiday"),
-        Category(id: UUID().uuidString, name: "Comfort Food")
+        Category(id: UUIDV7().uuidString, name: "Breakfast"),
+        Category(id: UUIDV7().uuidString, name: "Quick"),
+        Category(id: UUIDV7().uuidString, name: "Vegetarian"),
+        Category(id: UUIDV7().uuidString, name: "Vegan"),
+        Category(id: UUIDV7().uuidString, name: "Beverage"),
+        Category(id: UUIDV7().uuidString, name: "Burger"),
+        Category(id: UUIDV7().uuidString, name: "Soup"),
+        Category(id: UUIDV7().uuidString, name: "Pasta"),
+        Category(id: UUIDV7().uuidString, name: "Gluten-Free"),
+        Category(id: UUIDV7().uuidString, name: "Dairy-Free"),
+        Category(id: UUIDV7().uuidString, name: "Low-Carb"),
+        Category(id: UUIDV7().uuidString, name: "Slow Cooker"),
+        Category(id: UUIDV7().uuidString, name: "Instant Pot"),
+        Category(id: UUIDV7().uuidString, name: "No-Cook"),
+        Category(id: UUIDV7().uuidString, name: "Kid-Friendly"),
+        Category(id: UUIDV7().uuidString, name: "Holiday"),
+        Category(id: UUIDV7().uuidString, name: "Comfort Food")
     ]
     
     // MARK: - Sample Tags
