@@ -8,6 +8,15 @@
 import SwiftUI
 import SQLiteData
 
+/// Returns the heading text with a trailing colon on macOS (platform convention) and unchanged on iOS.
+private func platformSpecificHeadingName(_ text: String) -> String {
+    #if os(macOS)
+    return text + ":"
+    #else
+    return text
+    #endif
+}
+
 struct SettingsView: View {
     @Dependency(\.defaultDatabase) private var database
     @State private var diagnosticsInfo: [String: Any] = [:]
@@ -19,6 +28,9 @@ struct SettingsView: View {
             }
             Tab("Database", systemImage: "externaldrive") {
                 DatabaseSettingsView(diagnosticsInfo: $diagnosticsInfo)
+            }
+            Tab("Server", systemImage: "globe") {
+                ServerSettingsView()
             }
             Tab("Advanced", systemImage: "gearshape.2") {
                 AdvancedSettingsView()
@@ -69,14 +81,16 @@ struct DatabaseSettingsView: View {
                 }
                 #if os(macOS)
                 .buttonStyle(.link)
+                #else
+                .controlSize(.small)
                 #endif
             } header: {
-                Text("Database Location")
-                    #if os(macOS)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .padding(.top, 8)
-                    #endif
+                Text(platformSpecificHeadingName("Database Location"))
+                     #if os(macOS)
+                     .font(.headline)
+                     .fontWeight(.bold)
+                     .padding(.top, 8)
+                     #endif
             }
             
             Section {
@@ -101,7 +115,7 @@ struct DatabaseSettingsView: View {
                     Text("Show Diagnostics")
                 }
             } header: {
-                Text("Database Diagnostics")
+                Text(platformSpecificHeadingName("Database Diagnostics"))
                     #if os(macOS)
                     .font(.headline)
                     .fontWeight(.bold)
@@ -130,6 +144,209 @@ struct DatabaseSettingsView: View {
         print("Reset database location to default")
         // Refresh diagnostics after reset
         diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
+    }
+}
+
+struct ServerSettingsView: View {
+    @AppStorage("serverUse") private var serverUse = false
+    @AppStorage("serverUrl") private var serverUrl: String = ""
+    @AppStorage("savePasswordInKeychain") private var savePasswordInKeychain = false
+    @StateObject private var syncService = SaltySyncService.shared
+    @State private var showingSyncAlert = false
+    @State private var syncAlertMessage = ""
+    @State private var syncAlertIsError = false
+    @State private var password: String = ""
+    @State private var hasLoadedPassword = false
+    
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable sync with Salty Server", isOn: $serverUse)
+                    .onChange(of: serverUse) { oldValue, newValue in
+                        if newValue && !hasLoadedPassword {
+                            loadPasswordIfEnabled()
+                        } else if !newValue {
+                            // Clear password from memory when sync is disabled
+                            password = ""
+                        }
+                    }
+                
+                TextField(platformSpecificHeadingName("Server URL"), text: $serverUrl)
+                    .disabled(!serverUse)
+                    .textContentType(.URL)
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    #endif
+                
+                Text(verbatim: "Example: https://sever.example.com:8080")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                TextField(platformSpecificHeadingName("Username"), text: $syncService.serverUsername)
+                    .disabled(!serverUse)
+                
+                SecureField(platformSpecificHeadingName("Password"), text: $password)
+                    .disabled(!serverUse)
+                    .onChange(of: password) { oldValue, newValue in
+                        // Only save to Keychain if sync is enabled and user wants to save it
+                        if serverUse && savePasswordInKeychain {
+                            syncService.serverPassword = newValue
+                        }
+                    }                
+                if serverUse {
+                    Toggle("Save password securely in Keychain", isOn: $savePasswordInKeychain)
+                        .onChange(of: savePasswordInKeychain) { oldValue, newValue in
+                            if newValue && !password.isEmpty {
+                                // Save current password to Keychain
+                                syncService.serverPassword = password
+                            } else if !newValue {
+                                // Remove from Keychain (but keep in memory for current session)
+                                syncService.serverPassword = ""
+                            }
+                        }
+                    
+                    Text("If not saved, you will need to enter your password on every sync.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text(platformSpecificHeadingName("Server Configuration"))
+                     #if os(macOS)
+                     .font(.headline)
+                     .fontWeight(.bold)
+                     .padding(.top, 8)
+                     #endif
+            }
+            
+            Section {
+                Button {
+                    Task {
+                        // Always use the current UI credentials for sync (token for background tasks only -- not yet implemented)
+                        // Clear any existing token to force re-authentication with current UI values
+                        syncService.logout()
+                        // Set password in sync service (will be used for authentication)
+                        syncService.serverPassword = password
+                        await performSync()
+                        // Clear password from sync service if not saving to Keychain
+                        if !savePasswordInKeychain {
+                            syncService.serverPassword = ""
+                        }
+                    }
+                } label: {
+                    HStack {
+                        if syncService.isSyncing {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Syncing...")
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Sync Now")
+                        }
+                    }
+                }
+                .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || password.isEmpty || syncService.serverUsername.isEmpty)
+                
+                Button {
+                    syncService.logout()
+                    syncAlertIsError = false
+                    syncAlertMessage = "Login token cleared. Next sync will re-authenticate with the current credentials."
+                    showingSyncAlert = true
+                } label: {
+                        Text("Clear Saved Token")
+                }
+                #if os(macOS)
+                .buttonStyle(.link)
+                #endif
+                .controlSize(.small)
+                .disabled(syncService.isSyncing)
+                
+                if syncService.isSyncing {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(syncService.syncProgress.currentStep)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(syncService.syncProgress.summary)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                if let lastSync = syncService.lastSyncDate {
+                    HStack {
+                        Text("Last synced:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(lastSync, style: .relative)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                if let error = syncService.lastSyncError {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+            } header: {
+                Text(platformSpecificHeadingName("Sync"))
+                    #if os(macOS)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .padding(.top, 4)
+                    #endif
+            }
+            
+            Section {
+                Text("Compares your local recipes with the server and syncs changes in both directions. The most recently modified version wins in case of conflicts. Requires self-hosted (or other) Salty Server instance")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text(platformSpecificHeadingName("How Sync Works"))
+            }
+        }
+        .alert(syncAlertIsError ? "Sync Failed" : "Sync Complete", isPresented: $showingSyncAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(syncAlertMessage)
+        }
+        .onAppear {
+            if serverUse && !hasLoadedPassword {
+                loadPasswordIfEnabled()
+            }
+        }
+    }
+    
+    private func loadPasswordIfEnabled() {
+        // Only load from Keychain if sync is enabled and user wants to save password
+        if serverUse && savePasswordInKeychain {
+            password = syncService.serverPassword
+            hasLoadedPassword = true
+        } else {
+            // Don't load from Keychain - user will enter password manually
+            password = ""
+            hasLoadedPassword = true
+        }
+    }
+    
+    private func performSync() async {
+        do {
+            try await syncService.syncNow()
+            syncAlertIsError = false
+            syncAlertMessage = "Successfully synced with server.\n\(syncService.syncProgress.summary)"
+            showingSyncAlert = true
+        } catch {
+            syncAlertIsError = true
+            syncAlertMessage = error.localizedDescription
+            showingSyncAlert = true
+        }
     }
 }
 
@@ -201,32 +418,21 @@ struct GeneralSettingsView: View {
                     Text("Summary (Default)").tag(RecipeListViewStyle.summary)
                     Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
                 } label: {
-                    #if os(macOS)
-                    Text("Style:")
+                    Text(platformSpecificHeadingName("Style"))
                         .accessibilityLabel("Recipe List View Style")
-                    #else
-                    Text("Style")
-                        .accessibilityLabel("Recipe List View Style")
-                    #endif
                 }
             } header: {
-                #if os(macOS)
-                    Text("Recipe List View Style:")
-                #else
-                    Text("Recipe List View Style")
-                #endif
+                Text(platformSpecificHeadingName("Recipe List View Style"))
             }
             Section {
                 Toggle("Show Categories", isOn: showCategoriesBinding)
                 Toggle("Show Courses", isOn: showCoursesBinding)
                 Toggle("Show Tags", isOn: showTagsBinding)
             } header: {
-                #if os(macOS)
-                    Text("Sidebar Items:")
-                        .padding(.top)
-                #else
-                    Text("Sidebar Items")
-                #endif
+                Text(platformSpecificHeadingName("Sidebar Items"))
+                    #if os(macOS)
+                    .padding(.top)
+                    #endif
             } footer: {
                 Text("At least one sidebar item must be enabled.")
                     .font(.caption)
@@ -235,12 +441,10 @@ struct GeneralSettingsView: View {
                 Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
                 Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
             } header: {
-                #if os(macOS)
-                    Text("View Options:")
-                        .padding(.top)
-                #else
-                    Text("View Options")
-                #endif
+                Text(platformSpecificHeadingName("View Options"))
+                    #if os(macOS)
+                    .padding(.top)
+                    #endif
             }
         }
     }
@@ -282,7 +486,7 @@ struct AdvancedSettingsView: View {
                         .foregroundColor(.secondary)
                 }
             } header: {
-                Text("Database Backups")
+                Text(platformSpecificHeadingName("Database Backups"))
                     #if os(macOS)
                     .font(.headline)
                     .fontWeight(.bold)
@@ -303,7 +507,7 @@ struct AdvancedSettingsView: View {
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
-                Text("Image Cleanup")
+                Text(platformSpecificHeadingName("Image Cleanup"))
                     #if os(macOS)
                     .font(.headline)
                     .fontWeight(.bold)

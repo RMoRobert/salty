@@ -95,6 +95,9 @@ class RecipeImageManager {
             return nil
         }
         
+        // Delete any existing images for this recipe (handles extension changes)
+        deleteAllImages(for: recipeId)
+        
         // Determine file extension from image data
         let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
         let filename = "\(recipeId).\(fileExtension)"
@@ -102,6 +105,7 @@ class RecipeImageManager {
         
         do {
             try imageData.write(to: fileURL)
+            logger.debug("Saved image '\(filename)' (\(imageData.count) bytes)")
             let thumbnailData = generateThumbnail(from: imageData, size: CGSize(width: 300, height: 300))
             
             // If thumbnail generation fails, create a blank thumbnail or return nil
@@ -118,12 +122,38 @@ class RecipeImageManager {
         }
     }
     
+    /// Deletes all image files for a given recipe ID (any filename starting with "recipeId.")
+    private func deleteAllImages(for recipeId: String) {
+        let prefix = "\(recipeId)."
+        guard let contents = try? FileManager.default.contentsOfDirectory(at: imagesDirectory, includingPropertiesForKeys: nil) else { return }
+        
+        for fileURL in contents where fileURL.isFileURL {
+            let filename = fileURL.lastPathComponent
+            guard filename.hasPrefix(prefix) else { continue }
+            do {
+                try FileManager.default.removeItem(at: fileURL)
+                logger.debug("Deleted old image: \(filename)")
+            } catch {
+                logger.warning("Could not delete \(filename): \(error.localizedDescription)")
+            }
+        }
+    }
+    
     func loadImage(filename: String) -> Data? {
         let fileURL = imagesDirectory.appending(component: filename)
+        let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
+        
+        if !fileExists {
+            logger.warning("Image file does not exist: \(fileURL.path)")
+            return nil
+        }
+        
         do {
-            return try Data(contentsOf: fileURL)
+            let data = try Data(contentsOf: fileURL)
+            logger.debug("Loaded image \(filename): \(data.count) bytes from \(fileURL.path)")
+            return data
         } catch {
-            logger.debug("Could not load image \(filename): \(error)")
+            logger.error("Could not load image \(filename) from \(fileURL.path): \(error)")
             return nil
         }
     }

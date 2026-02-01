@@ -131,6 +131,7 @@ struct NutritionEditView: View {
             #endif
         }
     }
+    
 
     @ViewBuilder
     private var nutritionFormContent: some View {

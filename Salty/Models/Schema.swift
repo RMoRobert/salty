@@ -128,6 +128,7 @@ extension Recipe {
             if let result = RecipeImageManager.shared.saveImage(imageData, for: id) {
                 self.imageFilename = result.filename
                 self.imageThumbnailData = result.thumbnailData
+                self.lastModifiedDate = Date() // Ensure sync detects image changes
             }
         } else {
             // Remove existing image
@@ -136,6 +137,7 @@ extension Recipe {
             }
             self.imageFilename = nil
             self.imageThumbnailData = nil
+            self.lastModifiedDate = Date() // Ensure sync detects image removal
         }
     }
     
@@ -146,6 +148,7 @@ extension Recipe {
         }
         self.imageFilename = nil
         self.imageThumbnailData = nil
+        self.lastModifiedDate = Date() // Ensure sync detects image removal
     }
 }
 
@@ -182,6 +185,7 @@ struct Variation: Codable, Hashable, Equatable, Identifiable {
 struct Course: Codable, Identifiable, Equatable, Hashable {
     var id: String
     var name: String
+    var lastModifiedDate: Date?
 }
 //
 //extension Course: FetchableRecord, PersistableRecord {
@@ -240,6 +244,7 @@ struct NutritionInformation: Codable, Hashable, Equatable, Identifiable {
 struct Category: Hashable, Identifiable, Codable, Equatable {
     var id: String
     var name: String
+    var lastModifiedDate: Date?
 }
 
 //extension Category: FetchableRecord, PersistableRecord  {
@@ -259,6 +264,7 @@ struct Category: Hashable, Identifiable, Codable, Equatable {
 struct Tag: Hashable, Identifiable, Codable, Equatable, TableRecord {
     var id: String
     var name: String
+    var lastModifiedDate: Date?
 }
 
 //extension Tag: FetchableRecord, PersistableRecord  {
@@ -460,13 +466,16 @@ func appDatabase() throws -> any DatabaseWriter {
 
         try db.create(table: "course") { t in
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
-            
             t.column("name", .text)
+            // Added in later migration, here for reference:
+            //t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "category") { t in
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
+            // Added in later migration, here for reference:
+            //t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "recipe") { t in
@@ -503,6 +512,8 @@ func appDatabase() throws -> any DatabaseWriter {
         try db.create(table: "tag") { t in
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
+            // Added in later migration, here for reference:
+            //t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "recipeTag") { t in
@@ -553,6 +564,19 @@ func appDatabase() throws -> any DatabaseWriter {
         
         try db.alter(table: "recipe") { t in
             t.add(column: "variations", .jsonText)
+        }
+    }
+
+    migrator.registerMigration("0004: Add 'lastModifiedDate' column to 'category', 'course', and 'tag' tables") { db in
+        logger.info("Running '0004: Add lastModifiedDate column to category, course, and tag tables' migration")        
+        try db.alter(table: "category") { t in
+            t.add(column: "lastModifiedDate", .datetime)
+        }        
+        try db.alter(table: "course") { t in
+            t.add(column: "lastModifiedDate", .datetime)
+        }        
+        try db.alter(table: "tag") { t in
+            t.add(column: "lastModifiedDate", .datetime)
         }
     }
     
