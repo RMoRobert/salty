@@ -157,10 +157,12 @@ struct ServerSettingsView: View {
     @State private var syncAlertIsError = false
     @State private var password: String = ""
     @State private var hasLoadedPassword = false
+    @State private var showingSaltyServerHelpAlert = false
     
     var body: some View {
         Form {
             Section {
+                let serverToggle =
                 Toggle("Enable sync with Salty Server", isOn: $serverUse)
                     .onChange(of: serverUse) { oldValue, newValue in
                         if newValue && !hasLoadedPassword {
@@ -170,19 +172,41 @@ struct ServerSettingsView: View {
                             password = ""
                         }
                     }
+                let helpButton = Button("What's this?", systemImage:  "questionmark.circle") {
+                    showingSaltyServerHelpAlert = true
+                }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                HStack {
+#if os(macOS)
+                    serverToggle
+                        .padding(.leading, 1)
+                    helpButton
+#else
+                    helpButton
+                    serverToggle
+#endif
+                }
                 
                 TextField(platformSpecificHeadingName("Server URL"), text: $serverUrl)
                     .disabled(!serverUse)
                     .textContentType(.URL)
-                    #if os(iOS)
+#if os(iOS)
                     .keyboardType(.URL)
                     .autocapitalization(.none)
-                    #endif
-                
-                Text(verbatim: "Example: https://sever.example.com:8080")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+#endif
+                VStack(alignment: .leading) {
+                    if (!serverUrl.isEmpty && !serverUrl.starts(with: "https")) {
+                        Text("WARNING: It is recommended to use HTTPS to better secure your login credentials.")
+                            .font(.caption)
+                            .foregroundStyle(Color.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(verbatim: "Example: https://sever.example.com:8080")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 
                 TextField(platformSpecificHeadingName("Username"), text: $syncService.serverUsername)
                     .disabled(!serverUse)
@@ -217,7 +241,8 @@ struct ServerSettingsView: View {
                      #if os(macOS)
                      .font(.headline)
                      .fontWeight(.bold)
-                     .padding(.top, 8)
+                     .padding(.top, 6)
+                     .padding(.bottom, 4)
                      #endif
             }
             
@@ -304,7 +329,7 @@ struct ServerSettingsView: View {
             }
             
             Section {
-                Text("Compares your local recipes with the server and syncs changes in both directions. The most recently modified version wins in case of conflicts. Requires self-hosted (or other) Salty Server instance")
+                Text("Compares your local recipes with the server and syncs changes in both directions. The most recently modified version wins in case of conflicts.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -321,6 +346,11 @@ struct ServerSettingsView: View {
             if serverUse && !hasLoadedPassword {
                 loadPasswordIfEnabled()
             }
+        }
+        .alert("What is Salty Server?", isPresented: $showingSaltyServerHelpAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Salty Server is an optional, self-hosted sync service you can add to sync your database among multiple devices (as an alternative to moving or copying the database file yourself or relying on third-party services). For details, see: https://github.com/rmorobert/saltyserver")
         }
     }
     
