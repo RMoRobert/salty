@@ -114,6 +114,15 @@ struct SaltyApp: App {
         }
 
         #if os(macOS)
+        // Standalone recipe viewer (narrow split views → open full detail in its own window)
+        WindowGroup(id: "recipe-detail-window", for: String.self) { $recipeId in
+            NavigationStack {
+                RecipeDetailWindowView(recipeId: $recipeId)
+            }
+            .frame(minWidth: 520, idealWidth: 720, minHeight: 420, idealHeight: 680)
+        }
+        .defaultSize(width: 720, height: 680)
+
         Settings {
             SettingsView()
         }

@@ -136,6 +136,12 @@ struct RecipeNavigationSplitView: View {
         )
     }
     
+    #if os(macOS)
+    private func openRecipeInNewWindow(recipeId: String) {
+        openWindow(id: "recipe-detail-window", value: recipeId)
+    }
+    #endif
+    
     private func importSampleRecipes() {
         Task {
             await viewModel.importSampleRecipes()
@@ -242,6 +248,11 @@ struct RecipeNavigationSplitView: View {
                             }
                             .id(recipe.id)
                             .draggable(recipe.id)
+                            #if os(macOS)
+                            .onTapGesture(count: 2) {
+                                openRecipeInNewWindow(recipeId: recipe.id)
+                            }
+                            #endif
                             .contextMenu {
                                 contextMenuForRecipe(recipe)
                             }
@@ -681,6 +692,11 @@ struct RecipeNavigationSplitView: View {
     
     @ViewBuilder
     private func contextMenuForRecipe(_ recipe: Recipe) -> some View {
+        #if os(macOS)
+        Button("Open in New Window", systemImage: "macwindow") {
+            openRecipeInNewWindow(recipeId: recipe.id)
+        }
+        #endif
         Button("Edit", systemImage: "pencil") {
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true

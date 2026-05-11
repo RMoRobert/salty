@@ -92,6 +92,14 @@ class RecipeDetailViewModel {
         )
     }
     
+    init(recipeId: String) {
+        self.recipeId = recipeId
+        self._recipe = FetchOne(
+            wrappedValue: nil as Recipe?,
+            #sql("SELECT \(Recipe.columns) FROM \(Recipe.self) WHERE \(Recipe.id) = \(bind: recipeId)")
+        )
+    }
+    
     func showFullImage() {
         showingFullImage = true
     }
