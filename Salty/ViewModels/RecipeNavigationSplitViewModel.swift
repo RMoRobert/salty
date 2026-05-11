@@ -182,7 +182,7 @@ class RecipeNavigationSplitViewModel {
 //            do {
 //                let recipeIds = try database.read { db in
 //                    try RecipeCategory
-//                        .where { $0.categoryId == category.id }
+//                        .where { $0.categoryId.eq(category.id) }
 //                        .fetchAll(db)
 //                        .map { $0.recipeId }
 //                }
@@ -291,52 +291,52 @@ class RecipeNavigationSplitViewModel {
                         
                         if hasName && hasIntroduction && hasIngredients && hasNotesOrVariations {
                             // All four selected (with notes/variations)
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName && hasIntroduction && hasIngredients {
                             // Name, introduction, and ingredients
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName && hasIntroduction && hasNotesOrVariations {
                             // Name, introduction, and notes/variations
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName && hasIngredients && hasNotesOrVariations {
                             // Name, ingredients, and notes/variations
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasIntroduction && hasIngredients && hasNotesOrVariations {
                             // Introduction, ingredients, and notes/variations
-                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName && hasIntroduction {
                             // Name and introduction
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName && hasIngredients {
                             // Name and ingredients
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName && hasNotesOrVariations {
                             // Name and notes/variations
-                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasIntroduction && hasIngredients {
                             // Introduction and ingredients
-                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasIntroduction && hasNotesOrVariations {
                             // Introduction and notes/variations
-                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasIngredients && hasNotesOrVariations {
                             // Ingredients and notes/variations
-                            (#sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else if hasName {
                             // Only name selected
-                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite.eq(true)
                         } else if hasIntroduction {
                             // Only introduction selected
-                            #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                            #sql("\(recipe.introduction) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite.eq(true)
                         } else if hasIngredients {
                             // Only ingredients selected
-                            #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                            #sql("\(recipe.ingredients) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite.eq(true)
                         } else if hasNotesOrVariations {
                             // Only notes/variations selected - search both
-                            (#sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite == true
+                            (#sql("\(recipe.notes) COLLATE NOCASE LIKE \(bind: searchPattern)") || #sql("\(recipe.variations) COLLATE NOCASE LIKE \(bind: searchPattern)")) && recipe.isFavorite.eq(true)
                         } else {
                             // Fallback to name
-                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite == true
+                            #sql("\(recipe.name) COLLATE NOCASE LIKE \(bind: searchPattern)") && recipe.isFavorite.eq(true)
                         }
                     }
                     .order {
@@ -466,7 +466,7 @@ class RecipeNavigationSplitViewModel {
             try await $recipes.load(
                 Recipe
                     .where {
-                        $0.isFavorite == true
+                        $0.isFavorite.eq(true)
                     }
                     .order {
                         switch (sortOrder, sortDirection) {
@@ -2125,7 +2125,7 @@ class RecipeNavigationSplitViewModel {
             let imageFilenames = try database.read { db in
                 try Recipe
                     .select { $0.imageFilename }
-                    .where { $0.id == id }
+                    .where { $0.id.eq(id) }
                     .fetchAll(db)
             }
             
@@ -2139,7 +2139,7 @@ class RecipeNavigationSplitViewModel {
             // Now delete the recipe from the database
             let _ = try database.write { db in
                 try Recipe
-                    .where { $0.id == id }
+                    .where { $0.id.eq(id) }
                     .delete()
                     .execute(db)
             }
@@ -2164,7 +2164,7 @@ class RecipeNavigationSplitViewModel {
         // If not found in filtered list (e.g., category removed when selected and Edit view open), fetch directly from database
         do {
             return try database.read { db in
-                try Recipe.where { $0.id == recipeId }.fetchOne(db)
+                try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db)
             }
         } catch {
             logger.error("Error fetching recipe for edit: \(error)")
@@ -2720,7 +2720,7 @@ class RecipeNavigationSplitViewModel {
             try database.write { db in
                 // Check if relationship already exists
                 let existingRelationship = try RecipeCategory
-                    .where { $0.recipeId == recipeId && $0.categoryId == categoryId }
+                    .where { $0.recipeId.eq(recipeId) && $0.categoryId.eq(categoryId) }
                     .fetchOne(db)
                 
                 if existingRelationship == nil {
@@ -2747,7 +2747,7 @@ class RecipeNavigationSplitViewModel {
             try database.write { db in
                 // Check if relationship already exists
                 let existingRelationship = try RecipeTag
-                    .where { $0.recipeId == recipeId && $0.tagId == tagId }
+                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tagId) }
                     .fetchOne(db)
                 
                 if existingRelationship == nil {

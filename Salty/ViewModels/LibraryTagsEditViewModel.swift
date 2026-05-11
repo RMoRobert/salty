@@ -117,7 +117,7 @@ class LibraryTagsEditViewModel {
             // Check if a tag with this name already exists (case-insensitive)
             let existingTag = try database.read { db in
                 try Tag
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
             
@@ -151,7 +151,7 @@ class LibraryTagsEditViewModel {
             // Check if a tag with this name already exists (case-insensitive)
             let existingTag = try database.read { db in
                 try Tag
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) && $0.id != tags[index].id }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(tags[index].id) }
                     .fetchOne(db)
             }
             

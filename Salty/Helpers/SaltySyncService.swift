@@ -355,7 +355,7 @@ class SaltySyncService: ObservableObject {
         for id in toDeleteLocally {
             try await database.write { db in
                 try Course
-                    .where { $0.id == id }
+                    .where { $0.id.eq(id) }
                     .delete()
                     .execute(db)
             }
@@ -456,7 +456,7 @@ class SaltySyncService: ObservableObject {
         for id in toDeleteLocally {
             try await database.write { db in
                 try Category
-                    .where { $0.id == id }
+                    .where { $0.id.eq(id) }
                     .delete()
                     .execute(db)
             }
@@ -557,7 +557,7 @@ class SaltySyncService: ObservableObject {
         for id in toDeleteLocally {
             try await database.write { db in
                 try Tag
-                    .where { $0.id == id }
+                    .where { $0.id.eq(id) }
                     .delete()
                     .execute(db)
             }
@@ -875,10 +875,10 @@ class SaltySyncService: ObservableObject {
         // Load category and tag IDs from junction tables
         let (categoryIds, tagIds) = try await database.read { db in
             let categories = try RecipeCategory
-                .where { $0.recipeId == recipe.id }
+                .where { $0.recipeId.eq(recipe.id) }
                 .fetchAll(db)
             let tags = try RecipeTag
-                .where { $0.recipeId == recipe.id }
+                .where { $0.recipeId.eq(recipe.id) }
                 .fetchAll(db)
             return (categories.map { $0.categoryId }, tags.map { $0.tagId })
         }
@@ -904,7 +904,7 @@ class SaltySyncService: ObservableObject {
         
         try await database.write { db in
             // Check if recipe already exists
-            let exists = try Recipe.where { $0.id == recipe.id }.fetchOne(db) != nil
+            let exists = try Recipe.where { $0.id.eq(recipe.id) }.fetchOne(db) != nil
             
             if exists {
                 try Recipe.update(recipe).execute(db)
@@ -916,8 +916,8 @@ class SaltySyncService: ObservableObject {
             
             // Update category relationships
             // First delete existing relationships for this recipe
-            let deletedCategories = try RecipeCategory
-                .where { $0.recipeId == recipe.id }
+            try RecipeCategory
+                .where { $0.recipeId.eq(recipe.id) }
                 .delete()
                 .execute(db)
             logger.debug("Deleted existing category relationships for recipe \(recipe.id)")
@@ -927,7 +927,7 @@ class SaltySyncService: ObservableObject {
                 logger.info("Inserting \(categoryIds.count) category relationships for \(recipe.name)")
                 for categoryId in categoryIds {
                     // Check if category exists locally
-                    let categoryExists = try Category.where { $0.id == categoryId }.fetchOne(db) != nil
+                    let categoryExists = try Category.where { $0.id.eq(categoryId) }.fetchOne(db) != nil
                     if !categoryExists {
                         logger.warning("Category \(categoryId) does not exist locally - skipping relationship")
                         continue
@@ -945,7 +945,7 @@ class SaltySyncService: ObservableObject {
             
             // Update tag relationships
             let deletedTags = try RecipeTag
-                .where { $0.recipeId == recipe.id }
+                .where { $0.recipeId.eq(recipe.id) }
                 .delete()
                 .execute(db)
             logger.debug("Deleted existing tag relationships for recipe \(recipe.id)")
@@ -955,7 +955,7 @@ class SaltySyncService: ObservableObject {
                 logger.info("Inserting \(tagIds.count) tag relationships for \(recipe.name)")
                 for tagId in tagIds {
                     // Check if tag exists locally
-                    let tagExists = try Tag.where { $0.id == tagId }.fetchOne(db) != nil
+                    let tagExists = try Tag.where { $0.id.eq(tagId) }.fetchOne(db) != nil
                     if !tagExists {
                         logger.warning("Tag \(tagId) does not exist locally - skipping relationship")
                         continue

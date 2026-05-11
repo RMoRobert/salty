@@ -117,7 +117,7 @@ struct CategoryEditView: View {
         do {
             let selectedIDs = try database.read { db in
                 try RecipeCategory
-                    .where { $0.recipeId == recipe.id }
+                    .where { $0.recipeId.eq(recipe.id) }
                     .fetchAll(db)
                     .map { $0.categoryId }
             }
@@ -134,7 +134,7 @@ struct CategoryEditView: View {
             // First check if the recipe exists in the database
             let recipeExists = try database.read { db in
                 try Recipe
-                    .where { $0.id == recipe.id }
+                    .where { $0.id.eq(recipe.id) }
                     .fetchOne(db) != nil
             }
             
@@ -145,7 +145,7 @@ struct CategoryEditView: View {
                     let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
                     for categoryId in categoriesToRemove {
                         try RecipeCategory
-                            .where { $0.recipeId == recipe.id && $0.categoryId == categoryId }
+                            .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(categoryId) }
                             .delete()
                             .execute(db)
                     }
@@ -175,7 +175,7 @@ struct CategoryEditView: View {
             // Check if a category with this name already exists (case-insensitive)
             let existingCategory = try database.read { db in
                 try Category
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
             

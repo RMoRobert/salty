@@ -67,7 +67,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             try database.write { db in
                 // Remove from recipe associations first
                 try RecipeCategory
-                    .where { $0.categoryId == categoryToDelete.id }
+                    .where { $0.categoryId.eq(categoryToDelete.id) }
                     .delete()
                     .execute(db)
                 
@@ -120,7 +120,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             // Check if a category with this name already exists (case-insensitive)
             let existingCategory = try database.read { db in
                 try Category
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
             
@@ -156,7 +156,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             // Check if a category with this name already exists (case-insensitive)
             let existingCategory = try database.read { db in
                 try Category
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) && $0.id != categories[index].id }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(categories[index].id) }
                     .fetchOne(db)
             }
             

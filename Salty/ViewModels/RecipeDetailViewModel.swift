@@ -64,7 +64,7 @@ class RecipeDetailViewModel {
         do {
             let recipeCategoryIds = try database.read { db in
                 try RecipeCategory
-                    .where { $0.recipeId == recipe.id }
+                    .where { $0.recipeId.eq(recipe.id) }
                     .fetchAll(db)
                     .map { $0.categoryId }
             }

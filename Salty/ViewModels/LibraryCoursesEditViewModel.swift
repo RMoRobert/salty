@@ -37,7 +37,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
                 // Update recipes that reference this course to have no course
                 // TODO: Is this needed or will DB take care of with cascade? 
                 let recipesToUpdate = try Recipe
-                    .where { $0.courseId == courseToDelete.id }
+                    .where { $0.courseId.eq(courseToDelete.id) }
                     .fetchAll(db)
                 
                 for var recipe in recipesToUpdate {
@@ -94,7 +94,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
             // Check if a course .cowith this name already exists (case-insensitive)
             let existingCourse = try database.read { db in
                 try Course
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
             
@@ -130,7 +130,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
             // Check if a course with this name already exists (case-insensitive)
             let existingCourse = try database.read { db in
                 try Course
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) && $0.id != courses[index].id }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(courses[index].id) }
                     .fetchOne(db)
             }
             

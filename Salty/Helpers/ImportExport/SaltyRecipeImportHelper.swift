@@ -60,7 +60,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             
                             for categoryName in uniqueCategories {
                                 // Find existing category or create new one
-                                var category = try Category.where { $0.name == categoryName }.fetchOne(db)
+                                var category = try Category.where { $0.name.eq(categoryName) }.fetchOne(db)
                                 if category == nil {
                                     category = Category(id: UUID().uuidString, name: categoryName)
                                     try Category.insert {
@@ -72,7 +72,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                                 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeCategory
-                                    .where { $0.recipeId == recipe.id && $0.categoryId == category.id }
+                                    .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(category.id) }
                                     .fetchOne(db)
                                 
                                 if existingRelationship == nil {
@@ -92,7 +92,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             
                             for tagName in uniqueTags {
                                 // Find existing tag or create new one
-                                var tag = try Tag.where { $0.name == tagName }.fetchOne(db)
+                                var tag = try Tag.where { $0.name.eq(tagName) }.fetchOne(db)
                                 if tag == nil {
                                     tag = Tag(id: UUID().uuidString, name: tagName)
                                     try Tag.insert{ tag! }.execute(db)
@@ -102,7 +102,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                                 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeTag
-                                    .where { $0.recipeId == recipe.id && $0.tagId == tag.id }
+                                    .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tag.id) }
                                     .fetchOne(db)
                                 
                                 if existingRelationship == nil {
@@ -116,7 +116,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                         // Set course if present
                         if let courseName = saltyRecipe.course, !courseName.isEmpty {
                             // Check for existing course or create new one
-                            var course = try Course.where { $0.name == courseName }.fetchOne(db)
+                            var course = try Course.where { $0.name.eq(courseName) }.fetchOne(db)
                             if course == nil {
                                 course = Course(id: UUID().uuidString, name: courseName)
                                 try Course.insert{ course! }.execute(db)

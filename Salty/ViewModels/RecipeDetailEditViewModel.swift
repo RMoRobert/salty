@@ -131,7 +131,7 @@ class RecipeDetailEditViewModel {
                 if !selectedCategoryIDs.isEmpty {
                     // Remove existing category relationships
                     try RecipeCategory
-                        .where { $0.recipeId == recipe.id }
+                        .where { $0.recipeId.eq(recipe.id) }
                         .delete()
                         .execute(db)
                     
@@ -171,7 +171,7 @@ class RecipeDetailEditViewModel {
             // Check if tag already exists
             let existingTag = try database.read { db in
                 try Tag
-                    .where { $0.name.collate(.nocase) == trimmedName.collate(.nocase) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
             
@@ -189,7 +189,7 @@ class RecipeDetailEditViewModel {
             // Check if recipe already has this tag
             let existingRecipeTag = try database.read { db in
                 try RecipeTag
-                    .where { $0.recipeId == recipe.id && $0.tagId == tagToUse.id }
+                    .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tagToUse.id) }
                     .fetchOne(db)
             }
             
@@ -210,7 +210,7 @@ class RecipeDetailEditViewModel {
             // Find the tag
             let tag = try database.read { db in
                 try Tag
-                    .where { $0.name.collate(.nocase) == tagName.collate(.nocase) }
+                    .where { $0.name.collate(.nocase).eq(tagName.collate(.nocase)) }
                     .fetchOne(db)
             }
             
@@ -222,7 +222,7 @@ class RecipeDetailEditViewModel {
             // Remove the recipe-tag association
             let _ = try database.write { db in
                 try RecipeTag
-                    .where { $0.recipeId == recipe.id && $0.tagId == tag.id }
+                    .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tag.id) }
                     .delete()
                     .execute(db)
             }
@@ -241,7 +241,7 @@ class RecipeDetailEditViewModel {
         do {
             if let refreshedRecipe = try database.read({ db in
                 try Recipe
-                    .where { $0.id == recipe.id }
+                    .where { $0.id.eq(recipe.id) }
                     .fetchOne(db)
             }) {
                 recipe = refreshedRecipe

@@ -74,7 +74,7 @@ struct DatabaseSettingsView: View {
                 Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
                     .font(.caption)
                     .padding(6)
-                    .cornerRadius(4)
+                    .textSelection(.enabled)
                 
                 Button("Reset to Default Location", role: .destructive) {
                     showingResetConfirmation = true

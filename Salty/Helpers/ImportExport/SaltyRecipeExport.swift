@@ -189,7 +189,7 @@ extension SaltyRecipeExport {
         if let courseId = recipe.courseId {
             courseName = try database.read { db in
                 try Course
-                    .where { $0.id == courseId }
+                    .where { $0.id.eq(courseId) }
                     .fetchOne(db)?.name
             }
         }
@@ -197,7 +197,7 @@ extension SaltyRecipeExport {
         // Fetch category names
         let categoryNames = try database.read { db in
             let recipeCategoryIds = try RecipeCategory
-                .where { $0.recipeId == recipe.id }
+                .where { $0.recipeId.eq(recipe.id) }
                 .fetchAll(db)
                 .map { $0.categoryId }
             
@@ -211,7 +211,7 @@ extension SaltyRecipeExport {
         // Fetch tag names
         let tagNames = try database.read { db in
             let recipeTagIds = try RecipeTag
-                .where { $0.recipeId == recipe.id }
+                .where { $0.recipeId.eq(recipe.id) }
                 .fetchAll(db)
                 .map { $0.tagId }
             

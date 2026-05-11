@@ -467,15 +467,13 @@ func appDatabase() throws -> any DatabaseWriter {
         try db.create(table: "course") { t in
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
-            // Added in later migration, here for reference:
-            //t.column("lastModifiedDate", .datetime)
+            t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "category") { t in
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
-            // Added in later migration, here for reference:
-            //t.column("lastModifiedDate", .datetime)
+            t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "recipe") { t in
@@ -512,8 +510,7 @@ func appDatabase() throws -> any DatabaseWriter {
         try db.create(table: "tag") { t in
             t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
             t.column("name", .text)
-            // Added in later migration, here for reference:
-            //t.column("lastModifiedDate", .datetime)
+            t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "recipeTag") { t in
@@ -568,15 +565,31 @@ func appDatabase() throws -> any DatabaseWriter {
     }
 
     migrator.registerMigration("0004: Add 'lastModifiedDate' column to 'category', 'course', and 'tag' tables") { db in
-        logger.info("Running '0004: Add lastModifiedDate column to category, course, and tag tables' migration")        
-        try db.alter(table: "category") { t in
-            t.add(column: "lastModifiedDate", .datetime)
-        }        
-        try db.alter(table: "course") { t in
-            t.add(column: "lastModifiedDate", .datetime)
-        }        
-        try db.alter(table: "tag") { t in
-            t.add(column: "lastModifiedDate", .datetime)
+        logger.info("Running '0004: Add lastModifiedDate column to category, course, and tag tables' migration")
+        // Idempotent: 0001 now creates these columns on new installs; older DBs may still need this.
+        func needsColumn(table: String) throws -> Bool {
+            // pragma_table_info expects a string literal table name (single quotes), not a double-quoted identifier.
+            let escaped = table.replacingOccurrences(of: "'", with: "''")
+            let count = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pragma_table_info('\(escaped)') WHERE name = 'lastModifiedDate'"
+            ) ?? 0
+            return count == 0
+        }
+        if try needsColumn(table: "category") {
+            try db.alter(table: "category") { t in
+                t.add(column: "lastModifiedDate", .datetime)
+            }
+        }
+        if try needsColumn(table: "course") {
+            try db.alter(table: "course") { t in
+                t.add(column: "lastModifiedDate", .datetime)
+            }
+        }
+        if try needsColumn(table: "tag") {
+            try db.alter(table: "tag") { t in
+                t.add(column: "lastModifiedDate", .datetime)
+            }
         }
     }
     

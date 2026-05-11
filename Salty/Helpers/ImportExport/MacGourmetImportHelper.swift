@@ -51,7 +51,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                             
                             for categoryName in uniqueCategories {
                                 // Find existing category or create new one
-                                var category = try Category.where { $0.name == categoryName }.fetchOne(db)
+                                var category = try Category.where { $0.name.eq(categoryName) }.fetchOne(db)
                                 
                                 if category == nil {
                                     category = Category(id: UUID().uuidString, name: categoryName)
@@ -64,7 +64,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                                 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeCategory
-                                    .where { $0.recipeId == recipe.id && $0.categoryId == category.id }
+                                    .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(category.id) }
                                     .fetchOne(db)
                                 
                                 if existingRelationship == nil {
@@ -80,7 +80,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                         // Set course if present
                         if let courseName = mgRecipe.courseName, !courseName.isEmpty, courseName != "--" {
                             // Check for existing course or create new one
-                            var course = try Course.where { $0.name == courseName }.fetchOne(db)
+                            var course = try Course.where { $0.name.eq(courseName) }.fetchOne(db)
                             if course == nil {
                                 course = Course(id: UUID().uuidString, name: courseName)
                                 try Course.insert { course! }.execute(db)
