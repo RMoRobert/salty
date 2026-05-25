@@ -321,35 +321,52 @@ private struct IngredientScalePopoverContent: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                TextField("Scale by:", value: $viewModel.ingredientScalePercent, format: .number.precision(.fractionLength(2)))
-                    .frame(width: 70)
-                Text("%")
+                Button {
+                    viewModel.isIngredientScalePopoverShowing = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                #if os(macOS)
+                .help("Close")
+                .keyboardShortcut(.escape, modifiers: [])
+                #endif
+                
+                Spacer(minLength: 0)
             }
-            .accessibilityElement(children: .combine)
             
-            Slider(value: $viewModel.ingredientScalePercent, in: 25...400)
+            HStack {
+                TextField("Scale by:", value: $viewModel.ingredientScalePercent,
+                          format: .percent.precision(.fractionLength(2))
+                )
+                    .frame(width: 80)
+            }
+            Slider(value: $viewModel.ingredientScalePercent, in: 0.25...2)
             
             HStack(spacing: 8) {
                 IngredientScalePresetButton(
                     title: "Half",
                     accessibilityLabel: "Half recipe",
-                    isSelected: viewModel.isIngredientScaleNear(50)
+                    isSelected: viewModel.isIngredientScaleNear(0.5)
                 ) {
-                    viewModel.ingredientScalePercent = 50
+                    viewModel.ingredientScalePercent = 0.5
                 }
                 IngredientScalePresetButton(
                     title: "Two-Thirds",
                     accessibilityLabel: "Two-thirds recipe",
-                    isSelected: viewModel.isIngredientScaleNear(66.67)
+                    isSelected: viewModel.isIngredientScaleNear(2.0 / 3.0)
                 ) {
-                    viewModel.ingredientScalePercent = 66.67
+                    viewModel.ingredientScalePercent = 2.0 / 3.0
                 }
                 IngredientScalePresetButton(
                     title: "Double",
                     accessibilityLabel: "Double recipe",
-                    isSelected: viewModel.isIngredientScaleNear(200)
+                    isSelected: viewModel.isIngredientScaleNear(2.0)
                 ) {
-                    viewModel.ingredientScalePercent = 200
+                    viewModel.ingredientScalePercent = 2.0
                 }
             }
             
@@ -360,7 +377,10 @@ private struct IngredientScalePopoverContent: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(!viewModel.isIngredientScaleActive)
-            
+            Spacer()
+            Text("Recipe will temporarily display with scaled measurements, or you can...")
+                .font(.caption)
+                .accessibilityLabel("Recipe will temporarily display with scaled measurements, or save as new recipe below.")
             Button("Save as New Recipe…") {
                 viewModel.saveAsScaledRecipe()
             }
@@ -368,6 +388,7 @@ private struct IngredientScalePopoverContent: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(!viewModel.isIngredientScaleActive || viewModel.isSavingScaledRecipe)
+            
             
             if viewModel.isSavingScaledRecipe {
                 ProgressView()

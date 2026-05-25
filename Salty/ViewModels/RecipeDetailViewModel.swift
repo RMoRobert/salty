@@ -21,8 +21,8 @@ class RecipeDetailViewModel {
     let recipeId: String
     var showingFullImage = false
     
-    /// Temporary ingredient scale for detail view only (100 = original recipe).
-    var ingredientScalePercent: Double = 100
+    /// Temporary ingredient scale for detail view only. Stored as a fraction for `.percent` formatting (1.0 = 100%, 2.0 = 200%).
+    var ingredientScalePercent = 1.0
     var isIngredientScalePopoverShowing = false
     var isSavingScaledRecipe = false
     var scaledRecipeSaveErrorMessage: String?
@@ -92,19 +92,22 @@ class RecipeDetailViewModel {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     
-    var ingredientScaleFactor: Double { ingredientScalePercent / 100 }
+    /// Multiplier applied to ingredient quantities (same as `ingredientScalePercent`).
+    var ingredientScaleFactor: Double { ingredientScalePercent }
     
     var isIngredientScaleActive: Bool {
-        abs(ingredientScalePercent - 100) > 0.001
+        abs(ingredientScalePercent - 1.0) > 0.001
     }
     
+    /// Display-only percent number for footnotes and saved recipe names (e.g. `50`, `200`).
     var ingredientScalePercentLabel: String {
+        let displayPercent = ingredientScalePercent * 100
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 2
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.string(from: NSNumber(value: ingredientScalePercent)) ?? "\(ingredientScalePercent)"
+        return formatter.string(from: NSNumber(value: displayPercent)) ?? "\(displayPercent)"
     }
     
     var ingredientScaleDirectionsFootnote: String {
@@ -116,11 +119,12 @@ class RecipeDetailViewModel {
     }
     
     func resetIngredientScale() {
-        ingredientScalePercent = 100
+        ingredientScalePercent = 1.0
     }
     
-    func isIngredientScaleNear(_ targetPercent: Double, tolerance: Double = 0.5) -> Bool {
-        abs(ingredientScalePercent - targetPercent) <= tolerance
+    /// - Parameter targetFactor: Scale as a fraction (e.g. `0.5` for half, `2.0` for double).
+    func isIngredientScaleNear(_ targetFactor: Double, tolerance: Double = 0.01) -> Bool {
+        abs(ingredientScalePercent - targetFactor) <= tolerance
     }
     
     func saveAsScaledRecipe() {
