@@ -252,16 +252,9 @@ private struct IngredientsSection: View {
     @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
     
-    private var ingredientsTitle: String {
-        if viewModel.isIngredientScaleActive {
-            return "Ingredients (\(viewModel.ingredientScalePercentLabel)%)"
-        }
-        return "Ingredients"
-    }
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(ingredientsTitle)
+            Text("Ingredients")
                 .modifier(TitleStyle())
             ForEach(recipe.ingredients.indices, id: \.self) { index in
                 let ingredient = recipe.ingredients[index]
@@ -296,6 +289,12 @@ private struct IngredientsSection: View {
                     .padding(.bottom, 4)
                 }
             }
+            if viewModel.isIngredientScaleActive {
+                Text("Scaled to \(viewModel.ingredientScalePercentLabel)%")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                    .font(.caption)
+            }
             Button("Scale…", systemImage: "slider.horizontal.3") {
                 viewModel.isIngredientScalePopoverShowing = true
             }
@@ -308,43 +307,89 @@ private struct IngredientsSection: View {
             .padding(.bottom, 4)
             .padding(.top, 16)
             .popover(isPresented: $viewModel.isIngredientScalePopoverShowing) {
-                VStack(spacing: 12) {
-                    HStack {
-                        TextField("Scale by:", value: $viewModel.ingredientScalePercent, format: .number.precision(.fractionLength(2)))
-                            .frame(width: 70)
-                        Text("%")
-                    }
-                    .accessibilityElement(children: .combine)
-                    Slider(value: $viewModel.ingredientScalePercent, in: 25...400)
-                    HStack {
-                        Button("Half") {
-                            viewModel.ingredientScalePercent = 50
-                        }
-                        .buttonStyle(.link)
-                        .padding(.trailing, 4)
-                        Button("2/3") {
-                            viewModel.ingredientScalePercent = 66.67
-                        }
-                        .buttonStyle(.link)
-                        .padding(.trailing, 4)
-                        Button("Reset") {
-                            viewModel.resetIngredientScale()
-                        }
-                        .buttonStyle(.accessoryBarAction)
-                        .padding(.trailing, 4)
-                        Button("Double") {
-                            viewModel.ingredientScalePercent = 200
-                        }
-                        .buttonStyle(.link)
-                    }
-                    .controlSize(.small)
-                }
-                .frame(minWidth: 90, idealWidth: 170)
-                .padding()
+                IngredientScalePopoverContent(viewModel: viewModel)
             }
         }
         .frame(minWidth: 85, maxWidth: 300)
         .modifier(RecipeSectionBoxModifier())
+    }
+}
+
+private struct IngredientScalePopoverContent: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                TextField("Scale by:", value: $viewModel.ingredientScalePercent, format: .number.precision(.fractionLength(2)))
+                    .frame(width: 70)
+                Text("%")
+            }
+            .accessibilityElement(children: .combine)
+            
+            Slider(value: $viewModel.ingredientScalePercent, in: 25...400)
+            
+            HStack(spacing: 8) {
+                IngredientScalePresetButton(
+                    title: "Half",
+                    accessibilityLabel: "Half recipe",
+                    isSelected: viewModel.isIngredientScaleNear(50)
+                ) {
+                    viewModel.ingredientScalePercent = 50
+                }
+                IngredientScalePresetButton(
+                    title: "Two-Thirds",
+                    accessibilityLabel: "Two-thirds recipe",
+                    isSelected: viewModel.isIngredientScaleNear(66.67)
+                ) {
+                    viewModel.ingredientScalePercent = 66.67
+                }
+                IngredientScalePresetButton(
+                    title: "Double",
+                    accessibilityLabel: "Double recipe",
+                    isSelected: viewModel.isIngredientScaleNear(200)
+                ) {
+                    viewModel.ingredientScalePercent = 200
+                }
+            }
+            
+            Button("Reset") {
+                viewModel.resetIngredientScale()
+            }
+            .frame(maxWidth: .infinity)
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .disabled(!viewModel.isIngredientScaleActive)
+        }
+        .frame(minWidth: 200, idealWidth: 220)
+        .padding()
+    }
+}
+
+private struct IngredientScalePresetButton: View {
+    let title: String
+    let accessibilityLabel: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Group {
+            if isSelected {
+                Button(action: action) {
+                    Text(title)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Button(action: action) {
+                    Text(title)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .controlSize(.small)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

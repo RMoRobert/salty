@@ -114,6 +114,10 @@ class RecipeDetailViewModel {
         ingredientScalePercent = 100
     }
     
+    func isIngredientScaleNear(_ targetPercent: Double, tolerance: Double = 0.5) -> Bool {
+        abs(ingredientScalePercent - targetPercent) <= tolerance
+    }
+    
     // MARK: - Initialization
     init(recipe: Recipe) {
         self.recipeId = recipe.id
