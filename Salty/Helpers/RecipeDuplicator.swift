@@ -98,7 +98,7 @@ enum RecipeDuplicator {
         }
         
         try database.write { db in
-            try Recipe.insert(copy).execute(db)
+            try Recipe.insert { copy }.execute(db)
             
             for categoryId in categoryIds {
                 let recipeCategory = RecipeCategory(
@@ -106,7 +106,7 @@ enum RecipeDuplicator {
                     recipeId: copy.id,
                     categoryId: categoryId
                 )
-                try RecipeCategory.insert(recipeCategory).execute(db)
+                try RecipeCategory.insert { recipeCategory }.execute(db)
             }
             
             for tagId in tagIds {
@@ -115,7 +115,7 @@ enum RecipeDuplicator {
                     recipeId: copy.id,
                     tagId: tagId
                 )
-                try RecipeTag.insert(recipeTag).execute(db)
+                try RecipeTag.insert { recipeTag }.execute(db)
             }
         }
         

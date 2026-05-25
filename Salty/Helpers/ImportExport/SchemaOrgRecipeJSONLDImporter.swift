@@ -240,7 +240,7 @@ class SchemaOrgRecipeJSONLDImporter {
         
         if let recipeInstructions = dict["recipeInstructions"] {
             if let instructionsArray = recipeInstructions as? [[String: Any]] {
-                for (index, instruction) in instructionsArray.enumerated() {
+                for (_, instruction) in instructionsArray.enumerated() {
                     if let text = instruction["text"] as? String {
                         directions.append(Direction(
                             id: UUID().uuidString,

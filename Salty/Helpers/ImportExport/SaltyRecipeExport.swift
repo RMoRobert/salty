@@ -415,7 +415,7 @@ extension SaltyRecipeExport {
             courseId: nil, // Will be set after course is resolved
             directions: directions.map { $0.convertToDirection() },
             ingredients: ingredients.map { $0.convertToIngredient() },
-            notes: notes,
+            notes: notes.map { Note(id: UUIDV7().uuidString, title: $0.title, content: $0.content) },
             variations: variations?.map { $0.convertToVariation() } ?? [],
             preparationTimes: preparationTimes.map { $0.convertToPreparationTime() },
             nutrition: nutrition

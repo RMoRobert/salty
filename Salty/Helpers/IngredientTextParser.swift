@@ -142,7 +142,7 @@ extension Ingredient {
         let trimmedText = text.trimmingCharacters(in: .whitespaces)
         
         let numberToken = #"\d+(?:\.\d+)?(?:\s+\d+/\d+)?(?:\s*/\s*\d+)?"#
-        let rangePattern = "^(\\#(numberToken))\\s*-\\s*(\\#(numberToken))"
+        let rangePattern = #"^(\#(numberToken))\s*-\s*(\#(numberToken))"#
         
         var numberString: String
         var afterNumber: String
