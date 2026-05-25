@@ -21,6 +21,10 @@ class RecipeDetailViewModel {
     let recipeId: String
     var showingFullImage = false
     
+    /// Temporary ingredient scale for detail view only (100 = original recipe).
+    var ingredientScalePercent: Double = 100
+    var isIngredientScalePopoverShowing = false
+    
     @ObservationIgnored
     @FetchOne var recipe: Recipe?
     
@@ -81,6 +85,33 @@ class RecipeDetailViewModel {
         let recipeTagIds = allRecipeTags.filter { $0.recipeId == recipe.id }.map { $0.tagId }
         return tags.filter { recipeTagIds.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+    
+    var ingredientScaleFactor: Double { ingredientScalePercent / 100 }
+    
+    var isIngredientScaleActive: Bool {
+        abs(ingredientScalePercent - 100) > 0.001
+    }
+    
+    var ingredientScalePercentLabel: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.string(from: NSNumber(value: ingredientScalePercent)) ?? "\(ingredientScalePercent)"
+    }
+    
+    var ingredientScaleDirectionsFootnote: String {
+        "Ingredients scaled to \(ingredientScalePercentLabel)%. Amounts and times mentioned in directions may refer to quantity in orignal recipe. Please verify before use."
+    }
+    
+    func scaledIngredientDisplay(_ ingredient: Ingredient) -> IngredientScaler.DisplayParts {
+        IngredientScaler.displayParts(for: ingredient, scaleFactor: ingredientScaleFactor)
+    }
+    
+    func resetIngredientScale() {
+        ingredientScalePercent = 100
     }
     
     // MARK: - Initialization

@@ -141,15 +141,28 @@ extension Ingredient {
     func parseQuantity() -> (quantity: String, remainder: String) {
         let trimmedText = text.trimmingCharacters(in: .whitespaces)
         
-        // Check if text starts with a number (including fractions like 1/2, 1 1/2, decimals)
-        // Pattern matches: "1", "1.5", "1/2", "1 1/2", "1/4", etc.
-        let numberPattern = #"^(\d+(?:\.\d+)?(?:\s+\d+/\d+)?(?:\s*/\s*\d+)?)"#
-        guard let numberRange = trimmedText.range(of: numberPattern, options: .regularExpression) else {
-            return ("", trimmedText)
-        }
+        let numberToken = #"\d+(?:\.\d+)?(?:\s+\d+/\d+)?(?:\s*/\s*\d+)?"#
+        let rangePattern = "^(\\#(numberToken))\\s*-\\s*(\\#(numberToken))"
         
-        let numberString = String(trimmedText[numberRange])
-        let afterNumber = String(trimmedText[numberRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        var numberString: String
+        var afterNumber: String
+        
+        if let rangeRegex = try? NSRegularExpression(pattern: rangePattern),
+           let match = rangeRegex.firstMatch(in: trimmedText, range: NSRange(trimmedText.startIndex..., in: trimmedText)),
+           match.numberOfRanges >= 3,
+           let lowRange = Range(match.range(at: 1), in: trimmedText),
+           let highRange = Range(match.range(at: 2), in: trimmedText) {
+            numberString = "\(trimmedText[lowRange])-\(trimmedText[highRange])"
+            afterNumber = String(trimmedText[highRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        } else {
+            // Check if text starts with a number (including fractions like 1/2, 1 1/2, decimals)
+            let numberPattern = #"^(\#(numberToken))"#
+            guard let numberRange = trimmedText.range(of: numberPattern, options: .regularExpression) else {
+                return ("", trimmedText)
+            }
+            numberString = String(trimmedText[numberRange])
+            afterNumber = String(trimmedText[numberRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        }
         
         // If there's nothing after the number, return it as quantity
         guard !afterNumber.isEmpty else {

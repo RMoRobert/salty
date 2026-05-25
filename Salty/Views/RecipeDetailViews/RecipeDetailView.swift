@@ -26,8 +26,8 @@ struct RecipeDetailView: View {
                         PrepTimeAndFavoriteEtcSection(recipe: recipe)
                         IntroductionSection(recipe: recipe)
                         AdaptiveStack(verticalAlignment: .top) {
-                            IngredientsSection(recipe: recipe)
-                            DirectionsSection(recipe: recipe)
+                            IngredientsSection(viewModel: viewModel, recipe: recipe)
+                            DirectionsSection(viewModel: viewModel, recipe: recipe)
                         }
                         NotesSection(recipe: recipe)
                             .padding(.top, 2)
@@ -109,7 +109,7 @@ private struct TitleAndBasicInfoSection: View {
                 if let recipe = viewModel.recipe, !recipe.sourceDetails.trimmingCharacters(in: .whitespaces).isEmpty {
                     let sourceDetails = recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
                     if let url = URL(string: sourceDetails),
-                       let scheme = url.scheme?.lowercased().starts(with: "http") {
+                       let _ = url.scheme?.lowercased().starts(with: "http") {
                         Link(destination: url) {
                             Text(sourceDetails)
                                 .lineLimit(2)
@@ -249,15 +249,24 @@ private struct IntroductionSection: View {
 }
 
 private struct IngredientsSection: View {
+    @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
+    
+    private var ingredientsTitle: String {
+        if viewModel.isIngredientScaleActive {
+            return "Ingredients (\(viewModel.ingredientScalePercentLabel)%)"
+        }
+        return "Ingredients"
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Ingredients")
+            Text(ingredientsTitle)
                 .modifier(TitleStyle())
             ForEach(recipe.ingredients.indices, id: \.self) { index in
-                let isHeading = recipe.ingredients[index].isHeading
-                if isHeading {
-                    Text(recipe.ingredients[index].text)
+                let ingredient = recipe.ingredients[index]
+                if ingredient.isHeading {
+                    Text(ingredient.text)
                         .font(.callout)
                         .fontWeight(.semibold)
                         .foregroundStyle(.recipeDetailBoxForeground2)
@@ -266,11 +275,10 @@ private struct IngredientsSection: View {
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•")
-                            //.baselineOffset(1)
                             .foregroundStyle(.recipeDetailBoxForeground)
                             .fontWeight(.bold)
-                        let parsed = recipe.ingredients[index].parseQuantity()
-                        if !parsed.quantity.isEmpty {
+                        let parsed = viewModel.scaledIngredientDisplay(ingredient)
+                        if parsed.hasQuantity {
                             (Text(parsed.quantity)
                                 .fontWeight(.semibold) +
                              Text(parsed.remainder.isEmpty ? "" : " \(parsed.remainder)")
@@ -279,7 +287,7 @@ private struct IngredientsSection: View {
                                 .foregroundStyle(.recipeDetailBoxForeground)
                                 .accessibilityElement(children: .combine)
                         } else {
-                            Text(recipe.ingredients[index].text)
+                            Text(ingredient.text)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .foregroundStyle(.recipeDetailBoxForeground)
                                 .fontWeight(.regular)
@@ -288,6 +296,52 @@ private struct IngredientsSection: View {
                     .padding(.bottom, 4)
                 }
             }
+            Button("Scale…", systemImage: "slider.horizontal.3") {
+                viewModel.isIngredientScalePopoverShowing = true
+            }
+            #if os(macOS)
+            .buttonStyle(.link)
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .controlSize(.small)
+            .padding(.bottom, 4)
+            .padding(.top, 16)
+            .popover(isPresented: $viewModel.isIngredientScalePopoverShowing) {
+                VStack(spacing: 12) {
+                    HStack {
+                        TextField("Scale by:", value: $viewModel.ingredientScalePercent, format: .number.precision(.fractionLength(2)))
+                            .frame(width: 70)
+                        Text("%")
+                    }
+                    .accessibilityElement(children: .combine)
+                    Slider(value: $viewModel.ingredientScalePercent, in: 25...400)
+                    HStack {
+                        Button("Half") {
+                            viewModel.ingredientScalePercent = 50
+                        }
+                        .buttonStyle(.link)
+                        .padding(.trailing, 4)
+                        Button("2/3") {
+                            viewModel.ingredientScalePercent = 66.67
+                        }
+                        .buttonStyle(.link)
+                        .padding(.trailing, 4)
+                        Button("Reset") {
+                            viewModel.resetIngredientScale()
+                        }
+                        .buttonStyle(.accessoryBarAction)
+                        .padding(.trailing, 4)
+                        Button("Double") {
+                            viewModel.ingredientScalePercent = 200
+                        }
+                        .buttonStyle(.link)
+                    }
+                    .controlSize(.small)
+                }
+                .frame(minWidth: 90, idealWidth: 170)
+                .padding()
+            }
         }
         .frame(minWidth: 85, maxWidth: 300)
         .modifier(RecipeSectionBoxModifier())
@@ -295,7 +349,9 @@ private struct IngredientsSection: View {
 }
 
 private struct DirectionsSection: View {
+    @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Directions")
@@ -318,6 +374,14 @@ private struct DirectionsSection: View {
                     }
                     .padding(.bottom, 4)
                 }
+            }
+            if viewModel.isIngredientScaleActive {
+                Text(viewModel.ingredientScaleDirectionsFootnote)
+                    .font(.caption)
+                    .foregroundStyle(.recipeDetailBoxForeground2)
+                    .italic()
+                    .padding(.top, 8)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(minWidth: 95, maxWidth: 1000)
