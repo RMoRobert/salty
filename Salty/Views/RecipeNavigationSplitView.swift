@@ -520,7 +520,7 @@ struct RecipeNavigationSplitView: View {
                     if useWebRecipeDetailView {
                         RecipeDetailWebView(recipe: recipe)
                     } else {
-                        RecipeDetailView(recipe: recipe)
+                        RecipeDetailView(recipe: recipe, onScaledRecipeSaved: viewModel.handleNewRecipeSaved)
                     }
                 }
                 .id(recipeId) // seems to be needed to force full reload when recipe changes?

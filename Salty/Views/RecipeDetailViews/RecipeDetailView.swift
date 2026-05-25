@@ -13,8 +13,8 @@ struct RecipeDetailView: View {
     @State private var viewModel: RecipeDetailViewModel
     @Environment(\.openWindow) private var openWindow
     
-    init(recipe: Recipe) {
-        self._viewModel = State(initialValue: RecipeDetailViewModel(recipe: recipe))
+    init(recipe: Recipe, onScaledRecipeSaved: ((String) -> Void)? = nil) {
+        self._viewModel = State(initialValue: RecipeDetailViewModel(recipe: recipe, onScaledRecipeSaved: onScaledRecipeSaved))
     }
     
     var body: some View {
@@ -360,9 +360,35 @@ private struct IngredientScalePopoverContent: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(!viewModel.isIngredientScaleActive)
+            
+            Button("Save as New Recipe…") {
+                viewModel.saveAsScaledRecipe()
+            }
+            .frame(maxWidth: .infinity)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!viewModel.isIngredientScaleActive || viewModel.isSavingScaledRecipe)
+            
+            if viewModel.isSavingScaledRecipe {
+                ProgressView()
+                    .controlSize(.small)
+            }
         }
         .frame(minWidth: 200, idealWidth: 220)
         .padding()
+        .alert(
+            "Could Not Save Recipe",
+            isPresented: Binding(
+                get: { viewModel.scaledRecipeSaveErrorMessage != nil },
+                set: { if !$0 { viewModel.scaledRecipeSaveErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.scaledRecipeSaveErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.scaledRecipeSaveErrorMessage ?? "")
+        }
     }
 }
 

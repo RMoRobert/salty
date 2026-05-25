@@ -24,6 +24,11 @@ class RecipeDetailViewModel {
     /// Temporary ingredient scale for detail view only (100 = original recipe).
     var ingredientScalePercent: Double = 100
     var isIngredientScalePopoverShowing = false
+    var isSavingScaledRecipe = false
+    var scaledRecipeSaveErrorMessage: String?
+    
+    @ObservationIgnored
+    private let onScaledRecipeSaved: ((String) -> Void)?
     
     @ObservationIgnored
     @FetchOne var recipe: Recipe?
@@ -118,17 +123,47 @@ class RecipeDetailViewModel {
         abs(ingredientScalePercent - targetPercent) <= tolerance
     }
     
+    func saveAsScaledRecipe() {
+        guard let source = recipe, isIngredientScaleActive, !isSavingScaledRecipe else { return }
+        
+        isSavingScaledRecipe = true
+        scaledRecipeSaveErrorMessage = nil
+        
+        do {
+            let newId = try RecipeDuplicator.duplicate(
+                source: source,
+                database: database,
+                categoryIds: recipeCategories.map(\.id),
+                tagIds: recipeTags.map(\.id),
+                options: RecipeDuplicator.Options(
+                    ingredientScaleFactor: ingredientScaleFactor,
+                    scalePercentLabel: ingredientScalePercentLabel,
+                    sourceRecipeName: source.name
+                )
+            )
+            isIngredientScalePopoverShowing = false
+            onScaledRecipeSaved?(newId)
+        } catch {
+            logger.error("Failed to save scaled recipe copy: \(error)")
+            scaledRecipeSaveErrorMessage = error.localizedDescription
+        }
+        
+        isSavingScaledRecipe = false
+    }
+    
     // MARK: - Initialization
-    init(recipe: Recipe) {
+    init(recipe: Recipe, onScaledRecipeSaved: ((String) -> Void)? = nil) {
         self.recipeId = recipe.id
+        self.onScaledRecipeSaved = onScaledRecipeSaved
         self._recipe = FetchOne(
             wrappedValue: recipe, 
             #sql("SELECT \(Recipe.columns) FROM \(Recipe.self) WHERE \(Recipe.id) = \(bind: recipe.id)")
         )
     }
     
-    init(recipeId: String) {
+    init(recipeId: String, onScaledRecipeSaved: ((String) -> Void)? = nil) {
         self.recipeId = recipeId
+        self.onScaledRecipeSaved = onScaledRecipeSaved
         self._recipe = FetchOne(
             wrappedValue: nil as Recipe?,
             #sql("SELECT \(Recipe.columns) FROM \(Recipe.self) WHERE \(Recipe.id) = \(bind: recipeId)")

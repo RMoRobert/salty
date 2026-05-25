@@ -68,8 +68,10 @@ struct RecipeDetailWindowView: View {
                 RecipeDetailWebView(recipe: recipe)
                     .id(recipe.id)
             } else {
-                RecipeDetailView(recipe: recipe)
-                    .id(recipe.id)
+                RecipeDetailView(recipe: recipe, onScaledRecipeSaved: { newId in
+                    recipeId = newId
+                })
+                .id(recipe.id)
             }
         } else {
             ProgressView("Loading recipe...")

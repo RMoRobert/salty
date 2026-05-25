@@ -36,7 +36,7 @@ enum IngredientScaler {
         return DisplayParts(quantity: scaledQuantity, remainder: parsed.remainder)
     }
     
-    /// Full ingredient line with a scaled quantity baked in (for optional "save copy" later).
+    /// Full ingredient line with a scaled quantity baked in (e.g. when saving a scaled recipe copy).
     static func scaledText(for ingredient: Ingredient, scaleFactor: Double) -> String {
         let parts = displayParts(for: ingredient, scaleFactor: scaleFactor)
         if parts.hasQuantity {
