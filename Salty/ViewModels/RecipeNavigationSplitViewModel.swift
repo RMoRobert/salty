@@ -33,6 +33,7 @@ extension Notification.Name {
     static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
     static let exportSelectedRecipesAsHTML = Notification.Name("exportSelectedRecipesAsHTML")
     static let printSelectedRecipes = Notification.Name("printSelectedRecipes")
+    static let openSelectedRecipesInNewWindows = Notification.Name("openSelectedRecipesInNewWindows")
 }
 
 @Observable

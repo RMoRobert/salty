@@ -21,13 +21,13 @@ struct WebViewRepresentable: NSViewRepresentable {
     let onNavigationStateChange: (Bool, Bool, Bool) -> Void
     let onURLChange: (String) -> Void
     
-    // Convenience initializer for URL (maintains backward compatibility)
-    init(url: String, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {
-        self.content = .url(url)
-        self._coordinator = coordinator
-        self.onNavigationStateChange = onNavigationStateChange
-        self.onURLChange = onURLChange
-    }
+//    // Convenience initializer for URL (maintains backward compatibility)
+//    init(url: String, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {
+//        self.content = .url(url)
+//        self._coordinator = coordinator
+//        self.onNavigationStateChange = onNavigationStateChange
+//        self.onURLChange = onURLChange
+//    }
     
     // New initializer for content
     init(content: WebViewContent, coordinator: Binding<WebViewCoordinator?>, onNavigationStateChange: @escaping (Bool, Bool, Bool) -> Void, onURLChange: @escaping (String) -> Void) {

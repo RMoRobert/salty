@@ -136,9 +136,31 @@ struct RecipeNavigationSplitView: View {
         )
     }
     
+    private func postRecipeSelectionChanged() {
+        let count = viewModel.selectedRecipeIDs.count
+        NotificationCenter.default.post(
+            name: .recipeSelectionChanged,
+            object: nil,
+            userInfo: ["hasSelected": count > 0, "count": count]
+        )
+    }
+    
     #if os(macOS)
     private func openRecipeInNewWindow(recipeId: String) {
         openWindow(id: "recipe-detail-window", value: recipeId)
+    }
+    
+    private func openSelectedRecipesInNewWindows(recipeIds: Set<String>) {
+        let orderedIds = viewModel.recipes
+            .filter { recipeIds.contains($0.id) }
+            .map(\.id)
+        for recipeId in orderedIds {
+            openRecipeInNewWindow(recipeId: recipeId)
+        }
+    }
+    
+    private func openSelectedRecipesInNewWindows() {
+        openSelectedRecipesInNewWindows(recipeIds: viewModel.selectedRecipeIDs)
     }
     #endif
     
@@ -247,15 +269,13 @@ struct RecipeNavigationSplitView: View {
                                     .frame(minWidth: 280)
                             }
                             .id(recipe.id)
+                            .tag(recipe.id)
                             .draggable(recipe.id)
-                            #if os(macOS)
-                            .onTapGesture(count: 2) {
-                                openRecipeInNewWindow(recipeId: recipe.id)
-                            }
-                            #endif
+                            #if !os(macOS)
                             .contextMenu {
                                 contextMenuForRecipe(recipe)
                             }
+                            #endif
                     }
                     #if !os(macOS)
                     .onDelete { indexSet in
@@ -279,6 +299,13 @@ struct RecipeNavigationSplitView: View {
                         .listRowSeparator(.hidden)
                     }
                 }
+                #if os(macOS)
+                .contextMenu(forSelectionType: String.self) { selectedIDs in
+                    contextMenuForSelection(selectedIDs)
+                } primaryAction: { selectedIDs in
+                    openSelectedRecipesInNewWindows(recipeIds: selectedIDs)
+                }
+                #endif
                 .task(id: recipeQueryId) {
                     await viewModel.updateRecipesQuery()
                 }
@@ -639,13 +666,13 @@ struct RecipeNavigationSplitView: View {
                 recipeIDForInspector = recipeId
             }
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: .openSelectedRecipesInNewWindows)) { _ in
+            openSelectedRecipesInNewWindows()
+        }
+        #endif
         .onChange(of: viewModel.selectedRecipeIDs) { _, _ in
-            let hasSelected = !viewModel.selectedRecipeIDs.isEmpty
-            NotificationCenter.default.post(
-                name: .recipeSelectionChanged,
-                object: nil,
-                userInfo: ["hasSelected": hasSelected]
-            )
+            postRecipeSelectionChanged()
         }
         .onChange(of: isAnySheetShown) { _, _ in
             notifySheetStateChanged()
@@ -668,12 +695,7 @@ struct RecipeNavigationSplitView: View {
             offeredSampleImport = true
             
             // Notify menu about initial selection state
-            let hasSelected = !viewModel.selectedRecipeIDs.isEmpty
-            NotificationCenter.default.post(
-                name: .recipeSelectionChanged,
-                object: nil,
-                userInfo: ["hasSelected": hasSelected]
-            )
+            postRecipeSelectionChanged()
         }
     }
     
@@ -690,13 +712,75 @@ struct RecipeNavigationSplitView: View {
         )
     }
     
+    #if os(macOS)
     @ViewBuilder
-    private func contextMenuForRecipe(_ recipe: Recipe) -> some View {
-        #if os(macOS)
-        Button("Open in New Window", systemImage: "macwindow") {
+    private func contextMenuForSelection(_ selectedIDs: Set<String>) -> some View {
+        if selectedIDs.count == 1,
+           let recipeId = selectedIDs.first,
+           let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
+            contextMenuForSingleRecipe(recipe)
+        } else if selectedIDs.count > 1 {
+            contextMenuForMultipleRecipes()
+        }
+    }
+    
+    @ViewBuilder
+    private func contextMenuForSingleRecipe(_ recipe: Recipe) -> some View {
+        Button("Open Recipe in New Window", systemImage: "macwindow") {
             openRecipeInNewWindow(recipeId: recipe.id)
         }
-        #endif
+        .keyboardShortcut(.return)
+        Button("Edit", systemImage: "pencil") {
+            viewModel.recipeToEditID = recipe.id
+            viewModel.showingEditSheet = true
+        }
+        Menu("Export…") {
+            Button("Export as Recipe File…") {
+                viewModel.exportRecipe(recipe.id)
+            }
+            Button("Export as HTML…") {
+                viewModel.showHTMLExportSettingsForRecipe(recipe.id)
+            }
+        }
+        Button(role: .destructive, action: {
+            withAnimation {
+                viewModel.deleteRecipe(id: recipe.id)
+            }
+        }) {
+            Label("Delete", systemImage: "trash")
+        }
+        .keyboardShortcut(.delete, modifiers: [.command])
+        Divider()
+        Button("Get Info", systemImage: "info.circle") {
+            recipeIDForInspector = recipe.id
+        }
+    }
+    
+    @ViewBuilder
+    private func contextMenuForMultipleRecipes() -> some View {
+        Button("Open Recipes in New Windows", systemImage: "macwindow") {
+            openSelectedRecipesInNewWindows()
+        }
+        .keyboardShortcut(.return)
+        Menu("Export…") {
+            Button("Export as Recipe File…") {
+                viewModel.exportSelectedRecipes()
+            }
+            Button("Export as HTML…") {
+                viewModel.showHTMLExportSettings()
+            }
+        }
+        Button(role: .destructive, action: {
+            showingDeleteConfirmation = true
+        }) {
+            Label("Delete", systemImage: "trash")
+        }
+        .keyboardShortcut(.delete, modifiers: [.command])
+    }
+    #endif
+    
+    @ViewBuilder
+    private func contextMenuForRecipe(_ recipe: Recipe) -> some View {
         Button("Edit", systemImage: "pencil") {
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true

@@ -32,6 +32,7 @@ class SheetStateTracker: ObservableObject {
 // Track recipe selection state for enabling/disabling menu items
 class SelectionStateTracker: ObservableObject {
     @Published var hasRecipeSelected = false
+    @Published var selectedRecipeCount = 0
     
     init() {
         NotificationCenter.default.addObserver(
@@ -41,6 +42,9 @@ class SelectionStateTracker: ObservableObject {
         ) { notification in
             if let hasSelected = notification.userInfo?["hasSelected"] as? Bool {
                 self.hasRecipeSelected = hasSelected
+            }
+            if let count = notification.userInfo?["count"] as? Int {
+                self.selectedRecipeCount = count
             }
         }
     }
@@ -175,6 +179,14 @@ struct Menus: Commands {
                }
            }
            .disabled(sheetTracker.isAnySheetShown)
+           #if os(macOS)
+           Divider()
+           Button(selectionTracker.selectedRecipeCount <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
+               NotificationCenter.default.post(name: .openSelectedRecipesInNewWindows, object: nil)
+           }
+           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .keyboardShortcut(.return)
+           #endif
            Divider()
            Button("Print…") {
                NotificationCenter.default.post(name: .printSelectedRecipes, object: nil)
