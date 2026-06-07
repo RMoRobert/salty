@@ -140,9 +140,11 @@ struct CategoryEditView: View {
             
             // Only save category relationships if the recipe exists
             if recipeExists {
+                let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
+                let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
+                guard !categoriesToRemove.isEmpty || !categoriesToAdd.isEmpty else { return }
+                
                 try database.write { db in
-                    // Remove categories that are no longer selected
-                    let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
                     for categoryId in categoriesToRemove {
                         try RecipeCategory
                             .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(categoryId) }
@@ -150,12 +152,12 @@ struct CategoryEditView: View {
                             .execute(db)
                     }
                     
-                    // Add newly selected categories
-                    let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
                     for categoryId in categoriesToAdd {
                         let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
                         try RecipeCategory.insert(recipeCategory).execute(db)
                     }
+                    
+                    try Recipe.touchLastModified(recipeId: recipe.id, in: db)
                 }
             } else {
                 // If recipe doesn't exist yet, the selectedCategoryIDs binding will be updated
@@ -186,7 +188,7 @@ struct CategoryEditView: View {
             }
             
             // Create the new category
-            let newCategory = Category(id: UUID().uuidString, name: trimmedName)
+            let newCategory = Category(id: UUID().uuidString, name: trimmedName, lastModifiedDate: Date())
             try database.write { db in
                 try Category.insert {
                     newCategory

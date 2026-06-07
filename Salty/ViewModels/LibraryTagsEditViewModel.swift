@@ -68,8 +68,15 @@ class LibraryTagsEditViewModel {
         
         do {
             try database.write { db in
+                let affectedRecipeIds = try RecipeTag
+                    .where { $0.tagId.eq(tagToDelete.id) }
+                    .fetchAll(db)
+                    .map(\.recipeId)
+                
                 // Delete the tag (RecipeTag associations will be automatically removed due to cascade)
                 try Tag.delete(tagToDelete).execute(db)
+                
+                try Recipe.touchLastModified(recipeIds: affectedRecipeIds, in: db)
             }
             
             // Update selection indices after deletion
@@ -128,7 +135,7 @@ class LibraryTagsEditViewModel {
             }
             
             // Create the new tag
-            let newTag = Tag(id: UUIDV7().uuidString, name: trimmedName)
+            let newTag = Tag(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
             try database.write { db in
                 try Tag.insert(newTag).execute(db)
             }
@@ -164,6 +171,7 @@ class LibraryTagsEditViewModel {
             // Update the tag name
             var updatedTag = tags[index]
             updatedTag.name = trimmedName
+            updatedTag.lastModifiedDate = Date()
             try database.write { db in
                 try Tag.update(updatedTag).execute(db)
             }

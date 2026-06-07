@@ -65,11 +65,18 @@ class LibraryCategoriesEditViewModel: ObservableObject {
         
         do {
             try database.write { db in
+                let affectedRecipeIds = try RecipeCategory
+                    .where { $0.categoryId.eq(categoryToDelete.id) }
+                    .fetchAll(db)
+                    .map(\.recipeId)
+                
                 // Remove from recipe associations first
                 try RecipeCategory
                     .where { $0.categoryId.eq(categoryToDelete.id) }
                     .delete()
                     .execute(db)
+                
+                try Recipe.touchLastModified(recipeIds: affectedRecipeIds, in: db)
                 
                 // Then delete the category itself
                 try Category.delete(categoryToDelete).execute(db)
@@ -131,7 +138,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             }
             
             // Create the new category
-            let newCategory = Category(id: UUIDV7().uuidString, name: trimmedName)
+            let newCategory = Category(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
             try database.write { db in
                 try Category.insert {
                     newCategory
@@ -169,6 +176,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             // Update the category name
             var updatedCategory = categories[index]
             updatedCategory.name = trimmedName
+            updatedCategory.lastModifiedDate = Date()
             try database.write { db in
                 try Category.update(updatedCategory).execute(db)
             }

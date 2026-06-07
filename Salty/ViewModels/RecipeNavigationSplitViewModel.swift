@@ -2732,6 +2732,7 @@ class RecipeNavigationSplitViewModel {
                         categoryId: categoryId
                     )
                     try RecipeCategory.insert { recipeCategory }.execute(db)
+                    try Recipe.touchLastModified(recipeId: recipeId, in: db)
                     logger.info("Added recipe \(recipeId) to category \(categoryId)")
                 } else {
                     logger.info("Recipe \(recipeId) is already in category \(categoryId)")
@@ -2759,6 +2760,7 @@ class RecipeNavigationSplitViewModel {
                         tagId: tagId
                     )
                     try RecipeTag.insert(recipeTag).execute(db)
+                    try Recipe.touchLastModified(recipeId: recipeId, in: db)
                     logger.info("Added recipe \(recipeId) to tag \(tagId)")
                 } else {
                     logger.info("Recipe \(recipeId) is already tagged with \(tagId)")

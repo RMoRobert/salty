@@ -150,6 +150,19 @@ extension Recipe {
         self.imageThumbnailData = nil
         self.lastModifiedDate = Date() // Ensure sync detects image removal
     }
+    
+    /// Bumps lastModifiedDate so sync propagates changes to recipe relationships or metadata.
+    static func touchLastModified(recipeId: String, in db: Database) throws {
+        guard var recipe = try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db) else { return }
+        recipe.lastModifiedDate = Date()
+        try Recipe.update(recipe).execute(db)
+    }
+    
+    static func touchLastModified(recipeIds: some Sequence<String>, in db: Database) throws {
+        for recipeId in Set(recipeIds) {
+            try touchLastModified(recipeId: recipeId, in: db)
+        }
+    }
 }
 
 // TODO: Consider using something like this when presenting List view on main screen, as lack of lazy loading might mean we're fetching too much to start...

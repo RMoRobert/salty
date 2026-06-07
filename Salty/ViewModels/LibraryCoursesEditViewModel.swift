@@ -42,6 +42,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
                 
                 for var recipe in recipesToUpdate {
                     recipe.courseId = nil
+                    recipe.lastModifiedDate = Date()
                     try Recipe.update(recipe).execute(db)
                 }
                 
@@ -105,7 +106,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
             }
             
             // Create the new course
-            let newCourse = Course(id: UUID().uuidString, name: trimmedName)
+            let newCourse = Course(id: UUID().uuidString, name: trimmedName, lastModifiedDate: Date())
             try database.write { db in
                 try Course.insert {
                     newCourse
@@ -143,6 +144,7 @@ class LibraryCoursesEditViewModel: ObservableObject {
             // Update the course name
             var updatedCourse = courses[index]
             updatedCourse.name = trimmedName
+            updatedCourse.lastModifiedDate = Date()
             try database.write { db in
                 try Course.update(updatedCourse).execute(db)
             }

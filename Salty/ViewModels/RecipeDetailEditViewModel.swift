@@ -180,7 +180,7 @@ class RecipeDetailEditViewModel {
                 tagToUse = existing
             } else {
                 // Create new tag
-                tagToUse = Tag(id: UUIDV7().uuidString, name: trimmedName)
+                tagToUse = Tag(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
                 try database.write { db in
                     try Tag.insert{ tagToUse }.execute(db)
                 }
@@ -198,7 +198,9 @@ class RecipeDetailEditViewModel {
                 let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagToUse.id)
                 try database.write { db in
                     try RecipeTag.insert{ recipeTag }.execute(db)
+                    try Recipe.touchLastModified(recipeId: recipe.id, in: db)
                 }
+                recipe.lastModifiedDate = Date()
             }
         } catch {
             logger.error("Error adding tag: \(error)")
@@ -225,7 +227,9 @@ class RecipeDetailEditViewModel {
                     .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tag.id) }
                     .delete()
                     .execute(db)
+                try Recipe.touchLastModified(recipeId: recipe.id, in: db)
             }
+            recipe.lastModifiedDate = Date()
             
             logger.info("Tag '\(tagName)' removed from recipe")
         } catch {

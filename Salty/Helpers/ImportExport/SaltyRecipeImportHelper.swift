@@ -62,7 +62,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                                 // Find existing category or create new one
                                 var category = try Category.where { $0.name.eq(categoryName) }.fetchOne(db)
                                 if category == nil {
-                                    category = Category(id: UUID().uuidString, name: categoryName)
+                                    category = Category(id: UUID().uuidString, name: categoryName, lastModifiedDate: Date())
                                     try Category.insert {
                                         category!
                                     }.execute(db)
@@ -94,7 +94,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                                 // Find existing tag or create new one
                                 var tag = try Tag.where { $0.name.eq(tagName) }.fetchOne(db)
                                 if tag == nil {
-                                    tag = Tag(id: UUID().uuidString, name: tagName)
+                                    tag = Tag(id: UUID().uuidString, name: tagName, lastModifiedDate: Date())
                                     try Tag.insert{ tag! }.execute(db)
                                 }
                                 
@@ -118,7 +118,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             // Check for existing course or create new one
                             var course = try Course.where { $0.name.eq(courseName) }.fetchOne(db)
                             if course == nil {
-                                course = Course(id: UUID().uuidString, name: courseName)
+                                course = Course(id: UUID().uuidString, name: courseName, lastModifiedDate: Date())
                                 try Course.insert{ course! }.execute(db)
                             }
                             // Set the recipe's courseId if found or inserted
