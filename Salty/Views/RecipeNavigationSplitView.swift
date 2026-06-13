@@ -463,19 +463,7 @@ struct RecipeNavigationSplitView: View {
                     }
                     .disabled(viewModel.selectedRecipeIDs.isEmpty)
                     
-
-                    Button(role: .destructive, action: {
-                        showingDeleteConfirmation = true
-                    }) {
-                        Label("Delete Recipe", systemImage: "trash")
-                    }
-                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
                     
-                    Button(action: {
-                        viewModel.addNewRecipe()
-                    }) {
-                        Label("New Recipe", systemImage: "plus")
-                    }
                     Toggle(isOn: $viewModel.isFavoritesFilterActive) {
                         let imageName: String = isLiquidGlassAvailable() ?
                         "line.3.horizontal.decrease" :
@@ -484,6 +472,39 @@ struct RecipeNavigationSplitView: View {
                         // Needed to make look correcton macOS 15; removing is fine for macOS 26, but simulating same behavior for now as long as supporting both:
                            .foregroundColor(viewModel.isFavoritesFilterActive ? (isLiquidGlassAvailable() ? Color.white : Color.accentColor) : nil)
                     }
+                    
+                    Button(role: .destructive, action: {
+                        showingDeleteConfirmation = true
+                    }) {
+                        Label("Delete Recipe", systemImage: "trash")
+                    }
+                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                    
+                    Menu {
+                        Button(action: {
+                            viewModel.addNewRecipe()
+                        }) {
+                            Label("New Recipe", systemImage: "plus")
+                        }
+                        Divider()
+                        Button("Create Recipe from Web…") {
+                            openWindow(id: "create-recipe-from-web-window")
+                        }
+                        .disabled(isAnySheetShown)
+                        Button("Create Recipe from Image…") {
+                            openWindow(id: "create-recipe-from-image-window")
+                        }
+                        Button("Import from File…") {
+                            showingImportFromFileSheet = true
+                        }
+                        .disabled(isAnySheetShown)
+                    } label: {
+                        Label("New Recipe", systemImage: "plus")
+                    }
+                    primaryAction: {
+                        viewModel.addNewRecipe()
+                    }
+                    
                 }
                 #endif
             }
