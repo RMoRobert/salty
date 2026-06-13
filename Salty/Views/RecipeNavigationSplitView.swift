@@ -434,35 +434,36 @@ struct RecipeNavigationSplitView: View {
                         Button(action: {
                             viewModel.exportSelectedRecipes()
                         }) {
-                            Label("Export as Recipe File…", systemImage: "square.and.arrow.down")
+                            Label("Export as Recipe File…", systemImage: "document")
                         }
                         Button(action: {
                             viewModel.showHTMLExportSettings()
                         }) {
-                            Label("Export as HTML…", systemImage: "doc.text")
+                            Label("Export as HTML…", systemImage: "text.page")
                         }
+                        if let recipeId = viewModel.selectedRecipeIDs.first,
+                           let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
+                           let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+                            // Would like this to work with plain text fallback, but can't get to...
+                            // ShareLink(item: shareableRecipe,
+                            //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                            //           message: Text(shareableRecipe.plainTextRepresentation),
+                            //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                            // )
+                            ShareLink(item: shareableRecipe.plainTextRepresentation + "\n\nShared from Salty Recipe Manager for iOS and macOS",
+                                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                                      message: Text(shareableRecipe.plainTextRepresentation),
+                                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                            )
+                            .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                        }
+                        
                     } label: {
-                        Label("Export", systemImage: "square.and.arrow.up")
+                        Label("Share or Export", systemImage: "square.and.arrow.up")
                     }
                     .disabled(viewModel.selectedRecipeIDs.isEmpty)
                     
-                    if let recipeId = viewModel.selectedRecipeIDs.first,
-                       let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
-                       let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
-                        // Would like this to work with plain text fallback, but can't get to...
-                        // ShareLink(item: shareableRecipe,
-                        //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                        //           message: Text(shareableRecipe.plainTextRepresentation),
-                        //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                        // )
-                        ShareLink(item: shareableRecipe.plainTextRepresentation + "\n\nShared from Salty Recipe Manager for iOS and macOS",
-                                  subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                                  message: Text(shareableRecipe.plainTextRepresentation),
-                                  preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                        )
-                        .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                    }
-                    
+
                     Button(role: .destructive, action: {
                         showingDeleteConfirmation = true
                     }) {
