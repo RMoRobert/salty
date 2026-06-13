@@ -154,7 +154,7 @@ struct Menus: Commands {
        ToolbarCommands()
        SidebarCommands()
        CommandGroup(after: .newItem) {
-           Button("Create Recipe from Web…") {
+           Button("Create from Web…") {
                #if os(iOS)
                NotificationCenter.default.post(name: .showCreateFromWebSheet, object: nil)
                #else
@@ -162,7 +162,7 @@ struct Menus: Commands {
                #endif
            }
            .disabled(sheetTracker.isAnySheetShown)
-           Button("Create Recipe from Image…") {
+           Button("Create from Image…") {
                openWindow(id: "create-recipe-from-image-window")
            }
            Divider()

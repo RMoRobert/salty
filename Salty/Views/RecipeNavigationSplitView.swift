@@ -353,10 +353,26 @@ struct RecipeNavigationSplitView: View {
                         .disabled(viewModel.selectedRecipeIDs.isEmpty)
                     }
                     
-                    Button(action: {
-                        viewModel.addNewRecipe()
-                    }) {
+                    Menu {
+                        Button(action: {
+                            viewModel.addNewRecipe()
+                        }) {
+                            Label("New Recipe", systemImage: "plus")
+                        }
+                        Divider()
+                        Button("Create from Image…") {
+                            showingCreateFromImageSheet = true
+                        }
+                        Button("Import from File…") {
+                            showingImportFromFileSheet = true
+                        }
+                        Button("Create from Web…") {
+                            showingCreateFromWebSheet = true
+                        }
+                    } label: {
                         Label("New Recipe", systemImage: "plus")
+                    } primaryAction: {
+                        viewModel.addNewRecipe()
                     }
                     .disabled(isEditMode)
                     
@@ -406,16 +422,6 @@ struct RecipeNavigationSplitView: View {
                         }
                         Button("Course Editor") {
                             showingEditLibCoursesSheet = true
-                        }
-                        Divider()
-                        Button("Create Recipe from Image…") {
-                            showingCreateFromImageSheet.toggle()
-                        }
-                        Button("Import Recipes from File…") {
-                            showingImportFromFileSheet.toggle()
-                        }
-                        Button("Create Recipe from Web…") {
-                            showingCreateFromWebSheet.toggle()
                         }
 
                         #if !os(macOS)
@@ -487,11 +493,11 @@ struct RecipeNavigationSplitView: View {
                             Label("New Recipe", systemImage: "plus")
                         }
                         Divider()
-                        Button("Create Recipe from Web…") {
+                        Button("Create from Web…") {
                             openWindow(id: "create-recipe-from-web-window")
                         }
                         .disabled(isAnySheetShown)
-                        Button("Create Recipe from Image…") {
+                        Button("Create from Image…") {
                             openWindow(id: "create-recipe-from-image-window")
                         }
                         Button("Import from File…") {
