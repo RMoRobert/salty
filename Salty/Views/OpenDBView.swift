@@ -6,8 +6,10 @@
 //
 
 import SwiftUI
+import OSLog
 
 struct OpenDBView: View {
+    private let logger = Logger(subsystem: "Salty", category: "FileAccess")
     @Environment(\.dismiss) private var dismiss
     @State private var showingFolderPicker = false
     @State private var isOpening = false
@@ -35,7 +37,7 @@ struct OpenDBView: View {
                     case .success(let url):
                         openDatabase(at: url)
                     case .failure(let error):
-                        print(error.localizedDescription)
+                        logger.error("\(error.localizedDescription)")
                         errorMessage = "Failed to select folder: \(error.localizedDescription)"
                         showingErrorAlert = true
                     }
@@ -114,11 +116,11 @@ struct OpenDBView: View {
     
     private func openDatabase(at url: URL) {
         isOpening = true
-        print("Starting database open...")
+        logger.debug("Starting database open...")
         
         do {
             guard url.startAccessingSecurityScopedResource() else {
-                print("Unable to startAccessingSecurityScopedResource for \(url)")
+                logger.error("Unable to startAccessingSecurityScopedResource for \(url)")
                 errorMessage = "Unable to access the selected folder. Please try again."
                 showingErrorAlert = true
                 isOpening = false
@@ -132,7 +134,7 @@ struct OpenDBView: View {
             isOpening = false
             showingSuccessAlert = true
         } catch {
-            print("Unable to save bookmarks for database path: \(error.localizedDescription)")
+            logger.error("Unable to save bookmarks for database path: \(error.localizedDescription)")
             errorMessage = "Failed to save database location: \(error.localizedDescription)"
             showingErrorAlert = true
             isOpening = false

@@ -8,8 +8,10 @@
 import SwiftUI
 import SQLiteData
 import UniformTypeIdentifiers
+import OSLog
 
 struct ImportRecipesFromFileView: View {
+    private let logger = Logger(subsystem: "Salty", category: "Import")
     @Dependency(\.defaultDatabase) private var database
     @Environment(\.dismiss) private var dismiss
     @State private var showingImportFilePicker = false
@@ -49,7 +51,7 @@ struct ImportRecipesFromFileView: View {
         guard let file = selectedFileUrl else { return }
         
         isImporting = true
-        print("Starting automatic import...")
+        logger.debug("Starting automatic import...")
         let _ = file.startAccessingSecurityScopedResource()
         
         Task {
@@ -62,14 +64,14 @@ struct ImportRecipesFromFileView: View {
                 }
                 
                 await MainActor.run {
-                    print("Done with automatic import")
+                    logger.debug("Done with automatic import")
                     file.stopAccessingSecurityScopedResource()
                     isImporting = false
                     showingSuccessAlert = true
                 }
             } catch {
                 await MainActor.run {
-                    print("Automatic import failed: \(error.localizedDescription)")
+                    logger.error("Automatic import failed: \(error.localizedDescription)")
                     file.stopAccessingSecurityScopedResource()
                     isImporting = false
                     errorMessage = "Import failed: \(error.localizedDescription)"
@@ -91,7 +93,7 @@ struct ImportRecipesFromFileView: View {
                 case .success(let file):
                     selectedFileUrl = file
                 case .failure(let error):
-                    print(error.localizedDescription)
+                    logger.error("\(error.localizedDescription)")
                     errorMessage = "Failed to select file: \(error.localizedDescription)"
                     showingErrorAlert = true
                 }
@@ -181,12 +183,12 @@ struct ImportRecipesFromFileView: View {
         }
         .padding()
         .onAppear {
-            print("ImportRecipesFromFileView appeared")
-            print("preSelectedFileURL: \(String(describing: preSelectedFileURL))")
+            logger.debug("ImportRecipesFromFileView appeared")
+            logger.debug("preSelectedFileURL: \(String(describing: preSelectedFileURL))")
             // Set the pre-selected file URL if provided
             if let preSelectedURL = preSelectedFileURL {
                 selectedFileUrl = preSelectedURL
-                print("Set selectedFileUrl to: \(preSelectedURL)")
+                logger.debug("Set selectedFileUrl to: \(preSelectedURL)")
             }
         }
         .alert("Import Complete", isPresented: $showingSuccessAlert) {

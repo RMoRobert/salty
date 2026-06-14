@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import OSLog
 #if os(iOS)
 import PhotosUI
 #elseif os(macOS)
@@ -13,6 +14,7 @@ import AVFoundation
 #endif
 
 struct RecipeImageEditView: View {
+    private let logger = Logger(subsystem: "Salty", category: "RecipeImage")
     @Binding var recipe: Recipe
     @State private var dragOver = false
     @State private var showingImageFilePicker = false
@@ -218,11 +220,11 @@ struct RecipeImageEditView: View {
                         let imageData = try Data(contentsOf: url)
                         recipe.setImage(imageData)
                     } catch {
-                        print("Error loading image data: \(error)")
+                        logger.error("Error loading image data: \(error)")
                     }
                 }
             case .failure(let error):
-                print("Error selecting image: \(error.localizedDescription)")
+                logger.error("Error selecting image: \(error.localizedDescription)")
             }
         }
         #if os(iOS)
@@ -305,6 +307,7 @@ protocol RecipeImageCameraViewControllerDelegate: AnyObject {
 }
 
 class RecipeImageCameraViewController: NSViewController {
+    private let logger = Logger(subsystem: "Salty", category: "RecipeImage")
     weak var delegate: RecipeImageCameraViewControllerDelegate?
     private var captureSession: AVCaptureSession?
     private var videoPreviewLayer: AVCaptureVideoPreviewLayer?
@@ -334,22 +337,22 @@ class RecipeImageCameraViewController: NSViewController {
         
         // Get the default camera
         guard let camera = AVCaptureDevice.default(for: .video) else {
-            print("No camera available")
+            logger.debug("No camera available")
             return
         }
-        
+
         do {
             let input = try AVCaptureDeviceInput(device: camera)
             if captureSession.canAddInput(input) {
                 captureSession.addInput(input)
             }
-            
+
             photoOutput = AVCapturePhotoOutput()
             if let photoOutput = photoOutput, captureSession.canAddOutput(photoOutput) {
                 captureSession.addOutput(photoOutput)
             }
         } catch {
-            print("Error setting up camera: \(error)")
+            logger.error("Error setting up camera: \(error)")
         }
     }
     
@@ -444,14 +447,14 @@ class RecipeImageCameraViewController: NSViewController {
 extension RecipeImageCameraViewController: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
-            print("Error capturing photo: \(error)")
+            logger.error("Error capturing photo: \(error)")
             return
         }
-        
+
         guard let imageData = photo.fileDataRepresentation(),
               let image = NSImage(data: imageData),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            print("Failed to create CGImage from photo")
+            logger.error("Failed to create CGImage from photo")
             return
         }
         

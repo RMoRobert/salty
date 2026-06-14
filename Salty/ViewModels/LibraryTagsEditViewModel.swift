@@ -9,10 +9,12 @@ import Foundation
 import SwiftUI
 import SQLiteData
 import UUIDV7
+import OSLog
 
 @MainActor
 @Observable
 class LibraryTagsEditViewModel {
+    private let logger = Logger(subsystem: "Salty", category: "Library")
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
@@ -93,7 +95,7 @@ class LibraryTagsEditViewModel {
             }
             selectedIndices = newSelection
         } catch {
-            print("Error deleting tag: \(error)")
+            logger.error("Error deleting tag: \(error)")
         }
     }
     
@@ -145,7 +147,7 @@ class LibraryTagsEditViewModel {
             scrollToNewItem = true
             newTagName = ""
         } catch {
-            print("Error creating tag: \(error)")
+            logger.error("Error creating tag: \(error)")
         }
     }
     
@@ -181,7 +183,7 @@ class LibraryTagsEditViewModel {
             editingTagIndex = nil
             editingTagName = ""
         } catch {
-            print("Error updating tag: \(error)")
+            logger.error("Error updating tag: \(error)")
         }
     }
     

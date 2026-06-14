@@ -5,14 +5,16 @@
 //  Created by Robert on 6/6/25.
 //
 
+import OSLog
 import SQLiteData
 import SwiftUI
 
 // Global storage for import URL to avoid state reset issues
 class ImportURLManager: ObservableObject {
+    private let logger = Logger(subsystem: "Salty", category: "App")
     @Published var pendingImportURL: URL? {
         didSet {
-            print("ImportURLManager pendingImportURL changed to: \(String(describing: pendingImportURL))")
+            logger.debug("ImportURLManager pendingImportURL changed to: \(String(describing: self.pendingImportURL))")
         }
     }
     @Published var showingImportSheet = false
@@ -20,6 +22,7 @@ class ImportURLManager: ObservableObject {
 
 @main
 struct SaltyApp: App {
+    private let logger = Logger(subsystem: "Salty", category: "App")
     @Dependency(\.context) var context
     @Environment(\.openWindow) private var openWindow
     @StateObject private var importURLManager = ImportURLManager()
@@ -32,11 +35,11 @@ struct SaltyApp: App {
 
                 // Validate access; if a custom location can't be reached, try one fresh resolution.
                 if !FileManager.validateDatabaseAccess() {
-                    print("Warning: Database access validation failed. Attempting to re-resolve location bookmark...")
+                    logger.error("Warning: Database access validation failed. Attempting to re-resolve location bookmark...")
                     if FileManager.refreshCustomDatabaseBookmark() {
-                        print("Successfully re-resolved database location bookmark")
+                        logger.debug("Successfully re-resolved database location bookmark")
                     } else {
-                        print("Failed to re-resolve database location - may need user intervention")
+                        logger.error("Failed to re-resolve database location - may need user intervention")
                     }
                 }
 
@@ -49,7 +52,7 @@ struct SaltyApp: App {
                 backupManager.createBackupIfNeeded()
             } catch {
                 // Log the error but don't crash the app
-                print("Failed to initialize database: \(error)")
+                logger.error("Failed to initialize database: \(error)")
             }
         }
     }
@@ -132,13 +135,13 @@ struct SaltyApp: App {
     private func handleIncomingURL(_ url: URL) {
         // Check if this is a .saltyRecipe file
         if url.pathExtension.lowercased() == "saltyrecipe" {
-            print("Received .saltyRecipe file: \(url)")
+            logger.debug("Received .saltyRecipe file: \(url)")
             importURLManager.pendingImportURL = url
-            print("Set importURLManager.pendingImportURL to: \(url)")
-            print("Showing import sheet...")
+            logger.debug("Set importURLManager.pendingImportURL to: \(url)")
+            logger.debug("Showing import sheet...")
             importURLManager.showingImportSheet = true
         } else {
-            print("Received unsupported file type: \(url)")
+            logger.debug("Received unsupported file type: \(url)")
         }
     }
 }

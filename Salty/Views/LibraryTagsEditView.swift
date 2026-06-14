@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct LibraryTagsEditView: View {
-    @Bindable private var viewModel = LibraryTagsEditViewModel()
+    @State private var viewModel = LibraryTagsEditViewModel()
     @Environment(\.dismiss) var dismiss
     
     var body: some View {

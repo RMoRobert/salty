@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import OSLog
 
 #if os(iOS)
 import VisionKit
@@ -22,6 +23,7 @@ let targetSectionPickerTitle: String = "Target Section"
 #endif
 
 struct ScanTextForRecipeView: View {
+    private let logger = Logger(subsystem: "Salty", category: "OCR")
     @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: RecipeDetailEditViewModel
     @StateObject private var ocrService = RecipeOCRService()
@@ -241,7 +243,7 @@ struct ScanTextForRecipeView: View {
                     loadImageFromSecureURL(url)
                 }
             case .failure(let error):
-                print("File picker error: \(error)")
+                logger.error("File picker error: \(error)")
             }
         }
         #endif
@@ -507,12 +509,12 @@ struct ScanTextForRecipeView: View {
             // Create image source from data instead of URL
             guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
                   let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-                print("Failed to create image from data")
+                logger.error("Failed to create image from data")
                 return nil
             }
             return cgImage
         } catch {
-            print("Failed to read image data: \(error)")
+            logger.error("Failed to read image data: \(error)")
             return nil
         }
     }

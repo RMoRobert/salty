@@ -12,9 +12,8 @@ import WebViewKit
 
 struct RecipeDetailWebView: View {
     @State var recipe: Recipe
-    
+
     var body: some View {
-        let _ = print(recipe.asHtml)
         WebView(htmlString: recipe.asHtml)
     }
 }

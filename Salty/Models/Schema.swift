@@ -452,11 +452,7 @@ func appDatabase() throws -> any DatabaseWriter {
     configuration.prepareDatabase { db in
 #if DEBUG
         db.trace(options: .profile) {
-            if context == .live {
-                logger.debug("\($0.expandedDescription)")
-            } else {
-                print("\($0.expandedDescription)")
-            }
+            logger.debug("\($0.expandedDescription)")
         }
 #endif
     }

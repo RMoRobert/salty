@@ -7,8 +7,10 @@
 
 import SwiftUI
 import SQLiteData
+import OSLog
 
 struct RecipeImageView: View {
+    private let logger = Logger(subsystem: "Salty", category: "RecipeImage")
     @State var recipe: Recipe
     @State private var dragOver = false
     @State var imageFrameSize: CGFloat = 125
@@ -37,7 +39,7 @@ struct RecipeImageView: View {
                         // Check if it's a cancellation error and retry (see -999 cancelled sometimes on iOS -- no idea why, but this seems to work around)
                         if let urlError = error as? URLError, urlError.code == .cancelled, retryCount < 2 {
                             #if DEBUG
-                            let _ = print("RecipeImageView: Retrying image load (attempt \(retryCount + 1))")
+                            let _ = logger.debug("RecipeImageView: Retrying image load (attempt \(retryCount + 1))")
                             #endif
                             // Retry after a short delay
                             let _ = DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {

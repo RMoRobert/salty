@@ -9,9 +9,11 @@ import Foundation
 import SwiftUI
 import SQLiteData
 import UUIDV7
+import OSLog
 
 @MainActor
 class LibraryCategoriesEditViewModel: ObservableObject {
+    private let logger = Logger(subsystem: "Salty", category: "Library")
     @Dependency(\.defaultDatabase) private var database
     
     // List view state
@@ -96,7 +98,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             }
             selectedIndices = newSelection
         } catch {
-            print("Error deleting category: \(error)")
+            logger.error("Error deleting category: \(error)")
         }
     }
     
@@ -150,7 +152,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             scrollToNewItem = true
             newCategoryName = ""
         } catch {
-            print("Error creating category: \(error)")
+            logger.error("Error creating category: \(error)")
         }
     }
     
@@ -186,7 +188,7 @@ class LibraryCategoriesEditViewModel: ObservableObject {
             editingCategoryIndex = nil
             editingCategoryName = ""
         } catch {
-            print("Error updating category: \(error)")
+            logger.error("Error updating category: \(error)")
         }
     }
     

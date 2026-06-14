@@ -7,6 +7,7 @@
 
 import SwiftUI
 import WebKit
+import OSLog
 
 #if os(macOS)
 import AppKit
@@ -40,6 +41,7 @@ struct PrintRecipeView: NSViewRepresentable {
     }
     
     class Coordinator: NSObject, WKNavigationDelegate {
+        private let logger = Logger(subsystem: "Salty", category: "Print")
         var webView: WKWebView?
         @Binding var isPresented: Bool
         
@@ -66,7 +68,7 @@ struct PrintRecipeView: NSViewRepresentable {
         private func printWebView(_ webView: WKWebView) {
             // Ensure webView has a valid frame
             guard webView.frame.width > 0 && webView.frame.height > 0 else {
-                print("Error: WebView frame is invalid for printing")
+                logger.error("Error: WebView frame is invalid for printing")
                 DispatchQueue.main.async {
                     self.isPresented = false
                 }

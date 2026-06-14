@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SQLiteData
+import OSLog
 
 //struct CategoryEditView: View {
 //    @Binding var recipe: Recipe
@@ -17,6 +18,7 @@ import SQLiteData
 //}
 
 struct CategoryEditView: View {
+    private let logger = Logger(subsystem: "Salty", category: "UI")
     @Dependency(\.defaultDatabase) private var database
     @Binding var recipe: Recipe
     @Binding var selectedCategoryIDs: Set<String>
@@ -166,10 +168,10 @@ struct CategoryEditView: View {
             } else {
                 // If recipe doesn't exist yet, the selectedCategoryIDs binding will be updated
                 // and the categories will be saved when the recipe is saved
-                print("Recipe not yet saved to database, category selections stored in binding")
+                logger.debug("Recipe not yet saved to database, category selections stored in binding")
             }
         } catch {
-            print("Error saving category changes: \(error)")
+            logger.error("Error saving category changes: \(error)")
         }
     }
     
@@ -204,7 +206,7 @@ struct CategoryEditView: View {
             newCategoryName = ""
         } catch {
             // Handle error - could add error alert here if needed
-            print("Error creating category: \(error)")
+            logger.error("Error creating category: \(error)")
         }
     }
     

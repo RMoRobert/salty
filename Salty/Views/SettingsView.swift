@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SQLiteData
+import OSLog
 
 /// Returns the heading text with a trailing colon on macOS (platform convention) and unchanged on iOS.
 private func platformSpecificHeadingName(_ text: String) -> String {
@@ -51,6 +52,7 @@ enum RecipeListViewStyle: String, Codable {
 }
 
 struct DatabaseSettingsView: View {
+    private let logger = Logger(subsystem: "Salty", category: "Settings")
     @Binding var diagnosticsInfo: [String: Any]
     @State private var showingResetConfirmation = false
     @State private var showingOpenDatabaseSheet = false
@@ -141,7 +143,7 @@ struct DatabaseSettingsView: View {
     
     private func resetToDefaultDatabaseLocation() {
         FileManager.clearCustomLocationBookmarks()
-        print("Reset database location to default")
+        logger.debug("Reset database location to default")
         // Refresh diagnostics after reset
         diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
     }

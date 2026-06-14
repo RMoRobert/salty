@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import OSLog
 
 #if os(iOS)
 import VisionKit
@@ -17,6 +18,7 @@ import AVFoundation
 #endif
 
 struct CreateRecipeFromImageView: View {
+    private let logger = Logger(subsystem: "Salty", category: "Import")
     @Environment(\.dismiss) private var dismiss
     @StateObject private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
@@ -240,7 +242,7 @@ struct CreateRecipeFromImageView: View {
                     loadImageFromSecureURL(url)
                 }
             case .failure(let error):
-                print("File picker error: \(error)")
+                logger.error("File picker error: \(error)")
             }
         }
         .sheet(isPresented: $showingRecipeEditor) {
@@ -299,12 +301,12 @@ struct CreateRecipeFromImageView: View {
             // Create image source from data instead of URL
             guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
                   let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-                print("Failed to create image from data")
+                logger.error("Failed to create image from data")
                 return nil
             }
             return cgImage
         } catch {
-            print("Failed to read image data: \(error)")
+            logger.error("Failed to read image data: \(error)")
             return nil
         }
     }
@@ -501,6 +503,7 @@ protocol MacCameraViewControllerDelegate: AnyObject {
 }
 
 class MacCameraViewController: NSViewController {
+    private let logger = Logger(subsystem: "Salty", category: "Import")
     weak var delegate: MacCameraViewControllerDelegate?
     private var captureSession: AVCaptureSession?
     private var videoPreviewLayer: AVCaptureVideoPreviewLayer?
@@ -530,22 +533,22 @@ class MacCameraViewController: NSViewController {
         
         // Get the default camera
         guard let camera = AVCaptureDevice.default(for: .video) else {
-            print("No camera available")
+            logger.debug("No camera available")
             return
         }
-        
+
         do {
             let input = try AVCaptureDeviceInput(device: camera)
             if captureSession.canAddInput(input) {
                 captureSession.addInput(input)
             }
-            
+
             photoOutput = AVCapturePhotoOutput()
             if let photoOutput = photoOutput, captureSession.canAddOutput(photoOutput) {
                 captureSession.addOutput(photoOutput)
             }
         } catch {
-            print("Error setting up camera: \(error)")
+            logger.error("Error setting up camera: \(error)")
         }
     }
     
@@ -659,17 +662,17 @@ class MacCameraViewController: NSViewController {
 extension MacCameraViewController: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
-            print("Error capturing photo: \(error)")
+            logger.error("Error capturing photo: \(error)")
             return
         }
-        
+
         guard let imageData = photo.fileDataRepresentation(),
               let image = NSImage(data: imageData),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            print("Failed to create CGImage from photo")
+            logger.error("Failed to create CGImage from photo")
             return
         }
-        
+
         DispatchQueue.main.async { [weak self] in
             self?.delegate?.cameraViewController(self!, didCaptureImage: cgImage)
         }
