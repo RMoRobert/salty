@@ -10,14 +10,16 @@ import SQLiteData
 import SwiftUI
 
 // Global storage for import URL to avoid state reset issues
-class ImportURLManager: ObservableObject {
+@MainActor
+@Observable
+class ImportURLManager {
     private let logger = Logger(subsystem: "Salty", category: "App")
-    @Published var pendingImportURL: URL? {
+    var pendingImportURL: URL? {
         didSet {
             logger.debug("ImportURLManager pendingImportURL changed to: \(String(describing: self.pendingImportURL))")
         }
     }
-    @Published var showingImportSheet = false
+    var showingImportSheet = false
 }
 
 @main
@@ -25,7 +27,7 @@ struct SaltyApp: App {
     private let logger = Logger(subsystem: "Salty", category: "App")
     @Dependency(\.context) var context
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var importURLManager = ImportURLManager()
+    @State private var importURLManager = ImportURLManager()
     
     init() {
         if context == .live {

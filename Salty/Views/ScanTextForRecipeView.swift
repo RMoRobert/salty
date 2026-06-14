@@ -26,7 +26,7 @@ struct ScanTextForRecipeView: View {
     private let logger = Logger(subsystem: "Salty", category: "OCR")
     @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: RecipeDetailEditViewModel
-    @StateObject private var ocrService = RecipeOCRService()
+    @State private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
     #if os(iOS)
     @State private var multiPageScan: VNDocumentCameraScan?

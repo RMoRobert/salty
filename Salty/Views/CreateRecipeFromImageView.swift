@@ -20,7 +20,7 @@ import AVFoundation
 struct CreateRecipeFromImageView: View {
     private let logger = Logger(subsystem: "Salty", category: "Import")
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var ocrService = RecipeOCRService()
+    @State private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
 #if os(iOS)
     @State private var multiPageScan: VNDocumentCameraScan?

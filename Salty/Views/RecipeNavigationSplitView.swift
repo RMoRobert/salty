@@ -96,7 +96,7 @@ struct RecipeNavigationSplitView: View {
     // To force for testing:
     //@State private var offeredSampleImport = false
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var searchOptionsTracker = SearchOptionsTracker()
+    @State private var searchOptionsTracker = SearchOptionsTracker()
     
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true

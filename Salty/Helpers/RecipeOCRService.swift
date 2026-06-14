@@ -35,12 +35,13 @@ enum RecipeOCRError: Error, LocalizedError {
 }
 
 @MainActor
-class RecipeOCRService: ObservableObject {
+@Observable
+class RecipeOCRService {
     private let logger = Logger(subsystem: "Salty", category: "App")
     
-    @Published var isProcessing = false
-    @Published var extractedText = ""
-    @Published var error: RecipeOCRError?
+    var isProcessing = false
+    var extractedText = ""
+    var error: RecipeOCRError?
     
     func extractText(from image: CGImage) async {
         isProcessing = true

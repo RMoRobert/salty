@@ -151,7 +151,7 @@ struct CreateRecipeFromWebView: View {
         }
         
         webView.getSelectedText { selectedText in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 if let text = selectedText, !text.isEmpty {
                     self.viewModel.extractTextToField(text, field: field)
                 }
@@ -430,8 +430,8 @@ struct RecipeWebBrowserView: View {
         
         webView.getPageHTML { html in
             guard let html = html else { return }
-            
-            DispatchQueue.main.async {
+
+            Task { @MainActor in
                 let importer = SchemaOrgRecipeJSONLDImporter()
                 let recipes = importer.parseRecipes(from: html)
                 

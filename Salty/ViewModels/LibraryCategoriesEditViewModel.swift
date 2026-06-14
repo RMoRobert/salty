@@ -12,21 +12,24 @@ import UUIDV7
 import OSLog
 
 @MainActor
-class LibraryCategoriesEditViewModel: ObservableObject {
+@Observable
+class LibraryCategoriesEditViewModel {
     private let logger = Logger(subsystem: "Salty", category: "Library")
+    @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
     // List view state
-    @Published var selectedIndices: Set<Int> = []
-    @Published var showingNewCategoryAlert = false
-    @Published var newCategoryName = ""
-    @Published var showingDuplicateNameAlert = false
-    @Published var showingEditCategoryAlert = false
-    @Published var editingCategoryName = ""
-    @Published var editingCategoryIndex: Int? = nil
-    @Published var scrollToNewItem: Bool = false
-    @Published var searchText: String = ""
+    var selectedIndices: Set<Int> = []
+    var showingNewCategoryAlert = false
+    var newCategoryName = ""
+    var showingDuplicateNameAlert = false
+    var showingEditCategoryAlert = false
+    var editingCategoryName = ""
+    var editingCategoryIndex: Int? = nil
+    var scrollToNewItem: Bool = false
+    var searchText: String = ""
     
+    @ObservationIgnored
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
     var categories: [Category]
     

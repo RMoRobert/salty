@@ -20,17 +20,19 @@ import AppKit
 // MARK: - Sync Service
 
 @MainActor
-class SaltySyncService: ObservableObject {
+@Observable
+class SaltySyncService {
     static let shared = SaltySyncService()
     
     private let logger = Logger(subsystem: "Salty", category: "Sync")
     
+    @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
-    @Published var isSyncing = false
-    @Published var lastSyncDate: Date?
-    @Published var lastSyncError: String?
-    @Published var syncProgress: SyncProgress = SyncProgress()
+    var isSyncing = false
+    var lastSyncDate: Date?
+    var lastSyncError: String?
+    var syncProgress: SyncProgress = SyncProgress()
     
     private var serverUrl: String {
         UserDefaults.standard.string(forKey: "serverUrl") ?? ""

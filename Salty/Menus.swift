@@ -9,17 +9,22 @@ import SwiftUI
 
 // Want to disable some menu items on macOS (and iPadOS 26+?) when
 // sheets are open since can't open more than one; this should help
-class SheetStateTracker: ObservableObject {
-    @Published var isAnySheetShown = false
-    
+@MainActor
+@Observable
+class SheetStateTracker {
+    var isAnySheetShown = false
+
     init() {
         NotificationCenter.default.addObserver(
             forName: .sheetStateChanged,
             object: nil,
             queue: .main
         ) { notification in
-            if let isShown = notification.userInfo?["isShown"] as? Bool {
-                self.isAnySheetShown = isShown
+            // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
+            MainActor.assumeIsolated {
+                if let isShown = notification.userInfo?["isShown"] as? Bool {
+                    self.isAnySheetShown = isShown
+                }
             }
         }
     }
@@ -30,21 +35,26 @@ class SheetStateTracker: ObservableObject {
 }
 
 // Track recipe selection state for enabling/disabling menu items
-class SelectionStateTracker: ObservableObject {
-    @Published var hasRecipeSelected = false
-    @Published var selectedRecipeCount = 0
-    
+@MainActor
+@Observable
+class SelectionStateTracker {
+    var hasRecipeSelected = false
+    var selectedRecipeCount = 0
+
     init() {
         NotificationCenter.default.addObserver(
             forName: .recipeSelectionChanged,
             object: nil,
             queue: .main
         ) { notification in
-            if let hasSelected = notification.userInfo?["hasSelected"] as? Bool {
-                self.hasRecipeSelected = hasSelected
-            }
-            if let count = notification.userInfo?["count"] as? Int {
-                self.selectedRecipeCount = count
+            // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
+            MainActor.assumeIsolated {
+                if let hasSelected = notification.userInfo?["hasSelected"] as? Bool {
+                    self.hasRecipeSelected = hasSelected
+                }
+                if let count = notification.userInfo?["count"] as? Int {
+                    self.selectedRecipeCount = count
+                }
             }
         }
     }
@@ -56,28 +66,31 @@ class SelectionStateTracker: ObservableObject {
 
 // Track search options state to make menu reactive to UserDefaults changes
 // Also tracks changes via changeId to trigger query updates
-class SearchOptionsTracker: ObservableObject {
-    // Not @Published: this is a private cache of UserDefaults values. Publishing it would fire
-    // objectWillChange while loadFromUserDefaults() runs inside the @StateObject's init during a
-    // view update ("Publishing changes from within view updates is not allowed"). Views react via
-    // the published `changeId` instead, which is bumped whenever the selected options change.
+@MainActor
+@Observable
+class SearchOptionsTracker {
+    // Private cache of the UserDefaults values; `changeId` is bumped whenever the selected options
+    // change so dependents (e.g. the recipe query id) refresh.
     private var optionStates: [RecipeListSearchOptions: Bool] = [:]
-    @Published var changeId = UUID()
+    var changeId = UUID()
     private var lastSearchOptionsKey: String = ""
-    
+
     init() {
         // Initialize from UserDefaults
         loadFromUserDefaults()
         lastSearchOptionsKey = currentSearchOptionsKey()
-        
+
         // Observe UserDefaults changes
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.loadFromUserDefaults()
-            self?.checkForChanges()
+            // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
+            MainActor.assumeIsolated {
+                self?.loadFromUserDefaults()
+                self?.checkForChanges()
+            }
         }
     }
     
@@ -140,9 +153,9 @@ class SearchOptionsTracker: ObservableObject {
 
 struct Menus: Commands {
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var sheetTracker = SheetStateTracker()
-    @StateObject private var selectionTracker = SelectionStateTracker()
-    @StateObject private var searchOptionsTracker = SearchOptionsTracker()
+    @State private var sheetTracker = SheetStateTracker()
+    @State private var selectionTracker = SelectionStateTracker()
+    @State private var searchOptionsTracker = SearchOptionsTracker()
     
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
     @AppStorage("recipeListSortDirection") private var recipeListSortDirection: RecipeListSortDirection = .ascending

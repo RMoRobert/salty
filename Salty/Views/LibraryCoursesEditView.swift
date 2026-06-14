@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct LibraryCoursesEditView: View {
-    @StateObject private var viewModel = LibraryCoursesEditViewModel()
+    @State private var viewModel = LibraryCoursesEditViewModel()
     @Environment(\.dismiss) var dismiss
     
     var body: some View {

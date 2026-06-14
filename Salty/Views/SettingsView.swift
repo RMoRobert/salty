@@ -153,7 +153,7 @@ struct ServerSettingsView: View {
     @AppStorage("serverUse") private var serverUse = false
     @AppStorage("serverUrl") private var serverUrl: String = ""
     @AppStorage("savePasswordInKeychain") private var savePasswordInKeychain = false
-    @StateObject private var syncService = SaltySyncService.shared
+    @State private var syncService = SaltySyncService.shared
     @State private var showingSyncAlert = false
     @State private var syncAlertMessage = ""
     @State private var syncAlertIsError = false

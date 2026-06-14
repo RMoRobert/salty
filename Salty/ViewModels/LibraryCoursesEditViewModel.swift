@@ -11,20 +11,23 @@ import SQLiteData
 import OSLog
 
 @MainActor
-class LibraryCoursesEditViewModel: ObservableObject {
+@Observable
+class LibraryCoursesEditViewModel {
     private let logger = Logger(subsystem: "Salty", category: "Library")
+    @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
     // List view state
-    @Published var selectedIndices: Set<Int> = []
-    @Published var showingNewCourseAlert = false
-    @Published var newCourseName = ""
-    @Published var showingDuplicateNameAlert = false
-    @Published var showingEditCourseAlert = false
-    @Published var editingCourseName = ""
-    @Published var editingCourseIndex: Int? = nil
-    @Published var scrollToNewItem: Bool = false
+    var selectedIndices: Set<Int> = []
+    var showingNewCourseAlert = false
+    var newCourseName = ""
+    var showingDuplicateNameAlert = false
+    var showingEditCourseAlert = false
+    var editingCourseName = ""
+    var editingCourseIndex: Int? = nil
+    var scrollToNewItem: Bool = false
     
+    @ObservationIgnored
     @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
     var courses: [Course]
     
