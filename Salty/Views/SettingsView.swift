@@ -197,12 +197,12 @@ struct ServerSettingsView: View {
 #endif
                 VStack(alignment: .leading) {
                     if (!serverUrl.isEmpty && !serverUrl.starts(with: "https")) {
-                        Text("WARNING: It is recommended to use HTTPS to better secure your login credentials.")
+                        Text("WARNING: It is recommended to use HTTPS for better security.")
                             .font(.caption)
                             .foregroundStyle(Color.red)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(verbatim: "Example: https://sever.example.com:8080")
+                    Text(verbatim: "Example: https://sever.example.com:8443")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
