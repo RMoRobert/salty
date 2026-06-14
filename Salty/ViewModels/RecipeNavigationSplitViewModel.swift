@@ -41,10 +41,9 @@ extension Notification.Name {
 class RecipeNavigationSplitViewModel {
     var isNewLaunch = false // true if first launch of app, view should use to show reasonable default instead of blank-looking page on mobile
     
-    init() {
-        // Check if this is a new launch by looking for existing recipes
-        // We'll set this properly after the database is loaded
-        
+    init(isNewLaunch: Bool = false) {
+        self.isNewLaunch = isNewLaunch
+
         // Initialize sort settings from UserDefaults (only if they exist, otherwise use defaults)
         if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortOrder"),
            let setting = RecipeListSortOrderSetting(rawValue: rawValue) {

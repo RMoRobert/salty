@@ -88,7 +88,9 @@ private struct TagDropTargetView: View {
 }
 
 struct RecipeNavigationSplitView: View {
-    @State var viewModel: RecipeNavigationSplitViewModel
+    // Received from MainView (which owns it via @State). @Bindable provides the `$viewModel`
+    // bindings this view needs without taking a second, competing ownership of the instance.
+    @Bindable var viewModel: RecipeNavigationSplitViewModel
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @AppStorage("offeredSampleImport") private var offeredSampleImport = false
     // To force for testing:
