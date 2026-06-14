@@ -7,6 +7,7 @@
 
 import Foundation
 import SQLiteData
+import GRDB
 import OSLog
 
 public final class DatabaseBackupManager {
@@ -125,10 +126,7 @@ public final class DatabaseBackupManager {
     private func createBackupZip(at backupURL: URL) async throws {
         let zipService = ZipService()
         zipService.shouldOverwriteIfNecessary = true
-        
-        // Get the entire Salty library directory (the *.saltyRecipeLibrary folder)
-        let saltyLibraryDirectory = FileManager.saltyLibraryDirectory
-        
+
         // Handle security-scoped resources for custom database locations
         var didStartAccessing = false
         var parentDirectory: URL?
@@ -145,27 +143,53 @@ public final class DatabaseBackupManager {
                 parent.stopAccessingSecurityScopedResource()
             }
         }
-        
+
         // Create a temporary directory to organize our backup contents
         let tempBackupDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SaltyBackup-\(UUID().uuidString)")
-        
         try FileManager.default.createDirectory(at: tempBackupDirectory, withIntermediateDirectories: true, attributes: nil)
-        
         defer {
             // Clean up temporary directory
             try? FileManager.default.removeItem(at: tempBackupDirectory)
         }
-        
-        // Copy the entire Salty library directory structure
-        let libraryName = saltyLibraryDirectory.lastPathComponent
-        let backupLibraryDir = tempBackupDirectory.appendingPathComponent(libraryName)
-        
-        try FileManager.default.copyItem(at: saltyLibraryDirectory, to: backupLibraryDir)
-        logger.debug("Copied entire Salty library directory: \(libraryName)")
-        
-        // Create the ZIP file
+
+        // Stage the backup mirroring the library bundle layout so a restore is drop-in.
+        let libraryName = FileManager.saltyLibraryDirectory.lastPathComponent
+        let backupLibraryDir = tempBackupDirectory.appendingPathComponent(libraryName, isDirectory: true)
+        try FileManager.default.createDirectory(at: backupLibraryDir, withIntermediateDirectories: true, attributes: nil)
+
+        // 1) Write a CONSISTENT database snapshot via SQLite's online backup API. A raw file
+        //    copy of a live WAL database can capture a torn snapshot (committed data may still
+        //    live in the -wal file mid-checkpoint); the online backup copies a coherent state.
+        let snapshotURL = backupLibraryDir
+            .appendingPathComponent(FileManager.dbFileName, isDirectory: false)
+            .appendingPathExtension(FileManager.dbFileExt)
+        try writeConsistentDatabaseSnapshot(to: snapshotURL)
+        logger.debug("Wrote consistent database snapshot for backup")
+
+        // 2) Copy the external image files referenced by the database, if present.
+        let imagesSource = FileManager.saltyImageFolderUrl
+        if FileManager.default.fileExists(atPath: imagesSource.path) {
+            let imagesDest = backupLibraryDir.appendingPathComponent(FileManager.saltyImageFolderName, isDirectory: true)
+            try FileManager.default.copyItem(at: imagesSource, to: imagesDest)
+            logger.debug("Copied recipe images into backup")
+        }
+
+        // 3) Zip the staged library bundle.
         let _ = try zipService.createZip(zipFinalURL: backupURL, fromDirectory: tempBackupDirectory)
+    }
+
+    /// Writes a consistent, self-contained snapshot of the live database to `destinationURL`
+    /// using SQLite's online backup API. The destination is a fresh `DatabaseQueue`
+    /// (rollback-journal mode), so the result is a single `.sqlite` file with no `-wal`/`-shm`
+    /// sidecars — safe to copy, zip, or open directly.
+    func writeConsistentDatabaseSnapshot(to destinationURL: URL) throws {
+        // Remove any pre-existing file so the backup target starts empty.
+        try? FileManager.default.removeItem(at: destinationURL)
+
+        let snapshot = try DatabaseQueue(path: destinationURL.path)
+        try database.backup(to: snapshot)
+        try snapshot.close()
     }
     
     private func cleanupOldBackups() async {
