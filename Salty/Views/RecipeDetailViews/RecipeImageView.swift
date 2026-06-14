@@ -42,7 +42,8 @@ struct RecipeImageView: View {
                             let _ = logger.debug("RecipeImageView: Retrying image load (attempt \(retryCount + 1))")
                             #endif
                             // Retry after a short delay
-                            let _ = DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            let _ = Task {
+                                try? await Task.sleep(for: .seconds(0.2))
                                 retryCount += 1
                             }
                             ProgressView()

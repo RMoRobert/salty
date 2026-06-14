@@ -87,7 +87,8 @@ struct PreparationTimesEditView: View {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.2))
                         focusedPreparationTimeID = newID
                         scrollToNewItem = nil
                     }
@@ -213,7 +214,8 @@ struct PreparationTimesEditView: View {
         }
         scrollToNewItem = newPreparationTime.id
         // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.2))
             focusedPreparationTimeID = newPreparationTime.id
         }
     }
@@ -250,7 +252,8 @@ struct PreparationTimesEditView: View {
         }
         scrollToNewItem = newPreparationTime.id
         // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.2))
             focusedPreparationTimeID = newPreparationTime.id
         }
     }

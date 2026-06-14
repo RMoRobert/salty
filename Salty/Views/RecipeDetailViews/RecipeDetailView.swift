@@ -75,7 +75,7 @@ private struct TitleAndBasicInfoSection: View {
                 HStack {
                     Text(viewModel.recipe?.name ?? "")
                         .font(.title)
-                        .fontWeight(.bold)
+                        .bold()
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(alignment: .top)
@@ -176,7 +176,7 @@ private struct PrepTimeAndFavoriteEtcSection: View {
                     if (recipe.isFavorite) {
                         HStack {
                             Image(systemName: "heart.fill")
-                                .foregroundColor(.red)
+                                .foregroundStyle(.red)
                                 .modifier(IconShadowModifier())
                             Text("Favorite")
                         }
@@ -186,7 +186,7 @@ private struct PrepTimeAndFavoriteEtcSection: View {
                     if (recipe.wantToMake) {
                         HStack {
                             Image(systemName: "checkmark.diamond")
-                                .foregroundColor(Color.green.opacity(0.8))
+                                .foregroundStyle(Color.green.opacity(0.8))
                                 .modifier(IconShadowModifier())
                             Text("Want to Make")
                         }
@@ -269,7 +269,7 @@ private struct IngredientsSection: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•")
                             .foregroundStyle(.recipeDetailBoxForeground)
-                            .fontWeight(.bold)
+                            .bold()
                         let parsed = viewModel.scaledIngredientDisplay(ingredient)
                         if parsed.hasQuantity {
                             (Text(parsed.quantity)
@@ -569,7 +569,7 @@ private struct TitleStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(.title2)
-            .fontWeight(.bold)
+            .bold()
             .padding(.top, 8)
             .padding(.bottom, 8)
     }

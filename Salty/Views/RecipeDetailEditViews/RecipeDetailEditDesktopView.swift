@@ -49,7 +49,7 @@ struct RecipeDetailEditDesktopView: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 
                 Button("Save") {
                     Task {
@@ -356,7 +356,7 @@ struct RecipeDetailEditDesktopView: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(.quaternary, in: Capsule())
-                                .foregroundColor(.primary)
+                                .foregroundStyle(.primary)
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint("Remove tag \(tag)")

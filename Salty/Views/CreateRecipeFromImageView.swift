@@ -136,9 +136,9 @@ struct CreateRecipeFromImageView: View {
                 if let error = ocrService.error {
                     VStack {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                         Text(error.localizedDescription)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                     }
                     .padding()

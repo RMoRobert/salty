@@ -28,7 +28,7 @@ struct RecipeRowView: View {
     private var favoriteHeartView: ModifiedContent<some View, AccessibilityAttachmentModifier> {
         Image(systemName: recipe.isFavorite ? "heart.fill" : "heart.slash")
             .font(.caption)
-            .foregroundColor(.red)
+            .foregroundStyle(.red)
             .modifier(IconShadowModifier())
             .opacity(recipe.isFavorite ? 100 : 0)
             .accessibilityHint(recipe.isFavorite ? "Is Favorite" : "Not Favorite")
@@ -48,7 +48,7 @@ struct RecipeRowView: View {
                 // Show default recipe image when no thumbnail data
                 Image(systemName: "list.bullet.rectangle")
                     .font(.system(size: listViewStyle == .smallIcons ? 24 : 32, weight: .light))
-                    .foregroundColor(.gray.opacity(0.4))
+                    .foregroundStyle(.gray.opacity(0.4))
                     .frame(width: listViewStyle == .smallIcons ? 32 : 64, height: listViewStyle == .smallIcons ? 32 : 64)
                     .background(
                         RoundedRectangle(cornerRadius: 5)
@@ -68,13 +68,13 @@ struct RecipeRowView: View {
                         .lineLimit(1)
                     if listViewStyle == .summary || (!hasBottomRowData && !recipe.isFavorite) {
                         Text(recipe.summary)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     else if !hasBottomRowData && recipe.isFavorite {
                         HStack {
                             Text(recipe.summary)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                             Spacer()
                             favoriteHeartView
@@ -91,7 +91,7 @@ struct RecipeRowView: View {
                             HStack(alignment: .bottom, spacing: 0) {
                                 ForEach(1..<6) { starNum in
                                     Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                         .font(.caption2)
                                         .modifier(IconShadowModifier())
                                         .accessibilityHidden(true)
@@ -104,7 +104,7 @@ struct RecipeRowView: View {
                                 ForEach(1..<6) { starNum in
                                     Image(systemName: "circle.dotted")
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                         .accessibilityHidden(true)
                                 }
                             }

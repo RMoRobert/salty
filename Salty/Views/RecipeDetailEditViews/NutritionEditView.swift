@@ -35,7 +35,7 @@ struct ValidatedTextField: View {
                 
                 if !isValid {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                         .font(.caption)
                 }
             }
@@ -50,7 +50,7 @@ struct ValidatedTextField: View {
             
             if !isValid {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
+                    .foregroundStyle(.red)
                     .font(.caption)
             }
         }
@@ -124,7 +124,7 @@ struct NutritionEditView: View {
             #if os(macOS)
             Text(baseText + ":")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .padding(.top, 4)
             #else
             Text(baseText)

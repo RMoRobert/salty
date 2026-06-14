@@ -90,7 +90,7 @@ struct DatabaseSettingsView: View {
                 Text(platformSpecificHeadingName("Database Location"))
                      #if os(macOS)
                      .font(.headline)
-                     .fontWeight(.bold)
+                     .bold()
                      .padding(.top, 8)
                      #endif
             }
@@ -99,7 +99,7 @@ struct DatabaseSettingsView: View {
                 DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
                     Text(FileManager.getDatabaseTroubleshootingGuidance())
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(8)
                     
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -120,7 +120,7 @@ struct DatabaseSettingsView: View {
                 Text(platformSpecificHeadingName("Database Diagnostics"))
                     #if os(macOS)
                     .font(.headline)
-                    .fontWeight(.bold)
+                    .bold()
                     .padding(.top, 8)
                     #endif
             }
@@ -235,14 +235,14 @@ struct ServerSettingsView: View {
                     
                     Text("If not saved, you will need to enter your password on every sync.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } header: {
                 Text(platformSpecificHeadingName("Server Configuration"))
                      #if os(macOS)
                      .font(.headline)
-                     .fontWeight(.bold)
+                     .bold()
                      .padding(.top, 6)
                      .padding(.bottom, 4)
                      #endif
@@ -294,10 +294,10 @@ struct ServerSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(syncService.syncProgress.currentStep)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Text(syncService.syncProgress.summary)
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 
@@ -305,27 +305,27 @@ struct ServerSettingsView: View {
                     HStack {
                         Text("Last synced:")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Text(lastSync, style: .relative)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 
                 if let error = syncService.lastSyncError {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                         Text(error)
                             .font(.caption)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                     }
                 }
             } header: {
                 Text(platformSpecificHeadingName("Sync"))
                     #if os(macOS)
                     .font(.headline)
-                    .fontWeight(.bold)
+                    .bold()
                     .padding(.top, 4)
                     #endif
             }
@@ -333,7 +333,7 @@ struct ServerSettingsView: View {
             Section {
                 Text("Compares your local recipes with the server and syncs changes in both directions. The most recently modified version wins in case of conflicts.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
                 Text(platformSpecificHeadingName("How Sync Works"))
@@ -493,7 +493,7 @@ struct AdvancedSettingsView: View {
             Section {
                 Text("Salty automatically creates and stores up to a three recent backups of your recipe library.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(3)
                 
                 HStack {
@@ -515,13 +515,13 @@ struct AdvancedSettingsView: View {
                 if !backupMessage.isEmpty {
                     Text(backupMessage)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             } header: {
                 Text(platformSpecificHeadingName("Database Backups"))
                     #if os(macOS)
                     .font(.headline)
-                    .fontWeight(.bold)
+                    .bold()
                     .padding(.top, 8)
                     #endif
             }
@@ -536,13 +536,13 @@ struct AdvancedSettingsView: View {
                 
                 Text("This will remove all images stored alongside your recipe library database that are not referenced in the database. It should be safe, but we suggest having a backup before running (as you should periodically regardless).")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
                 Text(platformSpecificHeadingName("Image Cleanup"))
                     #if os(macOS)
                     .font(.headline)
-                    .fontWeight(.bold)
+                    .bold()
                     .padding(.top, 8)
                     #endif
             }
@@ -564,12 +564,14 @@ struct AdvancedSettingsView: View {
         backupManager.createBackupNow()
         
         // Wait a moment and then update the message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        Task {
+            try? await Task.sleep(for: .seconds(2))
             isCreatingBackup = false
             backupMessage = "Backup created successfully!"
-            
+
             // Clear the message after a couple seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            Task {
+                try? await Task.sleep(for: .seconds(2))
                 backupMessage = ""
             }
         }
@@ -584,7 +586,8 @@ struct AdvancedSettingsView: View {
             backupMessage = "All backups deleted successfully"
             
             // Clear the message after a couple seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            Task {
+                try? await Task.sleep(for: .seconds(2))
                 backupMessage = ""
             }
         } catch {
@@ -602,15 +605,15 @@ struct DiagnosticRow: View {
             Text(key)
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
             
             Text(String(describing: value ?? "nil"))
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.gray.opacity(0.1))
-                .cornerRadius(4)
+                .clipShape(.rect(cornerRadius: 4))
         }
         .padding(.vertical, 2)
     }

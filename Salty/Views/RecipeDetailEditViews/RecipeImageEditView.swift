@@ -140,7 +140,7 @@ struct RecipeImageEditView: View {
                                 .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4, dash: [5]))
                         )
                         .overlay(Label("Add", systemImage: "plus")
-                            .foregroundColor(.gray)
+                            .foregroundStyle(.gray)
                             .labelStyle(.iconOnly)
                         )
                 }
@@ -171,7 +171,7 @@ struct RecipeImageEditView: View {
                             .strokeBorder(.regularMaterial, style: StrokeStyle(lineWidth: 4, dash: [5]))
                     )
                     .overlay(Label("Add", systemImage: "plus")
-                        .foregroundColor(.gray)
+                        .foregroundStyle(.gray)
                         .labelStyle(.iconOnly)
                     )
                     .onTapGesture {

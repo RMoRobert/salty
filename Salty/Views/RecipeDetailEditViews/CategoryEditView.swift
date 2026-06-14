@@ -222,7 +222,7 @@ struct CategoryEditView: View {
             }) {
                 Label("Create New Category", systemImage: "plus.circle")
             }
-            .foregroundColor(.accentColor)
+            .foregroundStyle(Color.accentColor)
         }
         #if os(macOS)
         .frame(minWidth: 300, minHeight: 400)

@@ -135,7 +135,7 @@ struct RecipeDetailEditMobileView: View {
                             set: { viewModel.recipe.servings = $0 == 0 ? nil : $0 }
                         ),
                         in: 0...2000)
-                .foregroundColor(viewModel.recipe.servings != nil ? .primary : .secondary)
+                .foregroundStyle(viewModel.recipe.servings != nil ? .primary : .secondary)
                 TextField("Yield", text: $viewModel.recipe.yield)
                 HStack {
                     Picker("Course", selection: $viewModel.recipe.courseId) {

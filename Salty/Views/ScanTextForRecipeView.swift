@@ -92,7 +92,7 @@ struct ScanTextForRecipeView: View {
                                     .fontWeight(.semibold)
                                 Text("Select \"Extract Text\" to scan for text, then \"Insert Text\" to add it to your \(targetSection.rawValue.lowercased()).")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                             }
                             .padding()
                         }
@@ -156,9 +156,9 @@ struct ScanTextForRecipeView: View {
                 if let error = ocrService.error {
                     VStack {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                         Text(error.localizedDescription)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                     }
                     .padding()

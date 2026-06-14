@@ -113,17 +113,17 @@ struct ImportRecipesFromFileView: View {
                         if let fileType = detectedFileType {
                             Text("Type: \(fileType)")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .padding()
                     .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(8)
+                    .clipShape(.rect(cornerRadius: 8))
                     chooseFileButton
                 }
                 else {
                     Text("No file selected")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding()
                 }
             }
@@ -135,7 +135,7 @@ struct ImportRecipesFromFileView: View {
             // Description
             Text("Import a MacGourmet (.mgourmet) or Salty (.saltyRecipe) file into your recipe library.")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
@@ -152,14 +152,14 @@ struct ImportRecipesFromFileView: View {
                                 .font(.headline)
                             Text("Please wait while we import your recipes.")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                         }
                         .padding()
                     } else if detectedFileType == nil {
                         Text("Unsupported file type. Please select a .mgourmet or .saltyRecipe file.")
                             .padding()
-                            .foregroundColor(.orange)
+                            .foregroundStyle(.orange)
                     } else {
                         Button("Import Recipe") {
                             startImport()

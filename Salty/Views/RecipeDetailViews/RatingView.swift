@@ -26,7 +26,7 @@ struct RatingView: View {
             if showLabel {
                 Text(recipe.rating == .notSet ? "(not set)" : "\(recipe.rating.rawValue)/5")
                     .font(.caption)
-                    .foregroundColor(recipe.rating == .notSet ? .secondary : .primary)
+                    .foregroundStyle(recipe.rating == .notSet ? .secondary : .primary)
             }
             
             // Star rating display
@@ -35,7 +35,7 @@ struct RatingView: View {
                     let isStarInRange = recipe.rating.rawValue >= val
                     Image(systemName: isStarInRange ? "star.fill" : "star")
                         .symbolRenderingMode(isStarInRange ? .hierarchical : nil)
-                        .foregroundColor(isStarInRange ? .yellow : .gray)
+                        .foregroundStyle(isStarInRange ? .yellow : .gray)
                         .shadow(radius: isStarInRange ? 0.5 : 0, x: isStarInRange ? 0.5 : 0, y: isStarInRange ? 1 : 0)
                         .opacity(recipe.rating.rawValue > 0 ? 1 : 0.33)
                 }

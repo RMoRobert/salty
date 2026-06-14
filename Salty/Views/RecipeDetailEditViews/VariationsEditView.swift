@@ -88,7 +88,8 @@ struct VariationsEditView: View {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.1))
                         focusedVariationID = newID
                         scrollToNewItem = nil
                     }
@@ -199,7 +200,8 @@ struct VariationsEditView: View {
         }
         scrollToNewItem = newVariation.id
         // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.2))
             focusedVariationID = newVariation.id
         }
     }
@@ -236,7 +238,8 @@ struct VariationsEditView: View {
         }
         scrollToNewItem = newVariation.id
         // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.2))
             focusedVariationID = newVariation.id
         }
     }

@@ -40,7 +40,7 @@ private struct CategoryDropTargetView: View {
     
     private var dropTargetBackground: some View {
         Color.accentColor
-            .cornerRadius(5)
+            .clipShape(.rect(cornerRadius: 5))
             .opacity(0.15)
             .padding(.horizontal, 10)
     }
@@ -67,7 +67,7 @@ private struct TagDropTargetView: View {
     
     private var dropTargetBackground: some View {
         Color.accentColor
-            .cornerRadius(5)
+            .clipShape(.rect(cornerRadius: 5))
             .opacity(0.15)
             .padding(.horizontal, 10)
     }
@@ -323,7 +323,8 @@ struct RecipeNavigationSplitView: View {
                 .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
                     if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
                         // Wait a bit for the recipe to appear in the list before scrolling
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        Task {
+                            try? await Task.sleep(for: .seconds(0.5))
                             if viewModel.recipes.contains(where: { $0.id == newId }) {
                                 withAnimation {
                                     proxy.scrollTo(newId)
@@ -478,7 +479,9 @@ struct RecipeNavigationSplitView: View {
                         (viewModel.isFavoritesFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                         Label("Filter (Favorites Only)", systemImage: imageName)
                         // Needed to make look correcton macOS 15; removing is fine for macOS 26, but simulating same behavior for now as long as supporting both:
-                           .foregroundColor(viewModel.isFavoritesFilterActive ? (isLiquidGlassAvailable() ? Color.white : Color.accentColor) : nil)
+                           .foregroundStyle(viewModel.isFavoritesFilterActive
+                                            ? AnyShapeStyle(isLiquidGlassAvailable() ? Color.white : Color.accentColor)
+                                            : AnyShapeStyle(.foreground))
                     }
                     
                     Button(role: .destructive, action: {
@@ -522,7 +525,8 @@ struct RecipeNavigationSplitView: View {
                     Task { await viewModel.deleteSelectedRecipes() }
                     #if !os(macOS)
                     // Delay exiting edit mode to let deletion animation complete
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.4))
                         isEditMode = false
                     }
                     #endif

@@ -142,7 +142,8 @@ struct CreateRecipeFromWebView: View {
     private func extractSelectedTextToField(_ field: RecipeField, retryCount: Int = 0) {
         guard let webView = webView else {
             if retryCount < 5 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task {
+                    try? await Task.sleep(for: .seconds(0.1))
                     self.extractSelectedTextToField(field, retryCount: retryCount + 1)
                 }
             }
@@ -418,7 +419,8 @@ struct RecipeWebBrowserView: View {
         viewModel.currentURL = ""
         urlText = "about:home"
         // Reset loading state since HTML content loads immediately
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.1))
             viewModel.updateNavigationState(canGoBack: false, canGoForward: false, isLoading: false)
         }
     }
@@ -484,7 +486,7 @@ struct RecipeWebImportEditView: View {
                             .font(.headline)
                         Spacer()
                         Text("(⌘8)")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .font(.caption)
                     }
                     
@@ -501,7 +503,7 @@ struct RecipeWebImportEditView: View {
                             .font(.headline)
                         Spacer()
                         Text("(⌘5)")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .font(.caption)
                     }
                     
@@ -524,7 +526,7 @@ struct RecipeWebImportEditView: View {
                             .font(.headline)
                         Spacer()
                         Text("(⌘6)")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .font(.caption)
                     }
                     
@@ -578,7 +580,7 @@ struct RecipeWebImportEditView: View {
                     
                     if viewModel.recipe.preparationTimes.isEmpty {
                         Text("No preparation times added")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     } else {
                         ForEach(viewModel.recipe.preparationTimes) { time in
                             Text("\(time.type): \(time.timeString)")
@@ -599,7 +601,7 @@ struct RecipeWebImportEditView: View {
                     
                     if viewModel.recipe.notes.isEmpty {
                         Text("No notes added")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     } else {
                         ForEach(viewModel.recipe.notes) { note in
                             VStack(alignment: .leading) {
@@ -662,12 +664,12 @@ struct RecipeWebImportEditView: View {
                                     }
                                 }
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                             }
                         }
                     } else {
                         Text("No nutrition information available")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     
                     Button("Edit Nutrition") {
@@ -734,7 +736,7 @@ struct DisabledButtonStyleModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-//            .foregroundColor(isDisabled ? .secondary : .primary)
+//            .foregroundStyle(isDisabled ? .secondary : .primary)
 //            .opacity(isDisabled ? 0.7 : 1.0)
     }
 }

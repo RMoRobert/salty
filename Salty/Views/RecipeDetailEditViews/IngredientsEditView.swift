@@ -117,7 +117,8 @@ struct IngredientsEditView: View {
         }
         scrollToNewItem = newIngredient.id
         // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.2))
             focusedIngredientID = newIngredient.id
         }
     }
@@ -158,7 +159,8 @@ struct IngredientsEditView: View {
         }
         scrollToNewItem = newIngredient.id
         // Set focus after a brief delay to ensure the view is rendered
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task {
+            try? await Task.sleep(for: .seconds(0.2))
             focusedIngredientID = newIngredient.id
         }
     }
@@ -224,7 +226,8 @@ struct IngredientsContentView: View {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                     // Set focus after scrolling
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.2))
                         focusedIngredientID.wrappedValue = newID
                         scrollToNewItem = nil
                     }

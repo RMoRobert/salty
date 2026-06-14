@@ -58,7 +58,7 @@ struct DifficultyView: View {
                 Text(recipe.difficulty == .notSet ? "(not set)" : recipe.difficulty.stringValue().capitalized)
                     .font(.caption)
                     //.fontWeight(.medium)
-                    .foregroundColor(recipe.difficulty == .notSet ? .secondary : .primary)
+                    .foregroundStyle(recipe.difficulty == .notSet ? .secondary : .primary)
             }
             
             // Difficulty bar
@@ -73,7 +73,7 @@ struct DifficultyView: View {
                         )
                     )
                     .frame(width: barWidth, height: barHeight)
-                    .cornerRadius(barHeight / 2)
+                    .clipShape(.rect(cornerRadius: barHeight / 2))
                     .overlay(
                         RoundedRectangle(cornerRadius: barHeight / 2)
                             .stroke(.thinMaterial, lineWidth: 1)
@@ -86,7 +86,7 @@ struct DifficultyView: View {
                     // Question mark for not set
                     Text("?")
                         .font(.system(size: markerSize * 0.8, weight: .bold))
-                        .foregroundColor(.gray)
+                        .foregroundStyle(.gray)
                         .frame(width: markerSize, height: markerSize)
                         .background(
                             Circle()
@@ -110,13 +110,13 @@ struct DifficultyView: View {
             HStack {
                 Text("Easy")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 Spacer()
                 
                 Text("Difficult")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .frame(width: barWidth)
         }

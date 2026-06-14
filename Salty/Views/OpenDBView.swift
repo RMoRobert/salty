@@ -61,7 +61,7 @@ struct OpenDBView: View {
                         .font(.headline)
                     Text("Please wait while we set up the new database location.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding()
@@ -70,12 +70,12 @@ struct OpenDBView: View {
             VStack(spacing: 8) {
                 Text("Current location: \(currentLocation.relativePath)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 VStack(spacing: 8) {
                     Text("To clear any custom location and use the default:")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     Button("Revert to Default Location") {
                         UserDefaults.standard.removeObject(forKey: FileManager.userDefaultsDatabaseParentLocationKey)

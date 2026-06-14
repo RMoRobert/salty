@@ -144,18 +144,18 @@ struct RecipeFullImageView: View {
                             VStack {
                                 Image(systemName: "photo")
                                     .font(.largeTitle)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                 Text("Failed to load image")
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         @unknown default:
                             VStack {
                                 Image(systemName: "photo")
                                     .font(.largeTitle)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                 Text("Unknown error loading image")
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
@@ -164,9 +164,9 @@ struct RecipeFullImageView: View {
                     VStack {
                         Image(systemName: "photo")
                             .font(.largeTitle)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Text("No image available")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -175,7 +175,7 @@ struct RecipeFullImageView: View {
                 presentationMode.wrappedValue.dismiss()
             }) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .padding()
             }
             .buttonStyle(PlainButtonStyle())
