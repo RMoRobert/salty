@@ -463,6 +463,11 @@ func appDatabase() throws -> any DatabaseWriter {
     if context == .preview {
         database = try DatabaseQueue(configuration: configuration)
     } else {
+        // For a custom (security-scoped) location, begin and hold access BEFORE opening the
+        // connection so the long-lived DatabasePool — and its -wal/-shm files — stay reachable.
+        if context == .live {
+            FileManager.beginAccessingDatabaseLocation()
+        }
         let path =
          context == .live
         ? FileManager.saltyLibraryFullPath.path

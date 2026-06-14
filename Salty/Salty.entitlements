@@ -1,5 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+	<!--
+	  App Sandbox is enabled via ENABLE_APP_SANDBOX = YES (macOS). These entitlements
+	  grant the sandbox the file access the app actually needs:
+
+	  - files.user-selected.read-write: lets the folder/file pickers (fileImporter,
+	    NSOpenPanel) grant durable read/write access to a user-chosen database folder.
+	  - files.bookmarks.app-scope: required to CREATE and RESOLVE security-scoped
+	    bookmarks (URL.bookmarkData(options: .withSecurityScope)) so access to the
+	    custom database folder survives app relaunches.
+
+	  These keys are macOS sandbox entitlements; they are ignored (harmless) on iOS,
+	  where access to user-selected URLs is granted via the document picker instead.
+	-->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+</dict>
 </plist>

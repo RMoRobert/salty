@@ -27,19 +27,19 @@ struct SaltyApp: App {
     init() {
         if context == .live {
             do {
-                // Proactively refresh bookmarks to prevent permission issues
-                FileManager.refreshBookmarksIfNeeded()
-                
-                // Validate database access before attempting to open it
+                // Begin (and hold) security-scoped access to the database location before opening it.
+                FileManager.beginAccessingDatabaseLocation()
+
+                // Validate access; if a custom location can't be reached, try one fresh resolution.
                 if !FileManager.validateDatabaseAccess() {
-                    print("Warning: Database access validation failed. Attempting to refresh bookmarks...")
+                    print("Warning: Database access validation failed. Attempting to re-resolve location bookmark...")
                     if FileManager.refreshCustomDatabaseBookmark() {
-                        print("Successfully refreshed database bookmarks")
+                        print("Successfully re-resolved database location bookmark")
                     } else {
-                        print("Failed to refresh database bookmarks - may need user intervention")
+                        print("Failed to re-resolve database location - may need user intervention")
                     }
                 }
-                
+
                 try prepareDependencies {
                     $0.defaultDatabase = try Salty.appDatabase()
                 }
