@@ -660,129 +660,86 @@ class SaltySyncService {
     
     /// Sync recipes with deletion detection based on device's last sync time
     private func syncRecipesWithDeletions(deviceInfo: DeviceInfo) async throws {
-        let serverRecipes = try await fetchListFromServer(ServerRecipe.self, endpoint: "/api/recipes")
+        // 1. Full manifest (every server recipe's id + lastModifiedDate). This is the COMPLETE set the
+        //    deletion logic reconciles against — never the delta below.
+        let manifest = try await fetchManifest()
+
+        // 2. Only the changed bodies (the modifiedSince delta), paged. First sync / no lastSync date
+        //    → fetch everything (still paged).
+        let cutoff = (deviceInfo.isFirstSync || deviceInfo.lastSyncDate == nil) ? nil : deviceInfo.lastSyncDate
+        let deltaRecipes = try await fetchRecipeDeltaPaged(modifiedSince: cutoff)
+        let deltaById = Dictionary(deltaRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+
+        // 3. Local snapshot.
         let localRecipes = try await database.read { db in
             try Recipe.fetchAll(db)
         }
-        
-        let serverRecipesById = Dictionary(serverRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localRecipesById = Dictionary(localRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
-        let localRecipeIds = Set(localRecipes.map { $0.id })
-        
-        var recipesToDeleteOnServer: [String] = []
-        var recipesToDeleteLocally: [String] = []
-        
-        // Process each local recipe
-        for localRecipe in localRecipes {
-            if let serverRecipe = serverRecipesById[localRecipe.id] {
-                // Recipe exists on both sides - compare timestamps
-                let serverDate = serverRecipe.lastModifiedDate ?? Date.distantPast
-                let localDate = localRecipe.lastModifiedDate
-                
-                if localDate > serverDate {
-                    // Local is newer - upload to server
-                    try await uploadRecipe(localRecipe)
-                    syncProgress.itemsUploaded += 1
-                    syncProgress.uploadedRecipeIds.insert(localRecipe.id)
-                } else if serverDate > localDate {
-                    // Server is newer - download from server
-                    try await downloadRecipe(serverRecipe)
-                    syncProgress.itemsDownloaded += 1
-                    syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
-                }
+
+        // 4. Reconcile (pure, unit-tested in RecipeSyncReconcilerTests). Missing server timestamps map
+        //    to distantPast, matching the previous `?? Date.distantPast` behavior.
+        let localEntries = localRecipes.map {
+            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate)
+        }
+        let serverEntries = manifest.map {
+            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate ?? Date.distantPast)
+        }
+        let plan = RecipeSyncReconciler.plan(
+            local: localEntries,
+            server: serverEntries,
+            isFirstSync: deviceInfo.isFirstSync,
+            lastSyncDate: deviceInfo.lastSyncDate
+        )
+
+        logger.info("Sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server (manifest \(manifest.count), delta \(deltaRecipes.count))")
+
+        // 5. Uploads.
+        for recipeId in plan.toUpload {
+            guard let localRecipe = localRecipesById[recipeId] else { continue }
+            try await uploadRecipe(localRecipe)
+            syncProgress.itemsUploaded += 1
+            syncProgress.uploadedRecipeIds.insert(recipeId)
+        }
+
+        // 6. Downloads — use the delta body when present, otherwise fetch that single recipe (covers the
+        //    rare case where the server copy is newer than local but predates lastSync).
+        for recipeId in plan.toDownload {
+            let serverRecipe: ServerRecipe
+            if let body = deltaById[recipeId] {
+                serverRecipe = body
             } else {
-                // Recipe only exists locally
-                if deviceInfo.isFirstSync {
-                    // First sync - upload everything
-                    try await uploadRecipe(localRecipe)
-                    syncProgress.itemsUploaded += 1
-                    syncProgress.uploadedRecipeIds.insert(localRecipe.id)
-                } else if let lastSync = deviceInfo.lastSyncDate {
-                    // Check if recipe is newer than last sync
-                    if localRecipe.lastModifiedDate > lastSync {
-                        // New recipe created after last sync - upload
-                        try await uploadRecipe(localRecipe)
-                        syncProgress.itemsUploaded += 1
-                        syncProgress.uploadedRecipeIds.insert(localRecipe.id)
-                    } else {
-                        // Recipe existed before last sync but not on server - was deleted on server
-                        recipesToDeleteLocally.append(localRecipe.id)
-                    }
-                } else {
-                    // No last sync date, treat as new
-                    try await uploadRecipe(localRecipe)
-                    syncProgress.itemsUploaded += 1
-                    syncProgress.uploadedRecipeIds.insert(localRecipe.id)
-                }
+                serverRecipe = try await fetchRecipeById(recipeId)
             }
+            try await downloadRecipe(serverRecipe)
+            syncProgress.itemsDownloaded += 1
+            syncProgress.downloadedRecipeIds.insert(recipeId)
         }
-        
-        // Process recipes only on server
-        logger.info("Processing \(serverRecipes.count) server recipes, \(localRecipeIds.count) local recipes")
-        
-        for serverRecipe in serverRecipes {
-            if !localRecipeIds.contains(serverRecipe.id) {
-                logger.debug("Recipe '\(serverRecipe.name)' (\(serverRecipe.id)) is on server but not locally")
-                
-                if deviceInfo.isFirstSync {
-                    // First sync - download everything from server
-                    logger.debug("  -> First sync: downloading")
-                    try await downloadRecipe(serverRecipe)
-                    syncProgress.itemsDownloaded += 1
-                    syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
-                } else if let lastSync = deviceInfo.lastSyncDate {
-                    let serverDate = serverRecipe.lastModifiedDate ?? Date.distantPast
-                    logger.debug("  -> Comparing: serverDate=\(serverDate), lastSync=\(lastSync), serverDate > lastSync = \(serverDate > lastSync)")
-                    
-                    if serverDate > lastSync {
-                        // Recipe created/modified on server after last sync - download
-                        logger.debug("  -> Server recipe is newer than last sync: downloading")
-                        try await downloadRecipe(serverRecipe)
-                        syncProgress.itemsDownloaded += 1
-                        syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
-                    } else {
-                        // Recipe existed before last sync but not locally - was deleted locally
-                        logger.info("  -> Recipe was deleted locally (serverDate \(serverDate) <= lastSync \(lastSync)): will delete from server")
-                        recipesToDeleteOnServer.append(serverRecipe.id)
-                    }
-                } else {
-                    // No last sync date, download
-                    logger.debug("  -> No lastSyncDate available: downloading")
-                    try await downloadRecipe(serverRecipe)
-                    syncProgress.itemsDownloaded += 1
-                    syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
-                }
-            }
-        }
-        
-        logger.info("Sync decision summary: \(recipesToDeleteOnServer.count) to delete on server, \(recipesToDeleteLocally.count) to delete locally")
-        
-        // Delete recipes locally that were deleted on server
-        // (guarded against empty-response wipes; DB deletes batched in one transaction)
-        let recipeIdsToDeleteLocally = recipesToDeleteLocally
-        if serverResponseAllowsLocalDeletions(serverItemCount: serverRecipes.count, pendingLocalDeletions: recipeIdsToDeleteLocally.count, entity: "recipe") {
-            for recipeId in recipeIdsToDeleteLocally {
+
+        // 7. Deletions — local deletes are guarded against empty-response wipes using the COMPLETE
+        //    manifest count, and batched in one transaction.
+        if serverResponseAllowsLocalDeletions(serverItemCount: manifest.count, pendingLocalDeletions: plan.toDeleteLocally.count, entity: "recipe") {
+            for recipeId in plan.toDeleteLocally {
                 logger.info("Deleting recipe \(recipeId) locally (was deleted on another device)")
                 if let recipe = localRecipesById[recipeId], let filename = recipe.imageFilename {
                     RecipeImageManager.shared.deleteImage(filename: filename)
                 }
             }
             try await database.write { db in
-                for recipeId in recipeIdsToDeleteLocally {
+                for recipeId in plan.toDeleteLocally {
                     _ = try Recipe.deleteOne(db, key: recipeId)
                 }
             }
-            syncProgress.itemsDownloaded += recipeIdsToDeleteLocally.count // Count as sync actions
+            syncProgress.itemsDownloaded += plan.toDeleteLocally.count // Count as sync actions
         }
-        
-        // Delete recipes on server that were deleted locally
-        if !recipesToDeleteOnServer.isEmpty {
-            logger.info("Deleting \(recipesToDeleteOnServer.count) recipe(s) on server (were deleted locally)")
-            try await deleteRecipesOnServer(recipeIds: recipesToDeleteOnServer)
+
+        // Delete recipes on server that were deleted locally.
+        if !plan.toDeleteOnServer.isEmpty {
+            logger.info("Deleting \(plan.toDeleteOnServer.count) recipe(s) on server (were deleted locally)")
+            try await deleteRecipesOnServer(recipeIds: plan.toDeleteOnServer)
         }
-        
-        if !recipesToDeleteLocally.isEmpty || !recipesToDeleteOnServer.isEmpty {
-            logger.info("Deletion sync: \(recipesToDeleteLocally.count) deleted locally, \(recipesToDeleteOnServer.count) deleted on server")
+
+        if !plan.toDeleteLocally.isEmpty || !plan.toDeleteOnServer.isEmpty {
+            logger.info("Deletion sync: \(plan.toDeleteLocally.count) deleted locally, \(plan.toDeleteOnServer.count) deleted on server")
         }
     }
     
@@ -1295,6 +1252,53 @@ class SaltySyncService {
         try await fetchFromServerWithTotalCount(type, endpoint: endpoint).value
     }
 
+    /// Page size for the paginated recipe delta.
+    private static let syncPageSize = 100
+
+    /// Fetches the lightweight recipe manifest (id + lastModifiedDate for ALL of the user's recipes).
+    /// Uses the X-Total-Count completeness check, since this is the set deletion reconciliation relies on.
+    private func fetchManifest() async throws -> [ServerRecipeManifestEntry] {
+        try await fetchListFromServer(ServerRecipeManifestEntry.self, endpoint: "/api/recipes/sync/manifest")
+    }
+
+    /// Fetches a single recipe body by id (fallback when a to-download recipe isn't in the delta).
+    private func fetchRecipeById(_ id: String) async throws -> ServerRecipe {
+        try await fetchFromServer(ServerRecipe.self, endpoint: "/api/recipes/\(id)")
+    }
+
+    /// Fetches recipe bodies as the paginated `modifiedSince` delta. When `modifiedSince` is nil the
+    /// whole table is paged through (e.g. first sync). All pages are accumulated and verified against
+    /// the server's X-Total-Count, so a truncated fetch aborts rather than silently dropping recipes.
+    private func fetchRecipeDeltaPaged(modifiedSince: Date?) async throws -> [ServerRecipe] {
+        var sinceParam = ""
+        if let modifiedSince {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let iso = formatter.string(from: modifiedSince)
+            let encoded = iso.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? iso
+            sinceParam = "modifiedSince=\(encoded)&"
+        }
+
+        var all: [ServerRecipe] = []
+        var page = 0
+        var expectedTotal: Int?
+        while true {
+            let endpoint = "/api/recipes?\(sinceParam)page=\(page)&size=\(Self.syncPageSize)"
+            let (items, totalCount) = try await fetchFromServerWithTotalCount([ServerRecipe].self, endpoint: endpoint)
+            if expectedTotal == nil { expectedTotal = totalCount }
+            all.append(contentsOf: items)
+            if let total = expectedTotal, all.count >= total { break }
+            if items.count < Self.syncPageSize { break }   // short page → no more results
+            page += 1
+        }
+
+        if let total = expectedTotal, all.count != total {
+            logger.error("Paged recipe delta incomplete: collected \(all.count) of \(total); aborting to avoid a partial sync.")
+            throw SyncError.networkError("Incomplete paged recipe delta (\(all.count)/\(total))")
+        }
+        return all
+    }
+
     /// Fetches a list and verifies it against the server's `X-Total-Count` header (when present),
     /// throwing if the response is incomplete. This stops the deletion logic from ever running on a
     /// partial list (which would treat missing items as deletions). Backward compatible: a server
@@ -1519,6 +1523,13 @@ enum SyncError: LocalizedError {
 // MARK: - Server DTOs (Data Transfer Objects)
 
 /// Matches Spring Boot Recipe model
+/// Lightweight entry from GET /api/recipes/sync/manifest: a recipe's id + last-modified timestamp,
+/// used to reconcile existence/deletions without downloading full bodies.
+struct ServerRecipeManifestEntry: Codable {
+    var id: String
+    var lastModifiedDate: Date?
+}
+
 struct ServerRecipe: Codable {
     var id: String
     var name: String
