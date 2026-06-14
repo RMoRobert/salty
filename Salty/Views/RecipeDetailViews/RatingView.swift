@@ -40,7 +40,11 @@ struct RatingView: View {
                         .opacity(recipe.rating.rawValue > 0 ? 1 : 0.33)
                 }
             }
-            .accessibilityLabel("Rating: \(recipe.rating == .notSet) ? 4 : \"not set\" : \"(recipe.rating.rawValue) star(s)\"")
+            .accessibilityLabel(
+                recipe.rating == .notSet
+                    ? "Rating: not set"
+                    : "Rating: \(recipe.rating.rawValue) star\(recipe.rating.rawValue == 1 ? "" : "s")"
+            )
         }
     }
 }
