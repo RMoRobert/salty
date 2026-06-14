@@ -13,7 +13,7 @@ struct LibraryTagsEditView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        tagsList
+        TagsListView(viewModel: viewModel)
             .navigationTitle("Edit Tags")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -111,7 +111,12 @@ struct LibraryTagsEditView: View {
             }
     }
     
-    private var tagsList: some View {
+}
+
+private struct TagsListView: View {
+    @Bindable var viewModel: LibraryTagsEditViewModel
+
+    var body: some View {
         ScrollViewReader { proxy in
             List(selection: $viewModel.selectedIndices) {
                 ForEach(Array(viewModel.tags.enumerated()), id: \.element.id) { index, tag in

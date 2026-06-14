@@ -13,6 +13,35 @@ import PhotosUI
 import AVFoundation
 #endif
 
+private struct DeleteImageButton: View {
+    @Binding var recipe: Recipe
+    var body: some View {
+        Button("Delete", role: .destructive) {
+            recipe.removeImage()
+        }
+    }
+}
+
+private struct SelectImageFileButton: View {
+    @Binding var showingImageFilePicker: Bool
+    var body: some View {
+        Button("Select a File") {
+            showingImageFilePicker = true
+        }
+    }
+}
+
+private struct TakePhotoButton: View {
+    @Binding var showingCamera: Bool
+    @ViewBuilder var body: some View {
+        #if os(macOS)
+        Button("Take Photo") {
+            showingCamera = true
+        }
+        #endif
+    }
+}
+
 struct RecipeImageEditView: View {
     private let logger = Logger(subsystem: "Salty", category: "RecipeImage")
     @Binding var recipe: Recipe
@@ -21,33 +50,9 @@ struct RecipeImageEditView: View {
     @State private var showingPhotoPicker = false
     @State private var showingImageMenu = false
     @State private var showingCamera = false
-    
+
     @State var imageFrameSize: CGFloat = 100
-    
-    // MARK: - Computed Properties
-    @ViewBuilder
-    private var deleteButton: some View {
-        Button("Delete", role: .destructive) {
-            recipe.removeImage()
-        }
-    }
-    
-    @ViewBuilder
-    private var selectFileButton: some View {
-        Button("Select a File") {
-            showingImageFilePicker = true
-        }
-    }
-    
-    @ViewBuilder
-    private var cameraButton: some View {
-        #if os(macOS)
-        Button("Take Photo") {
-            showingCamera = true
-        }
-        #endif
-    }
-    
+
     private func createCGImage(from imageData: Data) -> CGImage? {
         #if os(iOS)
         guard let uiImage = UIImage(data: imageData) else { return nil }
@@ -75,14 +80,14 @@ struct RecipeImageEditView: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    deleteButton
-                    selectFileButton
-                    cameraButton
+                    DeleteImageButton(recipe: $recipe)
+                    SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .confirmationDialog("Image Options", isPresented: $showingImageMenu) {
-                    deleteButton
-                    selectFileButton
-                    cameraButton
+                    DeleteImageButton(recipe: $recipe)
+                    SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                     providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
@@ -146,12 +151,12 @@ struct RecipeImageEditView: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    selectFileButton
-                    cameraButton
+                    SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .confirmationDialog("Add Image", isPresented: $showingImageMenu) {
-                    selectFileButton
-                    cameraButton
+                    SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                     providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in

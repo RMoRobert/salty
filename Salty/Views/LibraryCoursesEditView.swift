@@ -13,7 +13,7 @@ struct LibraryCoursesEditView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        coursesList
+        CoursesListView(viewModel: viewModel)
             .navigationTitle("Edit Courses")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -111,7 +111,12 @@ struct LibraryCoursesEditView: View {
             }
     }
     
-    private var coursesList: some View {
+}
+
+private struct CoursesListView: View {
+    @Bindable var viewModel: LibraryCoursesEditViewModel
+
+    var body: some View {
         ScrollViewReader { proxy in
             List(selection: $viewModel.selectedIndices) {
                 ForEach(Array(viewModel.courses.enumerated()), id: \.element.id) { index, course in

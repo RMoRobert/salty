@@ -13,7 +13,7 @@ struct LibraryCategoriesEditView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        categoriesList
+        CategoriesListView(viewModel: viewModel)
             .navigationTitle("Edit Categories")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -113,7 +113,12 @@ struct LibraryCategoriesEditView: View {
             }
     }
     
-    private var categoriesList: some View {
+}
+
+private struct CategoriesListView: View {
+    @Bindable var viewModel: LibraryCategoriesEditViewModel
+
+    var body: some View {
         ScrollViewReader { proxy in
             List(selection: $viewModel.selectedIndices) {
                 ForEach(Array(viewModel.categories.enumerated()), id: \.element.id) { index, category in

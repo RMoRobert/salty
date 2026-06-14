@@ -33,18 +33,20 @@ private struct ConditionalListRowBackground<Background: View>: ViewModifier {
 
 // MARK: - Drop Target Views
 
-private struct CategoryDropTargetView: View {
-    let category: Category
-    let viewModel: RecipeNavigationSplitViewModel
-    @State private var isTargeted = false
-    
-    private var dropTargetBackground: some View {
+private struct DropTargetBackground: View {
+    var body: some View {
         Color.accentColor
             .clipShape(.rect(cornerRadius: 5))
             .opacity(0.15)
             .padding(.horizontal, 10)
     }
-    
+}
+
+private struct CategoryDropTargetView: View {
+    let category: Category
+    let viewModel: RecipeNavigationSplitViewModel
+    @State private var isTargeted = false
+
     var body: some View {
         Label(category.name, systemImage: "rectangle.stack")
             .tag("cat_\(category.id)")
@@ -56,7 +58,7 @@ private struct CategoryDropTargetView: View {
             } isTargeted: { hovering in
                 isTargeted = hovering
             }
-            .modifier(ConditionalListRowBackground(isTargeted: isTargeted, background: dropTargetBackground))
+            .modifier(ConditionalListRowBackground(isTargeted: isTargeted, background: DropTargetBackground()))
     }
 }
 
@@ -64,14 +66,7 @@ private struct TagDropTargetView: View {
     let tag: Tag
     let viewModel: RecipeNavigationSplitViewModel
     @State private var isTargeted = false
-    
-    private var dropTargetBackground: some View {
-        Color.accentColor
-            .clipShape(.rect(cornerRadius: 5))
-            .opacity(0.15)
-            .padding(.horizontal, 10)
-    }
-    
+
     var body: some View {
         Label(tag.name, systemImage: "tag")
             .tag("tag_\(tag.id)")
@@ -83,7 +78,7 @@ private struct TagDropTargetView: View {
             } isTargeted: { hovering in
                 isTargeted = hovering
             }
-            .modifier(ConditionalListRowBackground(isTargeted: isTargeted, background: dropTargetBackground))
+            .modifier(ConditionalListRowBackground(isTargeted: isTargeted, background: DropTargetBackground()))
     }
 }
 

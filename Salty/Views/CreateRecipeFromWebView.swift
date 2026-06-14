@@ -224,7 +224,7 @@ struct RecipeWebBrowserView: View {
             
             if !isLiquidGlassAvailable() || viewModel.isLoading {
                 ToolbarItemGroup(placement: .status) {
-                    progressIndicator
+                    LoadingProgressIndicator(isLoading: viewModel.isLoading)
                 }
             }
             
@@ -314,12 +314,15 @@ struct RecipeWebBrowserView: View {
             .truncationMode(.middle)
     }
     
-    private var progressIndicator: some View {
-        ProgressView()
-            .controlSize(.small)
-            .opacity(viewModel.isLoading ? 1.0 : 0.0)
+    private struct LoadingProgressIndicator: View {
+        let isLoading: Bool
+        var body: some View {
+            ProgressView()
+                .controlSize(.small)
+                .opacity(isLoading ? 1.0 : 0.0)
+        }
     }
-    
+
     private var importAndCloseButtons: some View {
         Group {
             if isCompactScreen {
