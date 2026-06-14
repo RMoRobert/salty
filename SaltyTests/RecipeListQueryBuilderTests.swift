@@ -90,6 +90,17 @@ struct RecipeListQueryBuilderTests {
         #expect(notesSQL.contains("$.content"))
     }
 
+    @Test func ingredientsSearchJSONTextNotRawColumn() {
+        // ingredients is a JSON array of {id, isHeading, isMain, text}; search the human-readable
+        // `text` value via json_each rather than LIKE-ing the whole column (which would also match
+        // JSON keys and element UUIDs).
+        let s = sql(pattern: "%x%", options: [.ingredients])
+        #expect(s.contains("json_each"))
+        #expect(s.contains("$.text"))
+        // One value field → exactly one LIKE.
+        #expect(s.components(separatedBy: " LIKE ").count - 1 == 1)
+    }
+
     @Test func emptyOptionsDefaultToName() {
         let s = sql(pattern: "%x%", options: [])
         #expect(s.contains("name"))

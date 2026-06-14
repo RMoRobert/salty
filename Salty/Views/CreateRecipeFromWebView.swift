@@ -199,17 +199,11 @@ struct RecipeWebBrowserView: View {
                 viewModel.currentURL = newURL
             }
         )
-        .background(
-            GeometryReader { geometry in
-                Color.clear
-                    .onAppear {
-                        isCompactScreen = geometry.size.width < 500
-                    }
-                    .onChange(of: geometry.size.width) { _, newWidth in
-                        isCompactScreen = newWidth < 500
-                    }
-            }
-        )
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.size.width < 500
+        } action: { isCompact in
+            isCompactScreen = isCompact
+        }
         .toolbar {
             ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
                 navigationButtons

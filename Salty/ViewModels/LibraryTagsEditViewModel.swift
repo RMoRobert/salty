@@ -28,7 +28,9 @@ class LibraryTagsEditViewModel {
     var editingTagIndex: Int? = nil
     var scrollToNewItem: Bool = false
     var searchText: String = ""
-    
+    /// Set when a create/rename/delete fails; surfaced to the user via `.errorAlert`.
+    var operationError: String?
+
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var tags: [Tag]
@@ -60,10 +62,11 @@ class LibraryTagsEditViewModel {
                 )
             }
         } catch {
-          // Handle error...
+            // Search reload failed; the list keeps its prior contents. Non-destructive, so log only.
+            logger.error("Error updating tag search query: \(error)")
         }
     }
-    
+
     func deleteTag(at index: Int) async {
         guard index < tags.count else { return }
         let tagToDelete = tags[index]
@@ -96,6 +99,7 @@ class LibraryTagsEditViewModel {
             selectedIndices = newSelection
         } catch {
             logger.error("Error deleting tag: \(error)")
+            operationError = "Couldn’t delete the tag. \(error.localizedDescription)"
         }
     }
     
@@ -148,6 +152,7 @@ class LibraryTagsEditViewModel {
             newTagName = ""
         } catch {
             logger.error("Error creating tag: \(error)")
+            operationError = "Couldn’t create the tag. \(error.localizedDescription)"
         }
     }
     
@@ -184,6 +189,7 @@ class LibraryTagsEditViewModel {
             editingTagName = ""
         } catch {
             logger.error("Error updating tag: \(error)")
+            operationError = "Couldn’t rename the tag. \(error.localizedDescription)"
         }
     }
     

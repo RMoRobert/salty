@@ -103,7 +103,7 @@ struct DatabaseSettingsView: View {
                         .padding(8)
                     
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(diagnosticsInfo.keys.sorted()), id: \.self) { key in
+                        ForEach(diagnosticsInfo.keys.sorted(), id: \.self) { key in
                             DiagnosticRow(key: key, value: diagnosticsInfo[key])
                         }
                     }

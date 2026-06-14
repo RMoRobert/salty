@@ -107,7 +107,10 @@ enum RecipeListQueryBuilder {
             conds.append("\(Recipe.introduction) COLLATE NOCASE LIKE \(bind: pattern)")
         }
         if active.contains(.ingredients) {
-            conds.append("\(Recipe.ingredients) COLLATE NOCASE LIKE \(bind: pattern)")
+            // ingredients is a JSON array of {id, isHeading, isMain, text}. Match only the
+            // human-readable `text` via json_each/json_extract rather than LIKE-ing the whole
+            // column (which would also match the JSON keys and element UUIDs).
+            conds.append("EXISTS (SELECT 1 FROM json_each(IIF(json_valid(\(Recipe.ingredients)), \(Recipe.ingredients), '[]')) WHERE json_extract(value, '$.text') COLLATE NOCASE LIKE \(bind: pattern))")
         }
         // Notes and variations are JSON arrays. Search only the human-readable value fields via
         // json_each/json_extract rather than LIKE-ing the whole column (which would also match the

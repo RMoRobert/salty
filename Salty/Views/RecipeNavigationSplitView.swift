@@ -114,6 +114,7 @@ struct RecipeNavigationSplitView: View {
     @State private var showingSettingsSheet = false
     @State private var showingFirstLaunchAlert = false
     @State private var recipeIDForInspector: String? = nil
+    @State private var recipeListScrollPosition = ScrollPosition()
     
     private var isAnySheetShown: Bool {
         showingEditLibCategoriesSheet ||
@@ -254,81 +255,80 @@ struct RecipeNavigationSplitView: View {
             #endif
 
         } content: {
-            ScrollViewReader { proxy in
-                List(selection: $viewModel.selectedRecipeIDs) {
-                    ForEach(viewModel.recipes) { recipe in
-                        RecipeRowView(recipe: recipe)
-                            .popover(isPresented: Binding(
-                                get: { recipeIDForInspector == recipe.id },
-                                set: { if !$0 { recipeIDForInspector = nil } }
-                            )) {
-                                RecipeInfoInspectorView(recipe: recipe)
-                                    .frame(minWidth: 280)
-                            }
-                            .id(recipe.id)
-                            .tag(recipe.id)
-                            .draggable(recipe.id)
-                            #if !os(macOS)
-                            .contextMenu {
-                                contextMenuForRecipe(recipe)
-                            }
-                            #endif
-                    }
-                    #if !os(macOS)
-                    .onDelete { indexSet in
-                        withAnimation {
-                            let recipesToDelete = indexSet.compactMap { index in
-                                viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
-                            }
-                            for recipe in recipesToDelete {
-                                Task { await viewModel.deleteRecipe(id: recipe.id) }
-                            }
+            List(selection: $viewModel.selectedRecipeIDs) {
+                ForEach(viewModel.recipes) { recipe in
+                    RecipeRowView(recipe: recipe)
+                        .popover(isPresented: Binding(
+                            get: { recipeIDForInspector == recipe.id },
+                            set: { if !$0 { recipeIDForInspector = nil } }
+                        )) {
+                            RecipeInfoInspectorView(recipe: recipe)
+                                .frame(minWidth: 280)
                         }
-                    }
-                    #endif
-                    if (viewModel.recipes.isEmpty) {
-                        HStack {
-                            Spacer()
-                            Text("No recipes")
-                                .foregroundStyle(.tertiary)
-                            Spacer()
+                        .id(recipe.id)
+                        .tag(recipe.id)
+                        .draggable(recipe.id)
+                        #if !os(macOS)
+                        .contextMenu {
+                            contextMenuForRecipe(recipe)
                         }
-                        .listRowSeparator(.hidden)
-                    }
-                }
-                #if os(macOS)
-                .contextMenu(forSelectionType: String.self) { selectedIDs in
-                    contextMenuForSelection(selectedIDs)
-                } primaryAction: { selectedIDs in
-                    openSelectedRecipesInNewWindows(recipeIds: selectedIDs)
-                }
-                #endif
-                .task(id: recipeQueryId) {
-                    await viewModel.updateRecipesQuery()
+                        #endif
                 }
                 #if !os(macOS)
-                .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
-                .onChange(of: isEditMode) { _, newValue in
-                    if !newValue {
-                        // Clear selection when exiting edit mode
-                        viewModel.selectedRecipeIDs.removeAll()
+                .onDelete { indexSet in
+                    withAnimation {
+                        let recipesToDelete = indexSet.compactMap { index in
+                            viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
+                        }
+                        for recipe in recipesToDelete {
+                            Task { await viewModel.deleteRecipe(id: recipe.id) }
+                        }
                     }
                 }
                 #endif
-                .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
-                    if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
-                        // Wait a bit for the recipe to appear in the list before scrolling
-                        Task {
-                            try? await Task.sleep(for: .seconds(0.5))
-                            if viewModel.recipes.contains(where: { $0.id == newId }) {
-                                withAnimation {
-                                    proxy.scrollTo(newId)
-                                }
+                if (viewModel.recipes.isEmpty) {
+                    HStack {
+                        Spacer()
+                        Text("No recipes")
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                    }
+                    .listRowSeparator(.hidden)
+                }
+            }
+            .scrollPosition($recipeListScrollPosition)
+            #if os(macOS)
+            .contextMenu(forSelectionType: String.self) { selectedIDs in
+                contextMenuForSelection(selectedIDs)
+            } primaryAction: { selectedIDs in
+                openSelectedRecipesInNewWindows(recipeIds: selectedIDs)
+            }
+            #endif
+            .task(id: recipeQueryId) {
+                await viewModel.updateRecipesQuery()
+            }
+            #if !os(macOS)
+            .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
+            .onChange(of: isEditMode) { _, newValue in
+                if !newValue {
+                    // Clear selection when exiting edit mode
+                    viewModel.selectedRecipeIDs.removeAll()
+                }
+            }
+            #endif
+            .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
+                if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
+                    // Wait a bit for the recipe to appear in the list before scrolling
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.5))
+                        if viewModel.recipes.contains(where: { $0.id == newId }) {
+                            withAnimation {
+                                recipeListScrollPosition.scrollTo(id: newId)
                             }
                         }
-                        // Reset the flag after attempting to scroll
-                        viewModel.shouldScrollToNewRecipe = false
                     }
+                    // Reset the flag after attempting to scroll
+                    viewModel.shouldScrollToNewRecipe = false
                 }
             }
             .navigationTitle(viewModel.navigationTitle)

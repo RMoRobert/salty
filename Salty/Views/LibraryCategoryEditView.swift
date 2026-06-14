@@ -111,50 +111,50 @@ struct LibraryCategoriesEditView: View {
             } message: {
                 Text("Enter the new name for the category")
             }
+            .errorAlert($viewModel.operationError)
     }
     
 }
 
 private struct CategoriesListView: View {
     @Bindable var viewModel: LibraryCategoriesEditViewModel
+    @State private var scrollPosition = ScrollPosition()
 
     var body: some View {
-        ScrollViewReader { proxy in
-            List(selection: $viewModel.selectedIndices) {
-                ForEach(Array(viewModel.categories.enumerated()), id: \.element.id) { index, category in
-                    HStack {
-                        Text(category.name)
-                        Spacer()
-                    }
-                    .tag(index)
-                    .id(index)
+        List(selection: $viewModel.selectedIndices) {
+            ForEach(Array(viewModel.categories.enumerated()), id: \.element.id) { index, category in
+                HStack {
+                    Text(category.name)
+                    Spacer()
                 }
-                .onDelete { indexSet in
-                    Task {
-                        for index in indexSet.sorted(by: >) {
-                            await viewModel.deleteCategory(at: index)
-                        }
+                .tag(index)
+            }
+            .onDelete { indexSet in
+                Task {
+                    for index in indexSet.sorted(by: >) {
+                        await viewModel.deleteCategory(at: index)
                     }
                 }
             }
-            #if os(macOS)
-            .listStyle(.bordered)
-            .alternatingRowBackgrounds()
-            #else
-            .listStyle(.plain)
-            #endif
-            .onChange(of: viewModel.scrollToNewItem) { _, shouldScroll in
-                if shouldScroll, let lastIndex = viewModel.categories.indices.last {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(lastIndex, anchor: .bottom)
-                    }
-                    viewModel.scrollToNewItem = false
+        }
+        .scrollPosition($scrollPosition)
+        #if os(macOS)
+        .listStyle(.bordered)
+        .alternatingRowBackgrounds()
+        #else
+        .listStyle(.plain)
+        #endif
+        .onChange(of: viewModel.scrollToNewItem) { _, shouldScroll in
+            if shouldScroll, !viewModel.categories.isEmpty {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    scrollPosition.scrollTo(edge: .bottom)
                 }
+                viewModel.scrollToNewItem = false
             }
-            .searchable(text: $viewModel.searchText)
-            .task(id: viewModel.searchText) {
-                await viewModel.updateQuery()
-            }
+        }
+        .searchable(text: $viewModel.searchText)
+        .task(id: viewModel.searchText) {
+            await viewModel.updateQuery()
         }
     }
 }

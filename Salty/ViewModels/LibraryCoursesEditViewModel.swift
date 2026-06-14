@@ -26,7 +26,9 @@ class LibraryCoursesEditViewModel {
     var editingCourseName = ""
     var editingCourseIndex: Int? = nil
     var scrollToNewItem: Bool = false
-    
+    /// Set when a create/rename/delete fails; surfaced to the user via `.errorAlert`.
+    var operationError: String?
+
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
     var courses: [Course]
@@ -70,6 +72,7 @@ class LibraryCoursesEditViewModel {
             selectedIndices = newSelection
         } catch {
             logger.error("Error deleting course: \(error)")
+            operationError = "Couldn’t delete the course. \(error.localizedDescription)"
         }
     }
     
@@ -124,6 +127,7 @@ class LibraryCoursesEditViewModel {
             newCourseName = ""
         } catch {
             logger.error("Error creating course: \(error)")
+            operationError = "Couldn’t create the course. \(error.localizedDescription)"
         }
     }
     
@@ -160,6 +164,7 @@ class LibraryCoursesEditViewModel {
             editingCourseName = ""
         } catch {
             logger.error("Error updating course: \(error)")
+            operationError = "Couldn’t rename the course. \(error.localizedDescription)"
         }
     }
     

@@ -80,21 +80,12 @@ private struct TitleAndBasicInfoSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(alignment: .top)
 #if !os(macOS)
-                        .background(
-                            GeometryReader { titleGeometry in
-                                Color.clear
-                                    .onAppear {
-                                        let titleFrame = titleGeometry.frame(in: .global)
-                                        let buffer: CGFloat = 90
-                                        viewModel.isTitleVisible = titleFrame.maxY > buffer
-                                    }
-                                    .onChange(of: titleGeometry.frame(in: .global)) { _, newFrame in
-                                        let buffer: CGFloat = 90
-                                        viewModel.isTitleVisible = newFrame.maxY > buffer
-                                    }
-                                    .accessibilityHidden(true)
-                            }
-                        )
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .global).maxY
+                        } action: { maxY in
+                            let buffer: CGFloat = 90
+                            viewModel.isTitleVisible = maxY > buffer
+                        }
 #endif
                 }
                 Spacer()

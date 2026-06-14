@@ -28,7 +28,9 @@ class LibraryCategoriesEditViewModel {
     var editingCategoryIndex: Int? = nil
     var scrollToNewItem: Bool = false
     var searchText: String = ""
-    
+    /// Set when a create/rename/delete fails; surfaced to the user via `.errorAlert`.
+    var operationError: String?
+
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
     var categories: [Category]
@@ -60,10 +62,11 @@ class LibraryCategoriesEditViewModel {
                 )
             }
         } catch {
-          // Handle error...
+            // Search reload failed; the list keeps its prior contents. Non-destructive, so log only.
+            logger.error("Error updating category search query: \(error)")
         }
     }
-    
+
     func deleteCategory(at index: Int) async {
         guard index < categories.count else { return }
         let categoryToDelete = categories[index]
@@ -102,6 +105,7 @@ class LibraryCategoriesEditViewModel {
             selectedIndices = newSelection
         } catch {
             logger.error("Error deleting category: \(error)")
+            operationError = "Couldn’t delete the category. \(error.localizedDescription)"
         }
     }
     
@@ -156,6 +160,7 @@ class LibraryCategoriesEditViewModel {
             newCategoryName = ""
         } catch {
             logger.error("Error creating category: \(error)")
+            operationError = "Couldn’t create the category. \(error.localizedDescription)"
         }
     }
     
@@ -192,6 +197,7 @@ class LibraryCategoriesEditViewModel {
             editingCategoryName = ""
         } catch {
             logger.error("Error updating category: \(error)")
+            operationError = "Couldn’t rename the category. \(error.localizedDescription)"
         }
     }
     
