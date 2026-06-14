@@ -30,7 +30,7 @@ struct LibraryCategoriesEditView: View {
                         .disabled(!viewModel.canEdit)
                         
                         Button(role: .destructive) {
-                            viewModel.deleteSelectedCategories()
+                            Task { await viewModel.deleteSelectedCategories() }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -54,7 +54,7 @@ struct LibraryCategoriesEditView: View {
                 #else
                 ToolbarItem(placement: .automatic) {
                     Button(role: .destructive) {
-                        viewModel.deleteSelectedCategories()
+                        Task { await viewModel.deleteSelectedCategories() }
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -86,7 +86,7 @@ struct LibraryCategoriesEditView: View {
                     viewModel.clearNewCategoryForm()
                 }
                 Button("Add") {
-                    viewModel.createNewCategory()
+                    Task { await viewModel.createNewCategory() }
                 }
                 .disabled(!viewModel.canCreateNewCategory)
             } message: {
@@ -104,7 +104,7 @@ struct LibraryCategoriesEditView: View {
                 }
                 Button("Save") {
                     if let index = viewModel.editingCategoryIndex {
-                        viewModel.updateCategoryName(at: index, to: viewModel.editingCategoryName)
+                        Task { await viewModel.updateCategoryName(at: index, to: viewModel.editingCategoryName) }
                     }
                 }
                 .disabled(!viewModel.canSaveEdit)
@@ -125,8 +125,10 @@ struct LibraryCategoriesEditView: View {
                     .id(index)
                 }
                 .onDelete { indexSet in
-                    for index in indexSet.sorted(by: >) {
-                        viewModel.deleteCategory(at: index)
+                    Task {
+                        for index in indexSet.sorted(by: >) {
+                            await viewModel.deleteCategory(at: index)
+                        }
                     }
                 }
             }

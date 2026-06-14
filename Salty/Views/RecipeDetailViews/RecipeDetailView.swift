@@ -382,7 +382,7 @@ private struct IngredientScalePopoverContent: View {
                 .font(.caption)
                 .accessibilityLabel("Recipe will temporarily display with scaled measurements, or save as new recipe below.")
             Button("Save as New Recipe…") {
-                viewModel.saveAsScaledRecipe()
+                Task { await viewModel.saveAsScaledRecipe() }
             }
             .frame(maxWidth: .infinity)
             .buttonStyle(.bordered)

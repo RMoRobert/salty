@@ -52,8 +52,10 @@ struct RecipeDetailEditDesktopView: View {
                 .foregroundColor(.secondary)
                 
                 Button("Save") {
-                    viewModel.saveRecipe()
-                    dismiss()
+                    Task {
+                        await viewModel.saveRecipe()
+                        dismiss()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.accentColor)
@@ -101,10 +103,8 @@ struct RecipeDetailEditDesktopView: View {
             newTagName = ""
             return 
         }
-        withAnimation {
-            viewModel.addTag(trimmedTag)
-        }
         newTagName = ""
+        Task { await viewModel.addTag(trimmedTag) }
     }
     
     
@@ -350,9 +350,7 @@ struct RecipeDetailEditDesktopView: View {
                 HFlow(itemSpacing: 8, rowSpacing: 4) {
                     ForEach(viewModel.sortedTags, id: \.self) { tag in
                         Button(action: {
-                            withAnimation {
-                                viewModel.removeTag(tag)
-                            }
+                            Task { await viewModel.removeTag(tag) }
                         }) {
                             Label(tag, systemImage: "minus.circle")
                                 .padding(.horizontal, 8)

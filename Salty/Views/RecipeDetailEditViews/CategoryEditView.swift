@@ -56,8 +56,10 @@ struct CategoryEditView: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        saveChanges()
-                        dismiss()
+                        Task {
+                            await saveChanges()
+                            dismiss()
+                        }
                     }
                     .keyboardShortcut(.return)
                     .disabled(selectedCategoryIDs == originalSelectedCategoryIDs)
@@ -65,10 +67,10 @@ struct CategoryEditView: View {
             }
             #endif
             .onAppear {
-                loadSelectedCategories()
+                Task { await loadSelectedCategories() }
             }
             .onChange(of: categories) { _, _ in
-                loadSelectedCategories()
+                Task { await loadSelectedCategories() }
             }
             .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
                 LibraryCategoriesEditView()
@@ -79,7 +81,7 @@ struct CategoryEditView: View {
                     newCategoryName = ""
                 }
                 Button("Add") {
-                    createNewCategory()
+                    Task { await createNewCategory() }
                 }
                 .disabled(newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } message: {
@@ -93,7 +95,7 @@ struct CategoryEditView: View {
                     .onChange(of: showingEditLibraryCategoriesSheet) { _, isPresented in
             if !isPresented {
                 // Refresh selected categories when the sheet is dismissed
-                loadSelectedCategories()
+                Task { await loadSelectedCategories() }
             }
         }
     }
@@ -113,11 +115,12 @@ struct CategoryEditView: View {
         )
     }
     
-    private func loadSelectedCategories() {
+    private func loadSelectedCategories() async {
+        let recipeId = recipe.id
         do {
-            let selectedIDs = try database.read { db in
+            let selectedIDs = try await database.read { db in
                 try RecipeCategory
-                    .where { $0.recipeId.eq(recipe.id) }
+                    .where { $0.recipeId.eq(recipeId) }
                     .fetchAll(db)
                     .map { $0.categoryId }
             }
@@ -128,36 +131,37 @@ struct CategoryEditView: View {
             originalSelectedCategoryIDs = []
         }
     }
-    
-    private func saveChanges() {
+
+    private func saveChanges() async {
+        let recipeId = recipe.id
+        let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
+        let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
         do {
             // First check if the recipe exists in the database
-            let recipeExists = try database.read { db in
+            let recipeExists = try await database.read { db in
                 try Recipe
-                    .where { $0.id.eq(recipe.id) }
+                    .where { $0.id.eq(recipeId) }
                     .fetchOne(db) != nil
             }
-            
+
             // Only save category relationships if the recipe exists
             if recipeExists {
-                let categoriesToRemove = originalSelectedCategoryIDs.subtracting(selectedCategoryIDs)
-                let categoriesToAdd = selectedCategoryIDs.subtracting(originalSelectedCategoryIDs)
                 guard !categoriesToRemove.isEmpty || !categoriesToAdd.isEmpty else { return }
-                
-                try database.write { db in
+
+                try await database.write { db in
                     for categoryId in categoriesToRemove {
                         try RecipeCategory
-                            .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(categoryId) }
+                            .where { $0.recipeId.eq(recipeId) && $0.categoryId.eq(categoryId) }
                             .delete()
                             .execute(db)
                     }
-                    
+
                     for categoryId in categoriesToAdd {
-                        let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
-                        try RecipeCategory.insert(recipeCategory).execute(db)
+                        let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipeId, categoryId: categoryId)
+                        try RecipeCategory.insert { recipeCategory }.execute(db)
                     }
-                    
-                    try Recipe.touchLastModified(recipeId: recipe.id, in: db)
+
+                    try Recipe.touchLastModified(recipeId: recipeId, in: db)
                 }
             } else {
                 // If recipe doesn't exist yet, the selectedCategoryIDs binding will be updated
@@ -169,32 +173,32 @@ struct CategoryEditView: View {
         }
     }
     
-    private func createNewCategory() {
+    private func createNewCategory() async {
         let trimmedName = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
             // Check if a category with this name already exists (case-insensitive)
-            let existingCategory = try database.read { db in
+            let existingCategory = try await database.read { db in
                 try Category
                     .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
-            
+
             if existingCategory != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Create the new category
             let newCategory = Category(id: UUID().uuidString, name: trimmedName, lastModifiedDate: Date())
-            try database.write { db in
+            try await database.write { db in
                 try Category.insert {
                     newCategory
                 }.execute(db)
             }
-            
+
             // Add to selected categories
             selectedCategoryIDs.insert(newCategory.id)
             newCategoryName = ""
@@ -236,8 +240,10 @@ struct CategoryEditView: View {
             Spacer()
             
             Button("Save") {
-                saveChanges()
-                dismiss()
+                Task {
+                    await saveChanges()
+                    dismiss()
+                }
             }
             .keyboardShortcut(.return)
             .buttonStyle(.borderedProminent)

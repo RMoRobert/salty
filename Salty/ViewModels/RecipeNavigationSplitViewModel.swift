@@ -2089,56 +2089,58 @@ class RecipeNavigationSplitViewModel {
         showingEditSheet = true
     }
     
-    func deleteSelectedRecipes() {
+    func deleteSelectedRecipes() async {
+        // Snapshot main-actor state for the off-actor @Sendable closures.
+        let idsToDelete = selectedRecipeIDs
         do {
             // First, get the image filenames from selected recipes before deleting them
-            let imageFilenames = try database.read { db in
+            let imageFilenames = try await database.read { db in
                 try Recipe
                     .select { $0.imageFilename }
-                    .where { selectedRecipeIDs.contains($0.id) }
+                    .where { idsToDelete.contains($0.id) }
                     .fetchAll(db)
             }
-             
+
             // Delete image files from filesystem
             for imageFilename in imageFilenames {
                 if let filename = imageFilename {
                     RecipeImageManager.shared.deleteImage(filename: filename)
                 }
             }
-            
+
             // Now delete the recipes from the database
-            let _ = try database.write { db in
+            try await database.write { db in
                 try Recipe
-                    .where { selectedRecipeIDs.contains($0.id) }
+                    .where { idsToDelete.contains($0.id) }
                     .delete()
                     .execute(db)
             }
-            
+
             selectedRecipeIDs.removeAll()
         } catch {
             logger.error("Error deleting recipes: \(error)")
         }
     }
-    
-    func deleteRecipe(id: String) {
+
+    func deleteRecipe(id: String) async {
         do {
             // First, get the image filename from the recipe before deleting it
-            let imageFilenames = try database.read { db in
+            let imageFilenames = try await database.read { db in
                 try Recipe
                     .select { $0.imageFilename }
                     .where { $0.id.eq(id) }
                     .fetchAll(db)
             }
-            
+
             // Delete image file from filesystem if it exists
             for imageFilename in imageFilenames {
                 if let filename = imageFilename {
                     RecipeImageManager.shared.deleteImage(filename: filename)
                 }
             }
-            
+
             // Now delete the recipe from the database
-            let _ = try database.write { db in
+            try await database.write { db in
                 try Recipe
                     .where { $0.id.eq(id) }
                     .delete()
@@ -2716,14 +2718,15 @@ class RecipeNavigationSplitViewModel {
     // MARK: - Category and Tag Management
     
     /// Adds a recipe to a category if it's not already associated
-    func addRecipeToCategory(recipeId: String, categoryId: String) {
+    func addRecipeToCategory(recipeId: String, categoryId: String) async {
+        let log = logger // Sendable copy for the off-actor closure
         do {
-            try database.write { db in
+            try await database.write { db in
                 // Check if relationship already exists
                 let existingRelationship = try RecipeCategory
                     .where { $0.recipeId.eq(recipeId) && $0.categoryId.eq(categoryId) }
                     .fetchOne(db)
-                
+
                 if existingRelationship == nil {
                     // Create relationship only if it doesn't already exist
                     let recipeCategory = RecipeCategory(
@@ -2733,25 +2736,26 @@ class RecipeNavigationSplitViewModel {
                     )
                     try RecipeCategory.insert { recipeCategory }.execute(db)
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)
-                    logger.info("Added recipe \(recipeId) to category \(categoryId)")
+                    log.info("Added recipe \(recipeId) to category \(categoryId)")
                 } else {
-                    logger.info("Recipe \(recipeId) is already in category \(categoryId)")
+                    log.info("Recipe \(recipeId) is already in category \(categoryId)")
                 }
             }
         } catch {
             logger.error("Error adding recipe to category: \(error)")
         }
     }
-    
+
     /// Adds a recipe to a tag if it's not already associated
-    func addRecipeToTag(recipeId: String, tagId: String) {
+    func addRecipeToTag(recipeId: String, tagId: String) async {
+        let log = logger // Sendable copy for the off-actor closure
         do {
-            try database.write { db in
+            try await database.write { db in
                 // Check if relationship already exists
                 let existingRelationship = try RecipeTag
                     .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tagId) }
                     .fetchOne(db)
-                
+
                 if existingRelationship == nil {
                     // Create relationship only if it doesn't already exist
                     let recipeTag = RecipeTag(
@@ -2759,11 +2763,11 @@ class RecipeNavigationSplitViewModel {
                         recipeId: recipeId,
                         tagId: tagId
                     )
-                    try RecipeTag.insert(recipeTag).execute(db)
+                    try RecipeTag.insert { recipeTag }.execute(db)
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)
-                    logger.info("Added recipe \(recipeId) to tag \(tagId)")
+                    log.info("Added recipe \(recipeId) to tag \(tagId)")
                 } else {
-                    logger.info("Recipe \(recipeId) is already tagged with \(tagId)")
+                    log.info("Recipe \(recipeId) is already tagged with \(tagId)")
                 }
             }
         } catch {
@@ -2804,11 +2808,11 @@ class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
         // No-op for preview
     }
     
-    override func deleteSelectedRecipes() {
+    override func deleteSelectedRecipes() async {
         // No-op for preview
     }
-    
-    override func deleteRecipe(id: String) {
+
+    override func deleteRecipe(id: String) async {
         // No-op for preview
     }
 }

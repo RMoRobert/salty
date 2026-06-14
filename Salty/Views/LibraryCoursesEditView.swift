@@ -30,7 +30,7 @@ struct LibraryCoursesEditView: View {
                         .disabled(!viewModel.canEdit)
                         
                         Button(role: .destructive) {
-                            viewModel.deleteSelectedCourses()
+                            Task { await viewModel.deleteSelectedCourses() }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -54,7 +54,7 @@ struct LibraryCoursesEditView: View {
                 #else
                 ToolbarItem(placement: .automatic) {
                     Button(role: .destructive) {
-                        viewModel.deleteSelectedCourses()
+                        Task { await viewModel.deleteSelectedCourses() }
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -84,7 +84,7 @@ struct LibraryCoursesEditView: View {
                     viewModel.clearNewCourseForm()
                 }
                 Button("Add") {
-                    viewModel.createNewCourse()
+                    Task { await viewModel.createNewCourse() }
                 }
                 .disabled(!viewModel.canCreateNewCourse)
             } message: {
@@ -102,7 +102,7 @@ struct LibraryCoursesEditView: View {
                 }
                 Button("Save") {
                     if let index = viewModel.editingCourseIndex {
-                        viewModel.updateCourseName(at: index, to: viewModel.editingCourseName)
+                        Task { await viewModel.updateCourseName(at: index, to: viewModel.editingCourseName) }
                     }
                 }
                 .disabled(!viewModel.canSaveEdit)
@@ -123,8 +123,10 @@ struct LibraryCoursesEditView: View {
                     .id(index)
                 }
                 .onDelete { indexSet in
-                    for index in indexSet.sorted(by: >) {
-                        viewModel.deleteCourse(at: index)
+                    Task {
+                        for index in indexSet.sorted(by: >) {
+                            await viewModel.deleteCourse(at: index)
+                        }
                     }
                 }
             }

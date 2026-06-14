@@ -115,47 +115,52 @@ class RecipeDetailEditViewModel {
     }
     
     // MARK: - Public Methods
-    func saveRecipe() {
+    func saveRecipe() async {
         recipe.lastModifiedDate = Date()
+        // Snapshot main-actor state into locals: the async write closure is @Sendable and runs
+        // off the main actor, so it must not touch `self`.
+        let recipeToSave = recipe
+        let isNew = isNewRecipe
+        let categoryIDs = selectedCategoryIDs
         do {
-            try database.write { db in
-                if isNewRecipe {
+            try await database.write { db in
+                if isNew {
                     // Insert new recipe
-                    try Recipe.insert(recipe).execute(db)
+                    try Recipe.insert { recipeToSave }.execute(db)
                 } else {
                     // Update existing recipe
-                    try Recipe.update(recipe).execute(db)
+                    try Recipe.update(recipeToSave).execute(db)
                 }
-                
+
                 // Handle category relationships
-                if !selectedCategoryIDs.isEmpty {
+                if !categoryIDs.isEmpty {
                     // Remove existing category relationships
                     try RecipeCategory
-                        .where { $0.recipeId.eq(recipe.id) }
+                        .where { $0.recipeId.eq(recipeToSave.id) }
                         .delete()
                         .execute(db)
-                    
+
                     // Add new category relationships
-                    for categoryId in selectedCategoryIDs {
+                    for categoryId in categoryIDs {
                         let recipeCategory = RecipeCategory(
                             id: UUIDV7().uuidString,
-                            recipeId: recipe.id,
+                            recipeId: recipeToSave.id,
                             categoryId: categoryId
                         )
-                        try RecipeCategory.insert(recipeCategory).execute(db)
+                        try RecipeCategory.insert { recipeCategory }.execute(db)
                     }
                 }
             }
-            
+
             // Handle successful save of new recipe
-            if isNewRecipe {
-                onNewRecipeSaved?(recipe.id)
+            if isNew {
+                onNewRecipeSaved?(recipeToSave.id)
             }
-            
+
             // After successful save, this is no longer a new recipe
             isNewRecipe = false
-            originalRecipe = recipe
-            
+            originalRecipe = recipeToSave
+
         } catch {
             logger.error("Error saving recipe: \(error)")
         }
@@ -163,42 +168,44 @@ class RecipeDetailEditViewModel {
     
     // MARK: - Tag Management
     
-    func addTag(_ tagName: String) {
+    func addTag(_ tagName: String) async {
         let trimmedName = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
+        let recipeId = recipe.id
         do {
             // Check if tag already exists
-            let existingTag = try database.read { db in
+            let existingTag = try await database.read { db in
                 try Tag
                     .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
-            
+
             let tagToUse: Tag
             if let existing = existingTag {
                 tagToUse = existing
             } else {
                 // Create new tag
-                tagToUse = Tag(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
-                try database.write { db in
-                    try Tag.insert{ tagToUse }.execute(db)
+                let newTag = Tag(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
+                try await database.write { db in
+                    try Tag.insert { newTag }.execute(db)
                 }
+                tagToUse = newTag
             }
-            
+
             // Check if recipe already has this tag
-            let existingRecipeTag = try database.read { db in
+            let existingRecipeTag = try await database.read { db in
                 try RecipeTag
-                    .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tagToUse.id) }
+                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tagToUse.id) }
                     .fetchOne(db)
             }
-            
+
             if existingRecipeTag == nil {
                 // Add tag to recipe
-                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagToUse.id)
-                try database.write { db in
-                    try RecipeTag.insert{ recipeTag }.execute(db)
-                    try Recipe.touchLastModified(recipeId: recipe.id, in: db)
+                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipeId, tagId: tagToUse.id)
+                try await database.write { db in
+                    try RecipeTag.insert { recipeTag }.execute(db)
+                    try Recipe.touchLastModified(recipeId: recipeId, in: db)
                 }
                 recipe.lastModifiedDate = Date()
             }
@@ -206,31 +213,32 @@ class RecipeDetailEditViewModel {
             logger.error("Error adding tag: \(error)")
         }
     }
-    
-    func removeTag(_ tagName: String) {
+
+    func removeTag(_ tagName: String) async {
+        let recipeId = recipe.id
         do {
             // Find the tag
-            let tag = try database.read { db in
+            let tag = try await database.read { db in
                 try Tag
                     .where { $0.name.collate(.nocase).eq(tagName.collate(.nocase)) }
                     .fetchOne(db)
             }
-            
+
             guard let tag = tag else {
                 logger.warning("Tag '\(tagName)' not found")
                 return
             }
-            
+
             // Remove the recipe-tag association
-            let _ = try database.write { db in
+            try await database.write { db in
                 try RecipeTag
-                    .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tag.id) }
+                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tag.id) }
                     .delete()
                     .execute(db)
-                try Recipe.touchLastModified(recipeId: recipe.id, in: db)
+                try Recipe.touchLastModified(recipeId: recipeId, in: db)
             }
             recipe.lastModifiedDate = Date()
-            
+
             logger.info("Tag '\(tagName)' removed from recipe")
         } catch {
             logger.error("Error removing tag: \(error)")

@@ -36,7 +36,7 @@ enum RecipeDuplicator {
         categoryIds: [String],
         tagIds: [String],
         options: Options = Options()
-    ) throws -> String {
+    ) async throws -> String {
         let now = Date()
         let newId = UUIDV7().uuidString
         let scaleFactor = options.ingredientScaleFactor
@@ -97,29 +97,31 @@ enum RecipeDuplicator {
             copy.setImage(thumbnailData)
         }
         
-        try database.write { db in
-            try Recipe.insert { copy }.execute(db)
-            
+        // Capture into a constant for the @Sendable write closure (runs off the calling actor).
+        let finalCopy = copy
+        try await database.write { db in
+            try Recipe.insert { finalCopy }.execute(db)
+
             for categoryId in categoryIds {
                 let recipeCategory = RecipeCategory(
                     id: UUIDV7().uuidString,
-                    recipeId: copy.id,
+                    recipeId: finalCopy.id,
                     categoryId: categoryId
                 )
                 try RecipeCategory.insert { recipeCategory }.execute(db)
             }
-            
+
             for tagId in tagIds {
                 let recipeTag = RecipeTag(
                     id: UUIDV7().uuidString,
-                    recipeId: copy.id,
+                    recipeId: finalCopy.id,
                     tagId: tagId
                 )
                 try RecipeTag.insert { recipeTag }.execute(db)
             }
         }
-        
-        return copy.id
+
+        return finalCopy.id
     }
     
     // MARK: - Private

@@ -62,12 +62,12 @@ class LibraryTagsEditViewModel {
         }
     }
     
-    func deleteTag(at index: Int) {
+    func deleteTag(at index: Int) async {
         guard index < tags.count else { return }
         let tagToDelete = tags[index]
-        
+
         do {
-            try database.write { db in
+            try await database.write { db in
                 let affectedRecipeIds = try RecipeTag
                     .where { $0.tagId.eq(tagToDelete.id) }
                     .fetchAll(db)
@@ -97,9 +97,9 @@ class LibraryTagsEditViewModel {
         }
     }
     
-    func deleteSelectedTags() {
+    func deleteSelectedTags() async {
         for index in selectedIndices.sorted(by: >) {
-            deleteTag(at: index)
+            await deleteTag(at: index)
         }
     }
     
@@ -116,28 +116,28 @@ class LibraryTagsEditViewModel {
         showingNewTagAlert = true
     }
     
-    func createNewTag() {
+    func createNewTag() async {
         let trimmedName = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
             // Check if a tag with this name already exists (case-insensitive)
-            let existingTag = try database.read { db in
+            let existingTag = try await database.read { db in
                 try Tag
                     .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
-            
+
             if existingTag != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Create the new tag
             let newTag = Tag(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
-            try database.write { db in
-                try Tag.insert(newTag).execute(db)
+            try await database.write { db in
+                try Tag.insert { newTag }.execute(db)
             }
             
                          // Select the new tag and scroll to it
@@ -149,31 +149,33 @@ class LibraryTagsEditViewModel {
         }
     }
     
-    func updateTagName(at index: Int, to newName: String) {
+    func updateTagName(at index: Int, to newName: String) async {
         guard index < tags.count else { return }
         let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
+            let currentTagId = tags[index].id
             // Check if a tag with this name already exists (case-insensitive)
-            let existingTag = try database.read { db in
+            let existingTag = try await database.read { db in
                 try Tag
-                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(tags[index].id) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(currentTagId) }
                     .fetchOne(db)
             }
-            
+
             if existingTag != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Update the tag name
             var updatedTag = tags[index]
             updatedTag.name = trimmedName
             updatedTag.lastModifiedDate = Date()
-            try database.write { db in
-                try Tag.update(updatedTag).execute(db)
+            let tagToUpdate = updatedTag
+            try await database.write { db in
+                try Tag.update(tagToUpdate).execute(db)
             }
             
             editingTagIndex = nil

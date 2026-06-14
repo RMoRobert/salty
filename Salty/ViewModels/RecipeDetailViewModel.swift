@@ -54,7 +54,11 @@ class RecipeDetailViewModel {
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self) ORDER BY \(RecipeTag.id)"))
     var allRecipeTags: [RecipeTag]
-    
+
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(RecipeCategory.columns) FROM \(RecipeCategory.self) ORDER BY \(RecipeCategory.id)"))
+    var allRecipeCategories: [RecipeCategory]
+
     // MARK: - Computed Properties
     #if !os(macOS)
     var shouldShowNavigationTitle: Bool {
@@ -70,19 +74,11 @@ class RecipeDetailViewModel {
     
     var recipeCategories: [Category] {
         guard let recipe = recipe else { return [] }
-        do {
-            let recipeCategoryIds = try database.read { db in
-                try RecipeCategory
-                    .where { $0.recipeId.eq(recipe.id) }
-                    .fetchAll(db)
-                    .map { $0.categoryId }
-            }
-            return categories.filter { recipeCategoryIds.contains($0.id) }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        } catch {
-            logger.error("Error loading recipe categories: \(error)")
-            return []
-        }
+        // Derive from the observed @FetchAll join table (no synchronous DB read on the main thread),
+        // mirroring how `recipeTags` is computed.
+        let recipeCategoryIds = allRecipeCategories.filter { $0.recipeId == recipe.id }.map { $0.categoryId }
+        return categories.filter { recipeCategoryIds.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     
     var recipeTags: [Tag] {
@@ -127,23 +123,28 @@ class RecipeDetailViewModel {
         abs(ingredientScalePercent - targetFactor) <= tolerance
     }
     
-    func saveAsScaledRecipe() {
+    func saveAsScaledRecipe() async {
         guard let source = recipe, isIngredientScaleActive, !isSavingScaledRecipe else { return }
-        
+
         isSavingScaledRecipe = true
         scaledRecipeSaveErrorMessage = nil
-        
+
+        // Snapshot main-actor state before the off-actor duplicate work.
+        let categoryIds = recipeCategories.map(\.id)
+        let tagIds = recipeTags.map(\.id)
+        let options = RecipeDuplicator.Options(
+            ingredientScaleFactor: ingredientScaleFactor,
+            scalePercentLabel: ingredientScalePercentLabel,
+            sourceRecipeName: source.name
+        )
+
         do {
-            let newId = try RecipeDuplicator.duplicate(
+            let newId = try await RecipeDuplicator.duplicate(
                 source: source,
                 database: database,
-                categoryIds: recipeCategories.map(\.id),
-                tagIds: recipeTags.map(\.id),
-                options: RecipeDuplicator.Options(
-                    ingredientScaleFactor: ingredientScaleFactor,
-                    scalePercentLabel: ingredientScalePercentLabel,
-                    sourceRecipeName: source.name
-                )
+                categoryIds: categoryIds,
+                tagIds: tagIds,
+                options: options
             )
             isIngredientScalePopoverShowing = false
             onScaledRecipeSaved?(newId)
@@ -151,7 +152,7 @@ class RecipeDetailViewModel {
             logger.error("Failed to save scaled recipe copy: \(error)")
             scaledRecipeSaveErrorMessage = error.localizedDescription
         }
-        
+
         isSavingScaledRecipe = false
     }
     

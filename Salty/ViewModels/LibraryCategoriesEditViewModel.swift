@@ -59,12 +59,12 @@ class LibraryCategoriesEditViewModel: ObservableObject {
         }
     }
     
-    func deleteCategory(at index: Int) {
+    func deleteCategory(at index: Int) async {
         guard index < categories.count else { return }
         let categoryToDelete = categories[index]
-        
+
         do {
-            try database.write { db in
+            try await database.write { db in
                 let affectedRecipeIds = try RecipeCategory
                     .where { $0.categoryId.eq(categoryToDelete.id) }
                     .fetchAll(db)
@@ -100,9 +100,9 @@ class LibraryCategoriesEditViewModel: ObservableObject {
         }
     }
     
-    func deleteSelectedCategories() {
+    func deleteSelectedCategories() async {
         for index in selectedIndices.sorted(by: >) {
-            deleteCategory(at: index)
+            await deleteCategory(at: index)
         }
     }
     
@@ -119,27 +119,27 @@ class LibraryCategoriesEditViewModel: ObservableObject {
         showingNewCategoryAlert = true
     }
     
-    func createNewCategory() {
+    func createNewCategory() async {
         let trimmedName = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
             // Check if a category with this name already exists (case-insensitive)
-            let existingCategory = try database.read { db in
+            let existingCategory = try await database.read { db in
                 try Category
                     .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
-            
+
             if existingCategory != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Create the new category
             let newCategory = Category(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
-            try database.write { db in
+            try await database.write { db in
                 try Category.insert {
                     newCategory
                 }.execute(db)
@@ -154,31 +154,33 @@ class LibraryCategoriesEditViewModel: ObservableObject {
         }
     }
     
-    func updateCategoryName(at index: Int, to newName: String) {
+    func updateCategoryName(at index: Int, to newName: String) async {
         guard index < categories.count else { return }
         let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
+            let currentCategoryId = categories[index].id
             // Check if a category with this name already exists (case-insensitive)
-            let existingCategory = try database.read { db in
+            let existingCategory = try await database.read { db in
                 try Category
-                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(categories[index].id) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(currentCategoryId) }
                     .fetchOne(db)
             }
-            
+
             if existingCategory != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Update the category name
             var updatedCategory = categories[index]
             updatedCategory.name = trimmedName
             updatedCategory.lastModifiedDate = Date()
-            try database.write { db in
-                try Category.update(updatedCategory).execute(db)
+            let categoryToUpdate = updatedCategory
+            try await database.write { db in
+                try Category.update(categoryToUpdate).execute(db)
             }
             
             editingCategoryIndex = nil

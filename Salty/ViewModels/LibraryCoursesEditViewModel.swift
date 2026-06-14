@@ -28,12 +28,12 @@ class LibraryCoursesEditViewModel: ObservableObject {
     
     // MARK: - List View Methods
     
-    func deleteCourse(at index: Int) {
+    func deleteCourse(at index: Int) async {
         guard index < courses.count else { return }
         let courseToDelete = courses[index]
-        
+
         do {
-            try database.write { db in
+            try await database.write { db in
                 // Update recipes that reference this course to have no course
                 // TODO: Is this needed or will DB take care of with cascade? 
                 let recipesToUpdate = try Recipe
@@ -68,9 +68,9 @@ class LibraryCoursesEditViewModel: ObservableObject {
         }
     }
     
-    func deleteSelectedCourses() {
+    func deleteSelectedCourses() async {
         for index in selectedIndices.sorted(by: >) {
-            deleteCourse(at: index)
+            await deleteCourse(at: index)
         }
     }
     
@@ -87,27 +87,27 @@ class LibraryCoursesEditViewModel: ObservableObject {
         showingNewCourseAlert = true
     }
     
-    func createNewCourse() {
+    func createNewCourse() async {
         let trimmedName = newCourseName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
             // Check if a course .cowith this name already exists (case-insensitive)
-            let existingCourse = try database.read { db in
+            let existingCourse = try await database.read { db in
                 try Course
                     .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
                     .fetchOne(db)
             }
-            
+
             if existingCourse != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Create the new course
             let newCourse = Course(id: UUID().uuidString, name: trimmedName, lastModifiedDate: Date())
-            try database.write { db in
+            try await database.write { db in
                 try Course.insert {
                     newCourse
                 }.execute(db)
@@ -122,31 +122,33 @@ class LibraryCoursesEditViewModel: ObservableObject {
         }
     }
     
-    func updateCourseName(at index: Int, to newName: String) {
+    func updateCourseName(at index: Int, to newName: String) async {
         guard index < courses.count else { return }
         let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        
+
         do {
+            let currentCourseId = courses[index].id
             // Check if a course with this name already exists (case-insensitive)
-            let existingCourse = try database.read { db in
+            let existingCourse = try await database.read { db in
                 try Course
-                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(courses[index].id) }
+                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) && $0.id.neq(currentCourseId) }
                     .fetchOne(db)
             }
-            
+
             if existingCourse != nil {
                 // Show duplicate name error
                 showingDuplicateNameAlert = true
                 return
             }
-            
+
             // Update the course name
             var updatedCourse = courses[index]
             updatedCourse.name = trimmedName
             updatedCourse.lastModifiedDate = Date()
-            try database.write { db in
-                try Course.update(updatedCourse).execute(db)
+            let courseToUpdate = updatedCourse
+            try await database.write { db in
+                try Course.update(courseToUpdate).execute(db)
             }
             
             editingCourseIndex = nil

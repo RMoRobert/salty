@@ -358,8 +358,10 @@ struct RecipeWebBrowserView: View {
 #if os(macOS)
                 Button("Save Recipe") {
                     if viewModel.hasRecipeData {
-                        viewModel.saveRecipe()
-                        onSave?()
+                        Task {
+                            await viewModel.saveRecipe()
+                            onSave?()
+                        }
                     } else {
                         viewModel.showingSaveAlert = true
                     }
@@ -437,8 +439,10 @@ struct RecipeWebBrowserView: View {
                     
                     #if os(iOS)
                     // On iOS, save the recipe and show the editor directly
-                    self.viewModel.saveRecipe()
-                    self.viewModel.showingExtractedDataSheet = true
+                    Task {
+                        await self.viewModel.saveRecipe()
+                        self.viewModel.showingExtractedDataSheet = true
+                    }
                     #endif
                 } else {
                     // No recipe data found - show alert

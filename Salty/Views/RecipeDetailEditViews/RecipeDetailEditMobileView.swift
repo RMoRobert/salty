@@ -51,8 +51,10 @@ struct RecipeDetailEditMobileView: View {
             ToolbarItem(placement: .primaryAction) {
                 
                 Button("Save") {
-                    viewModel.saveRecipe()
-                    dismiss()
+                    Task {
+                        await viewModel.saveRecipe()
+                        dismiss()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -72,11 +74,10 @@ struct RecipeDetailEditMobileView: View {
                 newTagName = ""
             }
             Button("Add") {
-                if !newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    withAnimation {
-                        viewModel.addTag(newTagName.trimmingCharacters(in: .whitespacesAndNewlines))
-                    }
+                let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
                     newTagName = ""
+                    Task { await viewModel.addTag(trimmed) }
                 }
             }
         } message: {
@@ -477,9 +478,7 @@ struct RecipeDetailEditMobileView: View {
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
                         ForEach(viewModel.sortedTags, id: \.self) { tag in
                             Button(action: {
-                                withAnimation {
-                                    viewModel.removeTag(tag)
-                                }
+                                Task { await viewModel.removeTag(tag) }
                             }) {
                                 Label(tag, systemImage: "minus.circle")
                             }

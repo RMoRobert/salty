@@ -79,22 +79,26 @@ class CreateRecipeFromWebViewModel {
     }
     
     // MARK: - Recipe Management
-    func saveRecipe() {
+    func saveRecipe() async {
         // Convert text to structured data before saving
         convertTextToStructuredData()
-        
+
         recipe.lastModifiedDate = Date()
-        
+
+        // Copy main-actor state into locals for use inside the @Sendable DB closure
+        let recipeToSave = recipe
+        let categoryIDsToSave = selectedCategoryIDs
+
         do {
-            try database.write { db in
+            try await database.write { db in
                 // First, save the recipe
-                try Recipe.insert { recipe }.execute(db)
-                
+                try Recipe.insert { recipeToSave }.execute(db)
+
                 // Then, save the category relationships
-                for categoryId in selectedCategoryIDs {
+                for categoryId in categoryIDsToSave {
                     let recipeCategory = RecipeCategory(
                         id: UUID().uuidString,
-                        recipeId: recipe.id,
+                        recipeId: recipeToSave.id,
                         categoryId: categoryId
                     )
                     try RecipeCategory.insert { recipeCategory }.execute(db)

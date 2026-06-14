@@ -30,7 +30,7 @@ struct LibraryTagsEditView: View {
                         .disabled(!viewModel.canEdit)
                         
                         Button(role: .destructive) {
-                            viewModel.deleteSelectedTags()
+                            Task { await viewModel.deleteSelectedTags() }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -54,7 +54,7 @@ struct LibraryTagsEditView: View {
                 #else
                 ToolbarItem(placement: .automatic) {
                     Button(role: .destructive) {
-                        viewModel.deleteSelectedTags()
+                        Task { await viewModel.deleteSelectedTags() }
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -84,7 +84,7 @@ struct LibraryTagsEditView: View {
                     viewModel.clearNewTagForm()
                 }
                 Button("Add") {
-                    viewModel.createNewTag()
+                    Task { await viewModel.createNewTag() }
                 }
                 .disabled(!viewModel.canCreateNewTag)
             } message: {
@@ -102,7 +102,7 @@ struct LibraryTagsEditView: View {
                 }
                 Button("Save") {
                     if let index = viewModel.editingTagIndex {
-                        viewModel.updateTagName(at: index, to: viewModel.editingTagName)
+                        Task { await viewModel.updateTagName(at: index, to: viewModel.editingTagName) }
                     }
                 }
                 .disabled(!viewModel.canSaveEdit)
@@ -123,8 +123,10 @@ struct LibraryTagsEditView: View {
                     .id(index)
                 }
                 .onDelete { indexSet in
-                    for index in indexSet.sorted(by: >) {
-                        viewModel.deleteTag(at: index)
+                    Task {
+                        for index in indexSet.sorted(by: >) {
+                            await viewModel.deleteTag(at: index)
+                        }
                     }
                 }
             }

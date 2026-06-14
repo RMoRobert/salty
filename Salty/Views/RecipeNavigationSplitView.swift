@@ -50,7 +50,7 @@ private struct CategoryDropTargetView: View {
             .tag("cat_\(category.id)")
             .dropDestination(for: String.self) { recipeIds, location in
                 for recipeId in recipeIds {
-                    viewModel.addRecipeToCategory(recipeId: recipeId, categoryId: category.id)
+                    Task { await viewModel.addRecipeToCategory(recipeId: recipeId, categoryId: category.id) }
                 }
                 return !recipeIds.isEmpty
             } isTargeted: { hovering in
@@ -77,7 +77,7 @@ private struct TagDropTargetView: View {
             .tag("tag_\(tag.id)")
             .dropDestination(for: String.self) { recipeIds, location in
                 for recipeId in recipeIds {
-                    viewModel.addRecipeToTag(recipeId: recipeId, tagId: tag.id)
+                    Task { await viewModel.addRecipeToTag(recipeId: recipeId, tagId: tag.id) }
                 }
                 return !recipeIds.isEmpty
             } isTargeted: { hovering in
@@ -284,7 +284,7 @@ struct RecipeNavigationSplitView: View {
                                 viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
                             }
                             for recipe in recipesToDelete {
-                                viewModel.deleteRecipe(id: recipe.id)
+                                Task { await viewModel.deleteRecipe(id: recipe.id) }
                             }
                         }
                     }
@@ -517,9 +517,7 @@ struct RecipeNavigationSplitView: View {
             .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
-                    withAnimation {
-                        viewModel.deleteSelectedRecipes()
-                    }
+                    Task { await viewModel.deleteSelectedRecipes() }
                     #if !os(macOS)
                     // Delay exiting edit mode to let deletion animation complete
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -771,9 +769,7 @@ struct RecipeNavigationSplitView: View {
             }
         }
         Button(role: .destructive, action: {
-            withAnimation {
-                viewModel.deleteRecipe(id: recipe.id)
-            }
+            Task { await viewModel.deleteRecipe(id: recipe.id) }
         }) {
             Label("Delete", systemImage: "trash")
         }
@@ -854,9 +850,7 @@ struct RecipeNavigationSplitView: View {
             if viewModel.selectedRecipeIDs.count > 1 {
                 showingDeleteConfirmation = true
             } else {
-                withAnimation {
-                    viewModel.deleteRecipe(id: recipe.id)
-                }
+                Task { await viewModel.deleteRecipe(id: recipe.id) }
             }
         }) {
             Label("Delete", systemImage: "trash")
