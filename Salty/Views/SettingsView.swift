@@ -602,7 +602,7 @@ struct DiagnosticRow: View {
                 .fontWeight(.medium)
                 .foregroundColor(.primary)
             
-            Text("\(value ?? "nil")")
+            Text(String(describing: value ?? "nil"))
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(6)
