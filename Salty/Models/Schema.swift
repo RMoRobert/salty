@@ -153,7 +153,7 @@ extension Recipe {
     
     /// Bumps lastModifiedDate so sync propagates changes to recipe relationships or metadata.
     static func touchLastModified(recipeId: String, in db: Database) throws {
-        guard var recipe = try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db) else { return }
+        guard var recipe = try Recipe.where({ $0.id.eq(recipeId) }).fetchOne(db) else { return }
         recipe.lastModifiedDate = Date()
         try Recipe.update(recipe).execute(db)
     }

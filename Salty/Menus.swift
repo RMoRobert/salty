@@ -57,7 +57,11 @@ class SelectionStateTracker: ObservableObject {
 // Track search options state to make menu reactive to UserDefaults changes
 // Also tracks changes via changeId to trigger query updates
 class SearchOptionsTracker: ObservableObject {
-    @Published private var optionStates: [RecipeListSearchOptions: Bool] = [:]
+    // Not @Published: this is a private cache of UserDefaults values. Publishing it would fire
+    // objectWillChange while loadFromUserDefaults() runs inside the @StateObject's init during a
+    // view update ("Publishing changes from within view updates is not allowed"). Views react via
+    // the published `changeId` instead, which is bumped whenever the selected options change.
+    private var optionStates: [RecipeListSearchOptions: Bool] = [:]
     @Published var changeId = UUID()
     private var lastSearchOptionsKey: String = ""
     
@@ -86,8 +90,13 @@ class SearchOptionsTracker: ObservableObject {
             if UserDefaults.standard.object(forKey: option.userDefaultsKey) is Bool {
                 optionStates[option] = UserDefaults.standard.bool(forKey: option.userDefaultsKey)
             } else {
-                // Set default: name = true, others = false
-                let defaultValue = option == .name
+                let defaultValue: Bool
+                switch option {
+                case .name:
+                    defaultValue = true
+                default:
+                    defaultValue = false
+                }
                 UserDefaults.standard.set(defaultValue, forKey: option.userDefaultsKey)
                 optionStates[option] = defaultValue
             }

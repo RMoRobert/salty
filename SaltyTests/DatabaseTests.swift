@@ -263,4 +263,167 @@ struct DatabaseIntegrationTests {
             #expect(found == "Written via WAL")
         }
     }
+
+    // MARK: - Search execution (runs the builder's generated SQL against a seeded DB)
+
+    @Suite struct Search {
+
+        /// Executes a built query fragment via GRDB raw SQL and returns the matched recipe ids in order.
+        private func runIDs(_ fragment: QueryFragment, _ db: any DatabaseWriter) async throws -> [String] {
+            let (sqlText, bindings) = fragment.prepare { _ in "?" }
+            let args: [(any DatabaseValueConvertible)?] = bindings.map { binding in
+                switch binding {
+                case .text(let s): return s
+                case .bool(let b): return b
+                case .int(let i): return i
+                case .uint(let u): return Int64(bitPattern: u)
+                case .double(let d): return d
+                case .date(let d): return d
+                case .blob(let bytes): return Data(bytes)
+                case .uuid(let u): return u.uuidString
+                case .null, .invalid: return nil
+                }
+            }
+            return try await db.read { db -> [String] in
+                try Row.fetchAll(db, sql: sqlText, arguments: StatementArguments(args)).map { row in row["id"] }
+            }
+        }
+
+        @Test func comboSearchMatchesByTagNameEvenWhenRecipeNameDoesNot() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'Mystery Dish')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r2', 'Plain Toast')")
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('t1', 'weeknight')")
+                try db.execute(sql: "INSERT INTO recipeTag (id, recipeId, tagId) VALUES ('rt1', 'r1', 't1')")
+            }
+            // category + course + tag selected, searching "weeknight". The OLD code silently fell
+            // back to name-only for this combo and would have returned []; the new builder finds r1.
+            let frag = RecipeListQueryBuilder.fragment(
+                scope: .all,
+                searchPattern: "%weeknight%",
+                options: [.category, .course, .tags],
+                includeFavorites: false,
+                sortOrder: .byName,
+                sortDirection: .ascending
+            )
+            let ids = try await runIDs(frag, db)
+            #expect(ids == ["r1"])
+        }
+
+        @Test func categoryScopeReturnsOnlyRecipesInThatCategory() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'In Cat')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r2', 'Not In Cat')")
+                try db.execute(sql: "INSERT INTO category (id, name) VALUES ('c1', 'Breads')")
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc1', 'r1', 'c1')")
+            }
+            let frag = RecipeListQueryBuilder.fragment(
+                scope: .category("c1"), searchPattern: nil, options: [],
+                includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+            )
+            let ids = try await runIDs(frag, db)
+            #expect(ids == ["r1"])
+        }
+
+        @Test func courseNameSearchFindsRecipe() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO course (id, name) VALUES ('co1', 'Dessert')")
+                try db.execute(sql: "INSERT INTO recipe (id, name, courseId) VALUES ('r1', 'Cake', 'co1')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r2', 'Salad')")
+            }
+            let frag = RecipeListQueryBuilder.fragment(
+                scope: .all, searchPattern: "%dessert%", options: [.course],
+                includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+            )
+            let ids = try await runIDs(frag, db)
+            #expect(ids == ["r1"])
+        }
+
+        @Test func favoritesFilterRestrictsResults() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO recipe (id, name, isFavorite) VALUES ('r1', 'Fav', 1)")
+                try db.execute(sql: "INSERT INTO recipe (id, name, isFavorite) VALUES ('r2', 'NotFav', 0)")
+            }
+            let frag = RecipeListQueryBuilder.fragment(
+                scope: .all, searchPattern: nil, options: [],
+                includeFavorites: true, sortOrder: .byName, sortDirection: .ascending
+            )
+            let ids = try await runIDs(frag, db)
+            #expect(ids == ["r1"])
+        }
+
+        @Test func notesAndVariationsSearchTheirOwnColumns() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                // r1 has searchable text only in NOTES; r2 only in VARIATIONS.
+                try db.execute(sql: "INSERT INTO recipe (id, name, notes) VALUES ('r1', 'A', ?)",
+                               arguments: [#"[{"id":"n1","title":"t","content":"ZEBRANOTE"}]"#])
+                try db.execute(sql: "INSERT INTO recipe (id, name, variations) VALUES ('r2', 'B', ?)",
+                               arguments: [#"[{"id":"v1","variationName":"vn","text":"ZEBRAVAR"}]"#])
+            }
+
+            func search(_ opts: Set<RecipeListSearchOptions>, _ pattern: String) async throws -> [String] {
+                try await runIDs(
+                    RecipeListQueryBuilder.fragment(
+                        scope: .all, searchPattern: pattern, options: opts,
+                        includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+                    ),
+                    db
+                )
+            }
+
+            // Notes-only finds the notes recipe, not the variations one.
+            #expect(try await search([.notes], "%ZEBRANOTE%") == ["r1"])
+            #expect(try await search([.notes], "%ZEBRAVAR%") == [])
+            // Variations-only finds the variations recipe, not the notes one.
+            #expect(try await search([.variations], "%ZEBRAVAR%") == ["r2"])
+            #expect(try await search([.variations], "%ZEBRANOTE%") == [])
+            // Both enabled finds either.
+            #expect(try await search([.notes, .variations], "%ZEBRANOTE%") == ["r1"])
+            #expect(try await search([.notes, .variations], "%ZEBRAVAR%") == ["r2"])
+
+            // JSON keys / structure are NOT matched (the whole point of json_extract): searching
+            // for "content"/"title"/"variationName"/"id" must find nothing.
+            #expect(try await search([.notes], "%content%") == [])
+            #expect(try await search([.notes], "%title%") == [])
+            #expect(try await search([.variations], "%variationName%") == [])
+            #expect(try await search([.notes, .variations], "%id%") == [])
+        }
+
+        @Test func notesSearchHandlesNullAndEmptyColumns() async throws {
+            // json_valid guard: NULL / empty / non-array JSON must not error, just not match.
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO recipe (id, name, notes) VALUES ('r1', 'A', NULL)")
+                try db.execute(sql: "INSERT INTO recipe (id, name, notes) VALUES ('r2', 'B', '')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r3', 'C')") // notes defaults to NULL
+            }
+            let ids = try await runIDs(
+                RecipeListQueryBuilder.fragment(
+                    scope: .all, searchPattern: "%anything%", options: [.notes],
+                    includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+                ),
+                db
+            )
+            #expect(ids == [])
+        }
+
+        @Test func descendingNameSortOrdersResults() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'Apple')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r2', 'Banana')")
+            }
+            let frag = RecipeListQueryBuilder.fragment(
+                scope: .all, searchPattern: nil, options: [],
+                includeFavorites: false, sortOrder: .byName, sortDirection: .descending
+            )
+            let ids = try await runIDs(frag, db)
+            #expect(ids == ["r2", "r1"])
+        }
+    }
 }
