@@ -136,7 +136,7 @@ struct IngredientsEditView: View {
             // If dropTarget < index, no adjustment needed
         }
         withAnimation(.easeIn)  {
-            editingIngredients.remove(at: index)
+            _ = editingIngredients.remove(at: index)
         }
     }
     

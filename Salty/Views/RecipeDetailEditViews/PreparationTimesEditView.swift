@@ -229,7 +229,7 @@ struct PreparationTimesEditView: View {
             }
         }
         withAnimation(.easeIn) {
-            editingPreparationTimes.remove(at: index)
+            _ = editingPreparationTimes.remove(at: index)
         }
     }
     

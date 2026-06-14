@@ -248,7 +248,7 @@ struct DirectionsEditView: View {
             // If dropTarget < index, no adjustment needed
         }
         withAnimation(.easeIn) {
-            editingDirections.remove(at: index)
+            _ = editingDirections.remove(at: index)
         }
     }
     

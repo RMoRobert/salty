@@ -215,7 +215,7 @@ struct VariationsEditView: View {
             }
         }
         withAnimation(.easeIn) {
-            editingVariations.remove(at: index)
+            _ = editingVariations.remove(at: index)
         }
     }
     

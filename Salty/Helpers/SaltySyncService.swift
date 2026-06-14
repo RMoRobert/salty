@@ -268,17 +268,32 @@ class SaltySyncService: ObservableObject {
         }
     }
     
+    /// Guards bulk LOCAL deletions against a truncated/empty server response. The deletion
+    /// heuristic ("present locally, absent from server, unchanged since last sync ⇒ deleted on
+    /// the server") is dangerous if the server ever returns an empty list due to a transient
+    /// failure rather than real deletions — it would wipe local data. So if the server returned
+    /// nothing while items are queued for local deletion, skip them (a later good sync resolves it).
+    /// NOTE: this only catches a fully-empty response; detecting a *partial* response would require
+    /// the server to also report its expected total count.
+    private func serverResponseAllowsLocalDeletions(serverItemCount: Int, pendingLocalDeletions: Int, entity: String) -> Bool {
+        if serverItemCount == 0 && pendingLocalDeletions > 0 {
+            logger.error("Skipping \(pendingLocalDeletions) local \(entity) deletion(s): the server returned an empty list, which likely indicates an incomplete response rather than real deletions.")
+            return false
+        }
+        return true
+    }
+
     // MARK: - Course Sync
     
     private func syncCoursesWithDeletions(deviceInfo: DeviceInfo) async throws {
-        let serverCourses = try await fetchFromServer([ServerCourse].self, endpoint: "/api/courses")
+        let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
         let localCourses = try await database.read { db in
             try Course.fetchAll(db)
         }
         
-        let serverCoursesById = Dictionary(uniqueKeysWithValues: serverCourses.map { ($0.id, $0) })
-        let localCoursesById = Dictionary(uniqueKeysWithValues: localCourses.map { ($0.id, $0) })
-        let serverCourseIds = Set(serverCourses.map { $0.id })
+        // uniquingKeysWith (not uniqueKeysWithValues) so a duplicate id in the server response
+        // can't trap/crash the sync; keep the last occurrence.
+        let serverCoursesById = Dictionary(serverCourses.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localCourseIds = Set(localCourses.map { $0.id })
         
         var toDeleteOnServer: [String] = []
@@ -351,15 +366,17 @@ class SaltySyncService: ObservableObject {
             }
         }
         
-        // Delete locally
-        for id in toDeleteLocally {
+        // Delete locally (guarded against empty-response wipes; batched in one transaction)
+        let coursesToDeleteLocally = toDeleteLocally
+        if serverResponseAllowsLocalDeletions(serverItemCount: serverCourses.count, pendingLocalDeletions: coursesToDeleteLocally.count, entity: "course") {
             try await database.write { db in
-                try Course
-                    .where { $0.id.eq(id) }
-                    .delete()
-                    .execute(db)
+                for id in coursesToDeleteLocally {
+                    try Course.where { $0.id.eq(id) }.delete().execute(db)
+                }
             }
-            logger.info("Deleted course \(id) locally (was deleted on server)")
+            if !coursesToDeleteLocally.isEmpty {
+                logger.info("Deleted \(coursesToDeleteLocally.count) course(s) locally (were deleted on server)")
+            }
         }
         
         // Delete on server
@@ -372,14 +389,12 @@ class SaltySyncService: ObservableObject {
     // MARK: - Category Sync
     
     private func syncCategoriesWithDeletions(deviceInfo: DeviceInfo) async throws {
-        let serverCategories = try await fetchFromServer([ServerCategory].self, endpoint: "/api/categories")
+        let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
         let localCategories = try await database.read { db in
             try Category.fetchAll(db)
         }
         
-        let serverCategoriesById = Dictionary(uniqueKeysWithValues: serverCategories.map { ($0.id, $0) })
-        let localCategoriesById = Dictionary(uniqueKeysWithValues: localCategories.map { ($0.id, $0) })
-        let serverCategoryIds = Set(serverCategories.map { $0.id })
+        let serverCategoriesById = Dictionary(serverCategories.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localCategoryIds = Set(localCategories.map { $0.id })
         
         var toDeleteOnServer: [String] = []
@@ -452,15 +467,17 @@ class SaltySyncService: ObservableObject {
             }
         }
         
-        // Delete locally
-        for id in toDeleteLocally {
+        // Delete locally (guarded against empty-response wipes; batched in one transaction)
+        let categoriesToDeleteLocally = toDeleteLocally
+        if serverResponseAllowsLocalDeletions(serverItemCount: serverCategories.count, pendingLocalDeletions: categoriesToDeleteLocally.count, entity: "category") {
             try await database.write { db in
-                try Category
-                    .where { $0.id.eq(id) }
-                    .delete()
-                    .execute(db)
+                for id in categoriesToDeleteLocally {
+                    try Category.where { $0.id.eq(id) }.delete().execute(db)
+                }
             }
-            logger.info("Deleted category \(id) locally (was deleted on server)")
+            if !categoriesToDeleteLocally.isEmpty {
+                logger.info("Deleted \(categoriesToDeleteLocally.count) category(ies) locally (were deleted on server)")
+            }
         }
         
         // Delete on server
@@ -473,14 +490,12 @@ class SaltySyncService: ObservableObject {
     // MARK: - Tag Sync
     
     private func syncTagsWithDeletions(deviceInfo: DeviceInfo) async throws {
-        let serverTags = try await fetchFromServer([ServerTag].self, endpoint: "/api/tags")
+        let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
         let localTags = try await database.read { db in
             try Tag.fetchAll(db)
         }
         
-        let serverTagsById = Dictionary(uniqueKeysWithValues: serverTags.map { ($0.id, $0) })
-        let localTagsById = Dictionary(uniqueKeysWithValues: localTags.map { ($0.id, $0) })
-        let serverTagIds = Set(serverTags.map { $0.id })
+        let serverTagsById = Dictionary(serverTags.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localTagIds = Set(localTags.map { $0.id })
         
         var toDeleteOnServer: [String] = []
@@ -553,69 +568,23 @@ class SaltySyncService: ObservableObject {
             }
         }
         
-        // Delete locally
-        for id in toDeleteLocally {
+        // Delete locally (guarded against empty-response wipes; batched in one transaction)
+        let tagsToDeleteLocally = toDeleteLocally
+        if serverResponseAllowsLocalDeletions(serverItemCount: serverTags.count, pendingLocalDeletions: tagsToDeleteLocally.count, entity: "tag") {
             try await database.write { db in
-                try Tag
-                    .where { $0.id.eq(id) }
-                    .delete()
-                    .execute(db)
+                for id in tagsToDeleteLocally {
+                    try Tag.where { $0.id.eq(id) }.delete().execute(db)
+                }
             }
-            logger.info("Deleted tag \(id) locally (was deleted on server)")
+            if !tagsToDeleteLocally.isEmpty {
+                logger.info("Deleted \(tagsToDeleteLocally.count) tag(s) locally (were deleted on server)")
+            }
         }
         
         // Delete on server
         for id in toDeleteOnServer {
             try await deleteOnServer(endpoint: "/api/tags/\(id)")
             logger.info("Deleted tag \(id) on server (was deleted locally)")
-        }
-    }
-    
-    // MARK: - Recipe Sync
-    
-    private func syncRecipes() async throws {
-        let serverRecipes = try await fetchFromServer([ServerRecipe].self, endpoint: "/api/recipes")
-        let localRecipes = try await database.read { db in
-            try Recipe.fetchAll(db)
-        }
-        
-        let serverRecipesById = Dictionary(uniqueKeysWithValues: serverRecipes.map { ($0.id, $0) })
-        let localRecipesById = Dictionary(uniqueKeysWithValues: localRecipes.map { ($0.id, $0) })
-        
-        // Process each local recipe
-        for localRecipe in localRecipes {
-            if let serverRecipe = serverRecipesById[localRecipe.id] {
-                // Recipe exists on both sides - compare timestamps
-                let serverDate = serverRecipe.lastModifiedDate ?? Date.distantPast
-                let localDate = localRecipe.lastModifiedDate
-                
-                if localDate > serverDate {
-                    // Local is newer - upload to server
-                    try await uploadRecipe(localRecipe)
-                    syncProgress.itemsUploaded += 1
-                    syncProgress.uploadedRecipeIds.insert(localRecipe.id) // Track for image sync
-                } else if serverDate > localDate {
-                    // Server is newer - download from server
-                    try await downloadRecipe(serverRecipe)
-                    syncProgress.itemsDownloaded += 1
-                    syncProgress.downloadedRecipeIds.insert(serverRecipe.id) // Track for image sync
-                }
-                // If dates are equal, no action needed
-            } else {
-                // Recipe only exists locally - upload to server
-                try await uploadRecipe(localRecipe)
-                syncProgress.itemsUploaded += 1
-                syncProgress.uploadedRecipeIds.insert(localRecipe.id) // Track for image sync
-            }
-        }
-        
-        // Download recipes that only exist on server
-        for serverRecipe in serverRecipes {
-            if localRecipesById[serverRecipe.id] == nil {
-                try await downloadRecipe(serverRecipe)
-                syncProgress.itemsDownloaded += 1
-                syncProgress.downloadedRecipeIds.insert(serverRecipe.id) // Track for image sync
-            }
         }
     }
     
@@ -689,14 +658,13 @@ class SaltySyncService: ObservableObject {
     
     /// Sync recipes with deletion detection based on device's last sync time
     private func syncRecipesWithDeletions(deviceInfo: DeviceInfo) async throws {
-        let serverRecipes = try await fetchFromServer([ServerRecipe].self, endpoint: "/api/recipes")
+        let serverRecipes = try await fetchListFromServer(ServerRecipe.self, endpoint: "/api/recipes")
         let localRecipes = try await database.read { db in
             try Recipe.fetchAll(db)
         }
         
-        let serverRecipesById = Dictionary(uniqueKeysWithValues: serverRecipes.map { ($0.id, $0) })
-        let localRecipesById = Dictionary(uniqueKeysWithValues: localRecipes.map { ($0.id, $0) })
-        let serverRecipeIds = Set(serverRecipes.map { $0.id })
+        let serverRecipesById = Dictionary(serverRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+        let localRecipesById = Dictionary(localRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localRecipeIds = Set(localRecipes.map { $0.id })
         
         var recipesToDeleteOnServer: [String] = []
@@ -788,17 +756,21 @@ class SaltySyncService: ObservableObject {
         logger.info("Sync decision summary: \(recipesToDeleteOnServer.count) to delete on server, \(recipesToDeleteLocally.count) to delete locally")
         
         // Delete recipes locally that were deleted on server
-        for recipeId in recipesToDeleteLocally {
-            logger.info("Deleting recipe \(recipeId) locally (was deleted on another device)")
-            if let recipe = localRecipesById[recipeId] {
-                if let filename = recipe.imageFilename {
+        // (guarded against empty-response wipes; DB deletes batched in one transaction)
+        let recipeIdsToDeleteLocally = recipesToDeleteLocally
+        if serverResponseAllowsLocalDeletions(serverItemCount: serverRecipes.count, pendingLocalDeletions: recipeIdsToDeleteLocally.count, entity: "recipe") {
+            for recipeId in recipeIdsToDeleteLocally {
+                logger.info("Deleting recipe \(recipeId) locally (was deleted on another device)")
+                if let recipe = localRecipesById[recipeId], let filename = recipe.imageFilename {
                     RecipeImageManager.shared.deleteImage(filename: filename)
                 }
             }
             try await database.write { db in
-                try Recipe.deleteOne(db, key: recipeId)
+                for recipeId in recipeIdsToDeleteLocally {
+                    _ = try Recipe.deleteOne(db, key: recipeId)
+                }
             }
-            syncProgress.itemsDownloaded += 1 // Count as a sync action
+            syncProgress.itemsDownloaded += recipeIdsToDeleteLocally.count // Count as sync actions
         }
         
         // Delete recipes on server that were deleted locally
@@ -944,7 +916,7 @@ class SaltySyncService: ObservableObject {
             }
             
             // Update tag relationships
-            let deletedTags = try RecipeTag
+            try RecipeTag
                 .where { $0.recipeId.eq(recipe.id) }
                 .delete()
                 .execute(db)
@@ -1318,12 +1290,30 @@ class SaltySyncService: ObservableObject {
     // MARK: - Network Helpers
     
     private func fetchFromServer<T: Decodable>(_ type: T.Type, endpoint: String) async throws -> T {
+        try await fetchFromServerWithTotalCount(type, endpoint: endpoint).value
+    }
+
+    /// Fetches a list and verifies it against the server's `X-Total-Count` header (when present),
+    /// throwing if the response is incomplete. This stops the deletion logic from ever running on a
+    /// partial list (which would treat missing items as deletions). Backward compatible: a server
+    /// that omits the header skips the check.
+    private func fetchListFromServer<Element: Decodable>(_ elementType: Element.Type, endpoint: String) async throws -> [Element] {
+        let (items, totalCount) = try await fetchFromServerWithTotalCount([Element].self, endpoint: endpoint)
+        if let totalCount, totalCount != items.count {
+            logger.error("Incomplete response from \(endpoint): received \(items.count) of \(totalCount) expected items; aborting sync to avoid treating missing items as deletions.")
+            throw SyncError.networkError("Incomplete response from \(endpoint) (\(items.count)/\(totalCount))")
+        }
+        return items
+    }
+
+    /// Fetches and decodes `T`, also returning the server's `X-Total-Count` header value if present.
+    private func fetchFromServerWithTotalCount<T: Decodable>(_ type: T.Type, endpoint: String) async throws -> (value: T, totalCount: Int?) {
         let url = URL(string: "\(serverUrl)\(endpoint)")!
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
-        
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -1368,7 +1358,9 @@ class SaltySyncService: ObservableObject {
         }
         
         do {
-            return try decoder.decode(type, from: data)
+            let value = try decoder.decode(type, from: data)
+            let totalCount = httpResponse.value(forHTTPHeaderField: "X-Total-Count").flatMap { Int($0) }
+            return (value, totalCount)
         } catch {
             // Log the raw response for debugging
             let responseBody = String(data: data, encoding: .utf8) ?? "Unable to decode response"

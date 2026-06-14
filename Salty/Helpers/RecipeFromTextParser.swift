@@ -54,7 +54,7 @@ struct RecipeFromTextParser {
     
     private func extractRecipeName(from lines: [String], using tokenizer: NLTokenizer) -> String {
         // Look for title-like patterns in the first few lines
-        for (index, line) in lines.prefix(15).enumerated() {
+        for line in lines.prefix(15) {
             let lowercased = line.lowercased()
             
             // Skip lines that are clearly not recipe names
@@ -241,8 +241,7 @@ struct RecipeFromTextParser {
         
         // Second pass: extract directions from the section
         var currentDirection = ""
-        var currentStepNumber = ""
-        
+
         for (index, line) in lines[(sectionStartIndex + 1)...].enumerated() {
             let lowercased = line.lowercased()
             
@@ -273,7 +272,6 @@ struct RecipeFromTextParser {
                 }
                 
                 // Start a new direction
-                currentStepNumber = line
                 currentDirection = line
                 logger.info("Started new step: '\(line)'")
             } else {
@@ -418,7 +416,7 @@ struct RecipeFromTextParser {
         ]
         
         for pattern in patterns {
-            if let match = line.matches(of: pattern).first,
+            if let match = lowercased.matches(of: pattern).first,
                let number = Int(match.1) {
                 return number
             }

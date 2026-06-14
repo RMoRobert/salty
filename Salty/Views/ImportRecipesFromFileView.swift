@@ -140,7 +140,7 @@ struct ImportRecipesFromFileView: View {
             Spacer()
             
             // Import section
-            if let file = selectedFileUrl {
+            if selectedFileUrl != nil {
                 VStack(spacing: 16) {
                     if isImporting {
                         VStack(spacing: 12) {

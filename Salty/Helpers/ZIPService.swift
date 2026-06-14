@@ -77,7 +77,7 @@ final class ZipService {
         ) { zipAccessURL in
             do {
                 if shouldOverwriteIfNecessary {
-                    try FileManager.default.replaceItemAt(zipFinalURL, withItemAt: zipAccessURL)
+                    _ = try FileManager.default.replaceItemAt(zipFinalURL, withItemAt: zipAccessURL)
                 } else {
                     try FileManager.default.moveItem(at: zipAccessURL, to: zipFinalURL)
                 }

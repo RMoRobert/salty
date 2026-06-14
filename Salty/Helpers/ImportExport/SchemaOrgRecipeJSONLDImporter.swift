@@ -356,7 +356,7 @@ class SchemaOrgRecipeJSONLDImporter {
     }
     
     private func extractNotes(from dict: [String: Any]) -> [Note] {
-        var notes: [Note] = []
+        let notes: [Note] = []
         
         // Extract keywords as a note:
 //        if let keywords = dict["keywords"] as? String, !keywords.isEmpty {

@@ -220,7 +220,7 @@ struct NotesEditView: View {
             }
         }
         withAnimation(.easeIn) {
-            editingNotes.remove(at: index)
+            _ = editingNotes.remove(at: index)
         }
     }
     
