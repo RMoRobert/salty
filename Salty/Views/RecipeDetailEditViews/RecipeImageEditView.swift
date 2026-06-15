@@ -91,8 +91,9 @@ struct RecipeImageEditView: View {
                 }
                 .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                     providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
-                        if let data = data
-                        {
+                        guard let data else { return }
+                        // The provider callback is nonisolated; hop to the main actor to mutate state.
+                        Task { @MainActor in
                             recipe.setImage(data)
                         }
                     })
@@ -123,10 +124,9 @@ struct RecipeImageEditView: View {
                         }
                         .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                             providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
-                                if let data = data
-                                {
-                                    recipe.setImage(data)
-                                }
+                                guard let data else { return }
+                                // Provider callback is nonisolated; hop to the main actor to mutate state.
+                                Task { @MainActor in recipe.setImage(data) }
                             })
                             return true
                         }
@@ -160,8 +160,9 @@ struct RecipeImageEditView: View {
                 }
                 .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                     providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
-                        if let data = data
-                        {
+                        guard let data else { return }
+                        // The provider callback is nonisolated; hop to the main actor to mutate state.
+                        Task { @MainActor in
                             recipe.setImage(data)
                         }
                     })
@@ -193,10 +194,9 @@ struct RecipeImageEditView: View {
                     }
                     .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                         providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
-                            if let data = data
-                            {
-                                recipe.setImage(data)
-                            }
+                            guard let data else { return }
+                            // Provider callback is nonisolated; hop to the main actor to mutate state.
+                            Task { @MainActor in recipe.setImage(data) }
                         })
                         return true
                     }
@@ -236,7 +236,7 @@ struct RecipeImageEditView: View {
         .photosPicker(
             isPresented: $showingPhotoPicker,
             selection: .init(get: { nil }, set: { item in
-                Task {
+                Task { @MainActor in
                     if let item = item {
                         if let data = try? await item.loadTransferable(type: Data.self) {
                             recipe.setImage(data)
@@ -306,7 +306,7 @@ struct RecipeImageCameraView: NSViewControllerRepresentable {
 }
 
 // MARK: - macOS Camera View Controller
-protocol RecipeImageCameraViewControllerDelegate: AnyObject {
+@MainActor protocol RecipeImageCameraViewControllerDelegate: AnyObject {
     func cameraViewController(_ controller: RecipeImageCameraViewController, didCaptureImage image: CGImage)
     func cameraViewControllerDidCancel(_ controller: RecipeImageCameraViewController)
 }
@@ -425,14 +425,19 @@ class RecipeImageCameraViewController: NSViewController {
     }
     
     private func startSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession?.startRunning()
+        // AVCaptureSession start/stop must run off the main thread. The session is created on the main
+        // actor; `nonisolated(unsafe)` hands the (thread-safe) session to a background queue without
+        // tripping Sendable checks.
+        nonisolated(unsafe) let session = captureSession
+        DispatchQueue.global(qos: .userInitiated).async {
+            session?.startRunning()
         }
     }
-    
+
     private func stopSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession?.stopRunning()
+        nonisolated(unsafe) let session = captureSession
+        DispatchQueue.global(qos: .userInitiated).async {
+            session?.stopRunning()
         }
     }
     
@@ -450,7 +455,9 @@ class RecipeImageCameraViewController: NSViewController {
 
 // MARK: - AVCapturePhotoCaptureDelegate
 extension RecipeImageCameraViewController: AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+    // AVFoundation invokes this on a background queue, so it must be nonisolated; we decode the photo
+    // here and hop to the main actor to notify the (MainActor) delegate.
+    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
             logger.error("Error capturing photo: \(error)")
             return
@@ -462,9 +469,10 @@ extension RecipeImageCameraViewController: AVCapturePhotoCaptureDelegate {
             logger.error("Failed to create CGImage from photo")
             return
         }
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.delegate?.cameraViewController(self!, didCaptureImage: cgImage)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            delegate?.cameraViewController(self, didCaptureImage: cgImage)
         }
     }
 }

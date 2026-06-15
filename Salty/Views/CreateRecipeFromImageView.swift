@@ -344,17 +344,15 @@ struct ImagePicker: UIViewControllerRepresentable {
         
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.dismiss()
-            
-            guard let provider = results.first?.itemProvider else { return }
-            
-            if provider.canLoadObject(ofClass: UIImage.self) {
-                provider.loadObject(ofClass: UIImage.self) { image, _ in
-                    DispatchQueue.main.async {
-                        if let uiImage = image as? UIImage,
-                           let cgImage = uiImage.cgImage {
-                            self.parent.selectedImage = cgImage
-                        }
-                    }
+
+            guard let provider = results.first?.itemProvider,
+                  provider.canLoadObject(ofClass: UIImage.self) else { return }
+
+            provider.loadObject(ofClass: UIImage.self) { [parent] image, _ in
+                // Extract the (Sendable) CGImage off-main, then hop to the main actor to update state.
+                guard let cgImage = (image as? UIImage)?.cgImage else { return }
+                Task { @MainActor in
+                    parent.selectedImage = cgImage
                 }
             }
         }
@@ -381,39 +379,33 @@ struct DocumentScanner: UIViewControllerRepresentable {
         Coordinator(self)
     }
     
-    class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+    // VNDocumentCameraViewControllerDelegate isn't @MainActor, but Vision delivers these callbacks on
+    // the main thread. A @preconcurrency conformance lets this @MainActor coordinator satisfy the
+    // nonisolated requirements (with a runtime main-actor check) so it can touch the SwiftUI bindings.
+    @MainActor
+    class Coordinator: NSObject, @preconcurrency VNDocumentCameraViewControllerDelegate {
         let parent: DocumentScanner
-        
+
         init(_ parent: DocumentScanner) {
             self.parent = parent
         }
-        
+
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            // Combine all pages into one image
-            let pageCount = scan.pageCount
-            if pageCount == 1 {
-                // Single page - use directly
-                let uiImage = scan.imageOfPage(at: 0)
-                if let cgImage = uiImage.cgImage {
-                    parent.selectedImage = cgImage
-                }
-            } else {
-                // Multiple pages - use the first page for display, but note that OCR will process all pages
-                let uiImage = scan.imageOfPage(at: 0)
-                if let cgImage = uiImage.cgImage {
-                    parent.selectedImage = cgImage
-                }
-                
-                // Store the scan for multi-page OCR processing
+            // Use the first page for display; keep the full scan when there are more pages so OCR
+            // can process all of them.
+            if let cgImage = scan.imageOfPage(at: 0).cgImage {
+                parent.selectedImage = cgImage
+            }
+            if scan.pageCount > 1 {
                 parent.multiPageScan = scan
             }
             parent.dismiss()
         }
-        
+
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
             parent.dismiss()
         }
-        
+
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
             parent.dismiss()
         }
@@ -438,7 +430,7 @@ struct CameraView: UIViewControllerRepresentable {
         Coordinator(self)
     }
     
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    @MainActor class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let parent: CameraView
         
         init(_ parent: CameraView) {
@@ -497,7 +489,7 @@ struct MacCameraView: NSViewControllerRepresentable {
 }
 
 // MARK: - macOS Camera View Controller
-protocol MacCameraViewControllerDelegate: AnyObject {
+@MainActor protocol MacCameraViewControllerDelegate: AnyObject {
     func cameraViewController(_ controller: MacCameraViewController, didCaptureImage image: CGImage)
     func cameraViewControllerDidCancel(_ controller: MacCameraViewController)
 }
@@ -635,14 +627,19 @@ class MacCameraViewController: NSViewController {
     }
     
     private func startSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession?.startRunning()
+        // AVCaptureSession start/stop must run off the main thread. The session is created on the main
+        // actor; `nonisolated(unsafe)` hands the (thread-safe) session to a background queue without
+        // tripping Sendable checks.
+        nonisolated(unsafe) let session = captureSession
+        DispatchQueue.global(qos: .userInitiated).async {
+            session?.startRunning()
         }
     }
-    
+
     private func stopSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession?.stopRunning()
+        nonisolated(unsafe) let session = captureSession
+        DispatchQueue.global(qos: .userInitiated).async {
+            session?.stopRunning()
         }
     }
     
@@ -660,7 +657,9 @@ class MacCameraViewController: NSViewController {
 
 // MARK: - AVCapturePhotoCaptureDelegate
 extension MacCameraViewController: AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+    // AVFoundation invokes this on a background queue, so it must be nonisolated; we decode the photo
+    // here and hop to the main actor to notify the (MainActor) delegate.
+    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
             logger.error("Error capturing photo: \(error)")
             return
@@ -673,8 +672,9 @@ extension MacCameraViewController: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        DispatchQueue.main.async { [weak self] in
-            self?.delegate?.cameraViewController(self!, didCaptureImage: cgImage)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            delegate?.cameraViewController(self, didCaptureImage: cgImage)
         }
     }
 }

@@ -126,7 +126,8 @@ struct DatabaseIntegrationTests {
                 try db.execute(sql: "UPDATE recipe SET name = ?, isFavorite = ? WHERE id = ?", arguments: ["Updated", true, "recipe-2"])
             }
 
-            let row = try await db.read { db in
+            // `Row` isn't Sendable, so this resolves to the synchronous `read` (no `await`).
+            let row = try db.read { db in
                 try Row.fetchOne(db, sql: "SELECT name, isFavorite FROM recipe WHERE id = ?", arguments: ["recipe-2"])
             }
             #expect(row?["name"] == "Updated")
@@ -284,8 +285,11 @@ struct DatabaseIntegrationTests {
                 case .null, .invalid: return nil
                 }
             }
+            // Build the (Sendable) StatementArguments before the closure so the non-Sendable `args`
+            // array isn't captured into the @Sendable read closure.
+            let arguments = StatementArguments(args)
             return try await db.read { db -> [String] in
-                try Row.fetchAll(db, sql: sqlText, arguments: StatementArguments(args)).map { row in row["id"] }
+                try Row.fetchAll(db, sql: sqlText, arguments: arguments).map { row in row["id"] }
             }
         }
 

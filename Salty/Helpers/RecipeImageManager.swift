@@ -18,7 +18,13 @@ import AppKit
 
 // MARK: - Image Manager
 
-class RecipeImageManager {
+// Safe to share across tasks: stored state is immutable (logger, imagesDirectory, injected
+// database) and file operations use only local state.
+//
+// ⚠️ `@unchecked` means the compiler does NOT verify this. If you add mutable stored state, the
+// race will compile silently — guard it with a lock/actor, isolate to an actor or @MainActor, or
+// re-justify this annotation.
+final class RecipeImageManager: @unchecked Sendable {
     static let shared = RecipeImageManager()
     private let logger = Logger(subsystem: "Salty", category: "App")
     private let imagesDirectory: URL

@@ -10,7 +10,14 @@ import SQLiteData
 import GRDB
 import OSLog
 
-public final class DatabaseBackupManager {
+// Safe to share across tasks: the only stored state is an immutable Logger and the injected
+// database dependency (set once, read-only). The backup methods run off the main actor (via the
+// `Task {}` triggers below) and use only local state, so there is no concurrent mutable state.
+//
+// ⚠️ `@unchecked` means the compiler does NOT verify this. If you add mutable stored state, the
+// race will compile silently — guard it with a lock/actor, isolate to an actor or @MainActor, or
+// re-justify this annotation.
+public final class DatabaseBackupManager: @unchecked Sendable {
     @Dependency(\.defaultDatabase) private var database
     private let logger = Logger(subsystem: "Salty", category: "DatabaseBackup")
     

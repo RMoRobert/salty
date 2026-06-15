@@ -249,20 +249,9 @@ class WebViewCoordinator: NSObject, WKNavigationDelegate {
         updateNavigationState()
     }
     
-    // MARK: - Navigation Policy
-    
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        
-        // Allow all navigation by default
-        decisionHandler(.allow)
-    }
-    
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        
-        // Allow all responses by default
-        decisionHandler(.allow)
-    }
-    
+    // Navigation/response policy is left at WebKit's default (allow); we don't implement
+    // decidePolicyFor since the no-op overrides only duplicated the default behavior.
+
     func updateNavigationState() {
         onNavigationStateChange(webView.canGoBack, webView.canGoForward, webView.isLoading)
     }

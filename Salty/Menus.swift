@@ -20,11 +20,11 @@ class SheetStateTracker {
             object: nil,
             queue: .main
         ) { notification in
+            // Extract the Sendable value before hopping; Notification itself isn't Sendable.
+            let isShown = notification.userInfo?["isShown"] as? Bool
             // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
             MainActor.assumeIsolated {
-                if let isShown = notification.userInfo?["isShown"] as? Bool {
-                    self.isAnySheetShown = isShown
-                }
+                if let isShown { self.isAnySheetShown = isShown }
             }
         }
     }
@@ -47,14 +47,13 @@ class SelectionStateTracker {
             object: nil,
             queue: .main
         ) { notification in
+            // Extract the Sendable values before hopping; Notification itself isn't Sendable.
+            let hasSelected = notification.userInfo?["hasSelected"] as? Bool
+            let count = notification.userInfo?["count"] as? Int
             // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
             MainActor.assumeIsolated {
-                if let hasSelected = notification.userInfo?["hasSelected"] as? Bool {
-                    self.hasRecipeSelected = hasSelected
-                }
-                if let count = notification.userInfo?["count"] as? Int {
-                    self.selectedRecipeCount = count
-                }
+                if let hasSelected { self.hasRecipeSelected = hasSelected }
+                if let count { self.selectedRecipeCount = count }
             }
         }
     }

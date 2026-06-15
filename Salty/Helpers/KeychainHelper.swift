@@ -11,8 +11,9 @@ import Foundation
 import Security
 import OSLog
 
-/// Helper class for storing and retrieving server login and other sensitive data in Keychain
-class KeychainHelper {
+/// Helper class for storing and retrieving server login and other sensitive data in Keychain.
+/// Stateless (only immutable `let` properties), so it's safely `Sendable` and usable from any actor.
+final class KeychainHelper: Sendable {
     static let shared = KeychainHelper()
     private let logger = Logger(subsystem: "Salty", category: "Keychain")
     private let service = "com.inuvro.salty"
