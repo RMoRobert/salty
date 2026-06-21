@@ -387,8 +387,8 @@ class SaltySyncService {
         for localCourse in localCourses {
             if let serverCourse = serverCoursesById[localCourse.id] {
                 // Exists on both - compare timestamps for updates
-                let serverDate = serverCourse.lastModifiedDate ?? Date.distantPast
-                let localDate = localCourse.lastModifiedDate ?? Date.distantPast
+                let serverDate = (serverCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                let localDate = (localCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                 
                 if localDate > serverDate {
                     try await putToServer(localCourse, endpoint: "/api/courses/\(localCourse.id)")
@@ -406,7 +406,7 @@ class SaltySyncService {
                     try await postToServer(localCourse, endpoint: "/api/courses")
                     syncProgress.itemsUploaded += 1
                 } else if let lastSync = deviceInfo.lastSyncDate {
-                    let localDate = localCourse.lastModifiedDate ?? Date.distantPast
+                    let localDate = (localCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localCourse, endpoint: "/api/courses")
                         syncProgress.itemsUploaded += 1
@@ -430,7 +430,7 @@ class SaltySyncService {
                     }
                     syncProgress.itemsDownloaded += 1
                 } else if let lastSync = deviceInfo.lastSyncDate {
-                    let serverDate = serverCourse.lastModifiedDate ?? Date.distantPast
+                    let serverDate = (serverCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if serverDate > lastSync {
                         let course = Course(id: serverCourse.id, name: serverCourse.name ?? "", lastModifiedDate: serverDate)
                         try await database.write { db in
@@ -488,8 +488,8 @@ class SaltySyncService {
         for localCategory in localCategories {
             if let serverCategory = serverCategoriesById[localCategory.id] {
                 // Exists on both - compare timestamps for updates
-                let serverDate = serverCategory.lastModifiedDate ?? Date.distantPast
-                let localDate = localCategory.lastModifiedDate ?? Date.distantPast
+                let serverDate = (serverCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                let localDate = (localCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                 
                 if localDate > serverDate {
                     try await putToServer(localCategory, endpoint: "/api/categories/\(localCategory.id)")
@@ -507,7 +507,7 @@ class SaltySyncService {
                     try await postToServer(localCategory, endpoint: "/api/categories")
                     syncProgress.itemsUploaded += 1
                 } else if let lastSync = deviceInfo.lastSyncDate {
-                    let localDate = localCategory.lastModifiedDate ?? Date.distantPast
+                    let localDate = (localCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localCategory, endpoint: "/api/categories")
                         syncProgress.itemsUploaded += 1
@@ -531,7 +531,7 @@ class SaltySyncService {
                     }
                     syncProgress.itemsDownloaded += 1
                 } else if let lastSync = deviceInfo.lastSyncDate {
-                    let serverDate = serverCategory.lastModifiedDate ?? Date.distantPast
+                    let serverDate = (serverCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if serverDate > lastSync {
                         let category = Category(id: serverCategory.id, name: serverCategory.name ?? "", lastModifiedDate: serverDate)
                         try await database.write { db in
@@ -589,8 +589,8 @@ class SaltySyncService {
         for localTag in localTags {
             if let serverTag = serverTagsById[localTag.id] {
                 // Exists on both - compare timestamps for updates
-                let serverDate = serverTag.lastModifiedDate ?? Date.distantPast
-                let localDate = localTag.lastModifiedDate ?? Date.distantPast
+                let serverDate = (serverTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                let localDate = (localTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                 
                 if localDate > serverDate {
                     try await putToServer(localTag, endpoint: "/api/tags/\(localTag.id)")
@@ -608,7 +608,7 @@ class SaltySyncService {
                     try await postToServer(localTag, endpoint: "/api/tags")
                     syncProgress.itemsUploaded += 1
                 } else if let lastSync = deviceInfo.lastSyncDate {
-                    let localDate = localTag.lastModifiedDate ?? Date.distantPast
+                    let localDate = (localTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localTag, endpoint: "/api/tags")
                         syncProgress.itemsUploaded += 1
@@ -632,7 +632,7 @@ class SaltySyncService {
                     }
                     syncProgress.itemsDownloaded += 1
                 } else if let lastSync = deviceInfo.lastSyncDate {
-                    let serverDate = serverTag.lastModifiedDate ?? Date.distantPast
+                    let serverDate = (serverTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if serverDate > lastSync {
                         let tag = Tag(id: serverTag.id, name: serverTag.name ?? "", lastModifiedDate: serverDate)
                         try await database.write { db in
@@ -760,11 +760,15 @@ class SaltySyncService {
 
         // 4. Reconcile (pure, unit-tested in RecipeSyncReconcilerTests). Missing server timestamps map
         //    to distantPast, matching the previous `?? Date.distantPast` behavior.
+        // Compare at the wire's resolution (whole milliseconds). The local Date (decoded by SQLiteData
+        // from "yyyy-MM-dd HH:mm:ss.SSS") and the server Date (decoded by ISO8601DateFormatter from
+        // "...SSS'Z'") can land on adjacent Doubles for the SAME millisecond, so a strict > / < made the
+        // reconciler re-upload/re-download every recipe on every sync. roundedToWireMillis normalizes both.
         let localEntries = localRecipes.map {
-            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate)
+            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate.roundedToWireMillis)
         }
         let serverEntries = manifest.map {
-            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate ?? Date.distantPast)
+            RecipeSyncReconciler.Entry(id: $0.id, lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis)
         }
         let plan = RecipeSyncReconciler.plan(
             local: localEntries,
@@ -1556,7 +1560,18 @@ class SaltySyncService {
             return false
         }
     }
-    
+
+}
+
+extension Date {
+    /// Rounded to whole milliseconds — the resolution of the sync wire format (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`).
+    /// The local `Date` (decoded by SQLiteData from `"yyyy-MM-dd HH:mm:ss.SSS"`) and the server `Date`
+    /// (decoded by `ISO8601DateFormatter`) can differ by sub-microsecond amounts for the SAME wall-clock
+    /// millisecond, so comparing them with `>` / `<` made sync re-upload/re-download everything forever.
+    /// Normalizing both sides to whole milliseconds before comparison makes equal instants compare equal.
+    var roundedToWireMillis: Date {
+        Date(timeIntervalSinceReferenceDate: (timeIntervalSinceReferenceDate * 1000).rounded() / 1000)
+    }
 }
 
 // MARK: - Sync Progress
