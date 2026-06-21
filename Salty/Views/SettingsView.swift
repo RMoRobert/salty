@@ -27,6 +27,9 @@ struct SettingsView: View {
             Tab("General", systemImage: "gearshape") {
                 GeneralSettingsView()
             }
+            Tab("Theme", systemImage: "paintbrush") {
+                ThemeSettingsView()
+            }
             Tab("Database", systemImage: "externaldrive") {
                 DatabaseSettingsView(diagnosticsInfo: $diagnosticsInfo)
             }
@@ -159,6 +162,7 @@ struct ServerSettingsView: View {
     @State private var syncAlertIsError = false
     @State private var password: String = ""
     @State private var hasLoadedPassword = false
+    @State private var showingForceResyncConfirm = false
     @State private var showingSaltyServerHelpAlert = false
     
     var body: some View {
@@ -289,7 +293,18 @@ struct ServerSettingsView: View {
                 #endif
                 .controlSize(.small)
                 .disabled(syncService.isSyncing)
-                
+
+                Button(role: .destructive) {
+                    showingForceResyncConfirm = true
+                } label: {
+                    Text("Force Full Re-Sync")
+                }
+                #if os(macOS)
+                .buttonStyle(.link)
+                #endif
+                .controlSize(.small)
+                .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || password.isEmpty || syncService.serverUsername.isEmpty)
+
                 if syncService.isSyncing {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(syncService.syncProgress.currentStep)
@@ -344,6 +359,21 @@ struct ServerSettingsView: View {
         } message: {
             Text(syncAlertMessage)
         }
+        .confirmationDialog("Force Full Re-Sync?", isPresented: $showingForceResyncConfirm, titleVisibility: .visible) {
+            Button("Delete Local & Re-Download", role: .destructive) {
+                Task {
+                    syncService.logout()
+                    syncService.serverPassword = password
+                    await performForceResync()
+                    if !savePasswordInKeychain {
+                        syncService.serverPassword = ""
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This deletes ALL local recipes, courses, categories, and tags, then re-downloads everything from the server. The server is not changed.")
+        }
         .onAppear {
             if serverUse && !hasLoadedPassword {
                 loadPasswordIfEnabled()
@@ -380,12 +410,23 @@ struct ServerSettingsView: View {
             showingSyncAlert = true
         }
     }
+
+    private func performForceResync() async {
+        do {
+            try await syncService.forceFullResyncFromServer()
+            syncAlertIsError = false
+            syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.summary)"
+            showingSyncAlert = true
+        } catch {
+            syncAlertIsError = true
+            syncAlertMessage = error.localizedDescription
+            showingSyncAlert = true
+        }
+    }
 }
 
 struct GeneralSettingsView: View {
-    @AppStorage("webPreviews") private var useWebRecipeDetailView = false
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
-    @AppStorage("monospacedBulkEditFont") private var monospacedBulkEditFont = false
     @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
@@ -469,11 +510,38 @@ struct GeneralSettingsView: View {
                 Text("At least one sidebar item must be enabled.")
                     .font(.caption)
             }
+        }
+    }
+}
+
+struct ThemeSettingsView: View {
+    @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    @AppStorage("recipeHtmlTheme") private var recipeHtmlTheme: RecipeHtmlTheme = .modern
+    @AppStorage("monospacedBulkEditFont") private var monospacedBulkEditFont = false
+
+    var body: some View {
+        Form {
             Section {
                 Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
-                Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
+                    .fixedSize(horizontal: false, vertical: true)
+                if useWebRecipeDetailView {
+                    Picker(platformSpecificHeadingName("Theme"), selection: $recipeHtmlTheme) {
+                        ForEach(RecipeHtmlTheme.allCases) { theme in
+                            Text(theme.displayName).tag(theme)
+                        }
+                    }
+                }
             } header: {
-                Text(platformSpecificHeadingName("View Options"))
+                Text(platformSpecificHeadingName("Recipe Display"))
+                    #if os(macOS)
+                    .padding(.top)
+                    #endif
+            }
+            Section {
+                Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text(platformSpecificHeadingName("Editing"))
                     #if os(macOS)
                     .padding(.top)
                     #endif

@@ -270,6 +270,88 @@ class SaltySyncService {
         }
     }
     
+    /// Force a full re-sync: delete ALL local recipes/courses/categories/tags and re-download
+    /// everything from the server. One-way (server → local) — performs no uploads and no server
+    /// deletions, so it's a safe recovery path (e.g. after local corruption or stale test data).
+    func forceFullResyncFromServer() async throws {
+        guard serverEnabled, !serverUrl.isEmpty else { throw SyncError.serverNotConfigured }
+        guard hasCredentials else { throw SyncError.credentialsNotConfigured }
+        guard !isSyncing else {
+            logger.warning("Sync already in progress, skipping force re-sync")
+            return
+        }
+
+        isSyncing = true
+        lastSyncError = nil
+        syncProgress = SyncProgress()
+        defer { isSyncing = false }
+
+        do {
+            syncProgress.currentStep = "Authenticating..."
+            try await ensureAuthenticated()
+            _ = try await registerDevice() // ensure the device is registered (state is otherwise ignored)
+
+            // Fetch the full server state first (so a failed download leaves local data intact).
+            syncProgress.currentStep = "Downloading from server..."
+            let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
+            let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
+            let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
+            let serverRecipes = try await fetchRecipeDeltaPaged(modifiedSince: nil) // nil → all recipes
+
+            // Wipe the local database + local image files.
+            syncProgress.currentStep = "Clearing local data..."
+            let oldImageFilenames = try await database.read { db in
+                try Recipe.fetchAll(db).compactMap { $0.imageFilename }
+            }
+            try await database.write { db in
+                try RecipeCategory.delete().execute(db)
+                try RecipeTag.delete().execute(db)
+                try Recipe.delete().execute(db)
+                try Course.delete().execute(db)
+                try Category.delete().execute(db)
+                try Tag.delete().execute(db)
+            }
+            for filename in oldImageFilenames {
+                RecipeImageManager.shared.deleteImage(filename: filename)
+            }
+
+            // Insert vocab first — downloadRecipe only links categories/tags that already exist locally.
+            try await database.write { db in
+                for c in serverCourses {
+                    try Course.insert { Course(id: c.id, name: c.name ?? "", lastModifiedDate: c.lastModifiedDate ?? Date()) }.execute(db)
+                }
+                for c in serverCategories {
+                    try Category.insert { Category(id: c.id, name: c.name ?? "", lastModifiedDate: c.lastModifiedDate ?? Date()) }.execute(db)
+                }
+                for t in serverTags {
+                    try Tag.insert { Tag(id: t.id, name: t.name ?? "", lastModifiedDate: t.lastModifiedDate ?? Date()) }.execute(db)
+                }
+            }
+            syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count
+
+            // Download recipes (marking them downloaded so syncImages pulls their images).
+            syncProgress.currentStep = "Downloading recipes..."
+            for serverRecipe in serverRecipes {
+                try await downloadRecipe(serverRecipe)
+                syncProgress.itemsDownloaded += 1
+                syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
+            }
+
+            // Images: local files were wiped, so this only downloads (nothing to upload).
+            syncProgress.currentStep = "Downloading images..."
+            try await syncImages()
+
+            try await completeSyncOnServer()
+            lastSyncDate = Date()
+            syncProgress.currentStep = "Full re-sync complete!"
+            logger.info("Force full re-sync complete: \(serverRecipes.count) recipes")
+        } catch {
+            lastSyncError = error.localizedDescription
+            logger.error("Force full re-sync failed at '\(self.syncProgress.currentStep)': \(error)")
+            throw error
+        }
+    }
+
     /// Guards bulk LOCAL deletions against a truncated/empty server response. The deletion
     /// heuristic ("present locally, absent from server, unchanged since last sync ⇒ deleted on
     /// the server") is dangerous if the server ever returns an empty list due to a transient
@@ -1376,15 +1458,30 @@ class SaltySyncService {
         }
     }
     
+    /// JSON encoder whose dates match the server's wire contract: `yyyy-MM-dd'T'HH:mm:ss.SSS'Z'` (UTC,
+    /// millisecond precision). NOTE: `JSONEncoder.dateEncodingStrategy = .iso8601` drops fractional
+    /// seconds — uploads were floored to whole seconds while the local copy and the server's echo keep
+    /// milliseconds, so the reconciler saw local as newer on every sync and re-uploaded forever. This
+    /// is the inverse of the decode path in `fetchFromServerWithTotalCount`, which prefers `.SSS'Z'`.
+    private func makeWireEncoder() -> JSONEncoder {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, enc in
+            var container = enc.singleValueContainer()
+            try container.encode(iso.string(from: date))
+        }
+        return encoder
+    }
+
     private func postToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
         let url = URL(string: "\(serverUrl)\(endpoint)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuthHeader(to: &request)
-        
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+
+        let encoder = makeWireEncoder()
         request.httpBody = try encoder.encode(object)
         
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -1403,13 +1500,12 @@ class SaltySyncService {
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuthHeader(to: &request)
-        
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+
+        let encoder = makeWireEncoder()
         request.httpBody = try encoder.encode(object)
-        
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1

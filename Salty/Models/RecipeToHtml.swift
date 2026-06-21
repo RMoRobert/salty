@@ -14,17 +14,41 @@ extension Recipe {
     var asHtml: String {
         return asHtmlWithOptions(options: HTMLExportOptions())
     }
-    
-    func asHtmlWithOptions(options: HTMLExportOptions) -> String {
+
+    // MARK: - Theming
+    //
+    // A recipe page is `<base CSS> + <theme CSS>`. The base (getDefaultCSS) defines the structure,
+    // print layout, and default look via CSS variables declared in `:root`. A theme is just additional
+    // CSS appended last, so it wins: override these variables and/or target the stable selectors below.
+    // This is what a user-supplied theme file would slot into (see RecipeHtmlTheme).
+    //
+    // Theme variables (most colors/fonts route through these — overriding them restyles the whole page):
+    //   --salty-font-body, --salty-font-heading
+    //   --salty-page-bg, --salty-surface, --salty-panel-bg
+    //   --salty-text, --salty-text-secondary, --salty-heading
+    //   --salty-accent, --salty-link, --salty-link-hover, --salty-border
+    //   --salty-star-filled, --salty-star-empty
+    //   --salty-card-radius, --salty-card-shadow
+    //
+    // Stable selectors a theme can rely on:
+    //   #recipe-name, #recipe-source, #recipe-sourceDetails, #recipe-image, #recipe-image-container
+    //   #recipe-info-container, #recipe-introduction-container, #recipe-ingredients-container,
+    //   #recipe-directions-container, #recipe-notes-container, #recipe-variations-container
+    //   .recipe-content-area, .recipe-introduction
+    //   .recipe-ingredients-list / .recipe-ingredient / .recipe-ingredient-heading
+    //   .recipe-directions-list / .recipe-directions-step / .recipe-directions-step-number /
+    //     .recipe-directions-step-text / .recipe-directions-heading
+    //   .recipe-note-container / .recipe-note-heading / .recipe-note-text
+    //   .recipe-variation-container / .recipe-variation-heading / .recipe-variation-text
+    //   .recipe-rating-star-filled / .recipe-rating-star-empty
+    func asHtmlWithOptions(options: HTMLExportOptions, theme: RecipeHtmlTheme = .modern) -> String {
         let doc = Document(.html) {
             Html {
                 Head {
                     Title(name)
                     Meta().charset("utf-8")
                     Meta().name("viewport").content("width=device-width, initial-scale=1.0")
-                    //let cssPath = Bundle.main.path(forResource: "recipe-default", ofType: "css") ?? ""
-                    //Link(rel: .stylesheet).href(cssPath)
-                    Style(getDefaultCSS())
+                    Style(getDefaultCSS() + "\n\n" + theme.overrideCSS)
                 }
                 Body {
                     Main {
@@ -709,15 +733,38 @@ html {
 
 /** CUSTOM **/
 
+/* ===========================================================================
+   THEME TOKENS — a theme restyles recipes by overriding these variables (and/or
+   adding rules); the HTML structure, ids, and class names below stay constant.
+   See RecipeHtmlTheme.swift and the "Theming" doc comment in asHtmlWithOptions.
+   =========================================================================== */
+:root {
+    --salty-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    --salty-font-heading: var(--salty-font-body);
+    --salty-page-bg: #ffffff;
+    --salty-surface: #ffffff;
+    --salty-panel-bg: #f8f9fa;
+    --salty-text: rgb(25, 25, 25);
+    --salty-text-secondary: #86868b;
+    --salty-heading: #1d1d1f;
+    --salty-accent: #0a84ff;
+    --salty-link: blue;
+    --salty-link-hover: cornflowerblue;
+    --salty-border: #e1e5e9;
+    --salty-star-filled: #ffd60a;
+    --salty-star-empty: #d1d5db;
+    --salty-card-radius: 16px;
+    --salty-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    font-family: var(--salty-font-body);
     font-size: 14rem;
     font-weight: 400;
     line-height: 1.2;
-    color: #222;
     padding: 2rem;
-    background: white;
-    color: rgb(25, 25, 25);
+    background: var(--salty-page-bg);
+    color: var(--salty-text);
     max-width: 1200px;
     margin: 0 auto;
     padding-left: 8rem;
@@ -726,11 +773,11 @@ body {
 
 a:link,
 a:visited {
-    color: blue;
+    color: var(--salty-link);
 }
 
 a:hover {
-    color: cornflowerblue;
+    color: var(--salty-link-hover);
 }
 
 /* Recipe Layout */
@@ -789,9 +836,9 @@ main {
    max-width: 400px;
    max-height: 400px;
    object-fit: cover;
-   border-radius: 16px;
-   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-   border: 1px solid #e1e5e9;
+   border-radius: var(--salty-card-radius);
+   box-shadow: var(--salty-card-shadow);
+   border: 1px solid var(--salty-border);
    transition: transform 0.2s ease;
 }
 
@@ -949,20 +996,20 @@ dd {
     gap: 0.15em;
     margin: 0.75em 0;
     /* padding: 0.5em 0.75em;
-background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); */
+background: linear-gradient(135deg, var(--salty-panel-bg) 0%, var(--salty-surface) 100%); */
     /* border-radius: 12px;
-border: 1px solid #e1e5e9;
+border: 1px solid var(--salty-border);
 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 }
 
 .recipe-rating-star-filled {
-    color: #ffd60a;
+    color: var(--salty-star-filled);
     font-size: 1.3em;
     text-shadow: 0 1px 2px rgba(255, 214, 10, 0.3);
 }
 
 .recipe-rating-star-empty {
-    color: #d1d5db;
+    color: var(--salty-star-empty);
     font-size: 1.3em;
 }
 
@@ -975,22 +1022,22 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 #recipe-difficulty-container {
     margin: 0.75em 0;
     /* padding: 0.5em 0.5em; */
-    /* background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    /* background: linear-gradient(135deg, var(--salty-panel-bg) 0%, var(--salty-surface) 100%);
 border-radius: 12px;
-border: 1px solid #e1e5e9;
+border: 1px solid var(--salty-border);
 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     display: block;
 }
 
 #recipe-difficulty-label {
     font-weight: 600;
-    color: #86868b;
+    color: var(--salty-text-secondary);
     margin-right: 0.5em;
 }
 
 #recipe-difficulty-text {
     font-weight: 500;
-    color: #1d1d1f;
+    color: var(--salty-heading);
     text-transform: capitalize;
 }
 
@@ -999,7 +1046,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     font-size: 2.5em;
     font-weight: 700;
     margin: 0.5em 0;
-    background: linear-gradient(135deg, #1d1d1f 0%, #424245 100%);
+    background: linear-gradient(135deg, var(--salty-heading) 0%, #424245 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -1010,7 +1057,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 #recipe-source,
 #recipe-sourceDetails {
     margin: 0.5em 0;
-    color: #86868b;
+    color: var(--salty-text-secondary);
     font-size: 0.95em;
     font-weight: 400;
 }
@@ -1019,7 +1066,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 #recipe-prep-times-heading {
     font-size: 1.4em;
     font-weight: 600;
-    color: #1d1d1f;
+    color: var(--salty-heading);
     margin: 1.5em 0 0.75em 0;
 }
 
@@ -1033,8 +1080,8 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 }
 
 #recipe-prep-time-list li {
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-    border: 1px solid #e1e5e9;
+    background: linear-gradient(135deg, var(--salty-panel-bg) 0%, var(--salty-surface) 100%);
+    border: 1px solid var(--salty-border);
     border-radius: 20px;
     padding: 0.75em;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -1047,7 +1094,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 
 .recipe-prep-time-type {
     font-weight: 600;
-    color: #86868b;
+    color: var(--salty-text-secondary);
     font-size: 0.9em;
 }
 
@@ -1056,7 +1103,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 }
 
 .recipe-prep-time-time {
-    color: #1d1d1f;
+    color: var(--salty-heading);
     font-weight: 600;
     font-size: 1.1em;
 }
@@ -1065,7 +1112,7 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
 h2 {
     font-size: 1.6em;
     font-weight: 600;
-    color: #1d1d1f;
+    color: var(--salty-heading);
     margin: 0.5rem 0 0.5rem 0;
 }
 
@@ -1073,7 +1120,7 @@ h2 {
 .recipe-ingredient-heading {
     font-weight: 600;
     margin: 0.5em 0 0.25em 0;
-    color: #1f1f1f;
+    color: var(--salty-heading);
     font-size: 0.95em;
 }
 
@@ -1100,7 +1147,7 @@ h2 {
 
 .recipe-directions-step-number {
     font-weight: bold;
-    color: #1d1d1f;
+    color: var(--salty-heading);
     flex-shrink: 0;
 }
 
@@ -1117,7 +1164,7 @@ h2 {
 .recipe-directions-heading {
     margin: 0.5em 0 0.25em 0;
     padding: 0.25em 0;
-    color: #1f1f1f;
+    color: var(--salty-heading);
     font-weight: 600;
     font-size: 0.95em;
     position: relative;
@@ -1133,7 +1180,7 @@ h2 {
 .recipe-introduction {
     margin: 0;
     line-height: 1.6;
-    color: #1d1d1f;
+    color: var(--salty-heading);
 }
 
 /* Metadata Styling */
@@ -1166,16 +1213,16 @@ h2 {
 .recipe-note-heading {
     font-size: 0.95em;
     font-weight: 600;
-    color: #1f1f1f;
+    color: var(--salty-heading);
 }
 
 .recipe-note-container {
     margin: 1em 0;
     padding: 0.5em 1.5em;
-    background: #f8f9fa;
+    background: var(--salty-panel-bg);
     border-radius: 12px;
     line-height: 1.25;
-    color: #1d1d1f;
+    color: var(--salty-heading);
 }
 
 #recipe-notes-container {
@@ -1187,16 +1234,16 @@ h2 {
 .recipe-variation-heading {
     font-size: 0.95em;
     font-weight: 600;
-    color: #1f1f1f;
+    color: var(--salty-heading);
 }
 
 .recipe-variation-container {
     margin: 1em 0;
     padding: 0.5em 1.5em;
-    background: #f8f9fa;
+    background: var(--salty-panel-bg);
     border-radius: 12px;
     line-height: 1.25;
-    color: #1d1d1f;
+    color: var(--salty-heading);
 }
 
 #recipe-variations-container {
@@ -1208,11 +1255,11 @@ h2 {
 /* Tags Styling */
 .recipe-tag {
     display: inline-block;
-    /* background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+    /* background: linear-gradient(135deg, var(--salty-accent) 0%, #5856d6 100%);
     color: white; */
     padding: 0.5em 1em;
     margin: 0.25em;
-    border: 1px solid #007bff52;
+    border: 1px solid var(--salty-border);
     border-radius: 20px;
     font-size: 0.9em;
     font-weight: 500;
@@ -1258,7 +1305,7 @@ body {
     font-size: 14rem;
     font-weight: 400;
     line-height: 1.6;
-    color: #1d1d1f;
+    color: var(--salty-heading);
     max-width: 1200px;
     margin: 0 auto;
 }
@@ -1282,17 +1329,31 @@ body {
 }
 
 /* Print-specific styles */
+/* Page size + margins are owned here (NOT by body padding and NOT by the print dialog's margins,
+   which the app sets to 0) so they don't stack and clip content. */
+@page {
+    size: letter;
+    margin: 0.5in;
+}
+
 @media print {
     /* Global font size reduction to 90% */
     html {
         font-size: 0.9rem !important;
     }
-    
+
     body {
         font-size: 90% !important;
         line-height: 1.4 !important; /* Reduce line height for tighter spacing */
-        margin: 0;
-        padding: 0.5in;
+        margin: 0 !important;
+        padding: 0 !important; /* margins come from @page; avoids double margins / right-edge clipping */
+    }
+
+    /* Safety: nothing prints wider than the page; images never split across a page. */
+    img {
+        max-width: 100% !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
     }
     
     /* Reduce spacing for all text elements */
@@ -1332,13 +1393,13 @@ body {
         margin: 0.5em 0 !important;
     }
     
-    /* Allow section headers to break freely */
+    /* Keep section headers with the content that follows (no orphaned heading at a page bottom). */
     #recipe-ingredients-container h2,
     #recipe-directions-container h2,
     #recipe-notes-container h2,
     #recipe-variations-container h2 {
-        break-after: auto !important;
-        page-break-after: auto !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
         break-inside: avoid !important; /* Don't break headers themselves */
         page-break-inside: avoid !important;
         margin-top: 0.5em !important; /* Reduce top margin */
@@ -1388,12 +1449,24 @@ body {
         left: 0.2em !important; /* Position bullet slightly to the right of left edge */
     }
     
-    /* Prevent breaking individual direction steps */
+    /* Prevent breaking individual direction steps. WebKit's print engine doesn't honor
+       break-inside:avoid on flex containers, which sliced a wrapped line across pages — so for print
+       lay steps out as normal block text (number + text inline) where avoid works reliably. */
     .recipe-directions-step,
     .recipe-directions-step-with-name {
+        display: block !important;
         break-inside: avoid !important;
         page-break-inside: avoid !important;
         margin: 0.5em 0 !important; /* Reduce spacing between steps */
+    }
+
+    .recipe-directions-step-number {
+        display: inline !important;
+        margin-right: 0.4em !important;
+    }
+
+    .recipe-directions-step-text {
+        display: inline !important;
     }
     
     /* Prevent breaking individual notes and variations */
@@ -1447,26 +1520,49 @@ body {
     
     #recipe-name {
         font-size: 1.8em !important; /* 90% of 2em */
-        /* Override gradient background for print - use solid black text */
+        /* Flatten the modern gradient-text for print; honor the theme's heading color. */
         background: none !important;
         -webkit-background-clip: unset !important;
         -webkit-text-fill-color: unset !important;
         background-clip: unset !important;
-        color: #000 !important;
+        color: var(--salty-heading) !important;
         margin: 0.5em 0 !important; /* Reduce margins */
     }
-    
-    /* Reduce spacing for source info and make it darker for better readability */
+
+    /* Reduce spacing for source info; honor the theme's secondary text color. */
     #recipe-source,
     #recipe-sourceDetails {
         margin: 0.25em 0 !important;
-        color: #555555 !important; /* Darker gray - was #86868b, now darker for better readability */
+        color: var(--salty-text-secondary) !important;
     }
     
-    /* Ensure images print well - reduced size */
+    /* Lay the header out as a row so the photo sits top-right of the name/source instead of taking
+       its own full-width row below them (saves vertical space). The image markup already follows the
+       text block in the DOM, so a flex row puts it on the right automatically. */
+    #recipe-info-container {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: flex-start !important;
+        gap: 0.5em 1em !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #recipe-info-container .recipe-content-area {
+        flex: 1 1 auto !important;
+        min-width: 0 !important; /* allow the text column to shrink next to the image */
+    }
+
+    #recipe-image-container {
+        flex: 0 0 auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Smaller photo for the top-right corner. */
     #recipe-image {
-        max-width: 300px !important; /* Reduced from 400px */
-        max-height: 300px !important; /* Reduced from 400px */
+        max-width: 2in !important;
+        max-height: 2in !important;
         width: auto;
         height: auto;
         object-fit: contain;

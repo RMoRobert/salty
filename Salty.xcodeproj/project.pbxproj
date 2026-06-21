@@ -469,7 +469,7 @@
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 35;
+				CURRENT_PROJECT_VERSION = 37;
 				CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS = "";
 				"CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS[sdk=iphoneos*]" = NO;
 				DEAD_CODE_STRIPPING = YES;
@@ -509,7 +509,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 2.2.2;
+				MARKETING_VERSION = 2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.inuvro.salty-dev";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -534,7 +534,7 @@
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 35;
+				CURRENT_PROJECT_VERSION = 37;
 				CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS = "";
 				"CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS[sdk=iphoneos*]" = NO;
 				DEAD_CODE_STRIPPING = YES;
@@ -574,7 +574,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 2.2.2;
+				MARKETING_VERSION = 2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inuvro.salty;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -733,6 +733,8 @@
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.0.0;
 			};
+			traits = (
+			);
 		};
 		D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -754,8 +756,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/danielsaidi/WebViewKit";
 			requirement = {
-				kind = exactVersion;
-				version = 1.0.0;
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
 			};
 		};
 		D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
@@ -773,6 +775,8 @@
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.4.0;
 			};
+			traits = (
+			);
 		};
 /* End XCRemoteSwiftPackageReference section */
 

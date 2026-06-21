@@ -657,7 +657,9 @@ class RecipeNavigationSplitViewModel {
         }
         
         logger.info("Printing recipe: \(recipe.name)")
-        let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions)
+        // Print with the user's selected recipe theme (matches the web detail view).
+        let theme = RecipeHtmlTheme(rawValue: UserDefaults.standard.string(forKey: "recipeHtmlTheme") ?? "") ?? .modern
+        let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions, theme: theme)
         
         // Print using platform-specific implementation
         #if os(macOS)
