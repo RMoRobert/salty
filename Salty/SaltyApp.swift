@@ -9,25 +9,11 @@ import OSLog
 import SQLiteData
 import SwiftUI
 
-// Global storage for import URL to avoid state reset issues
-@MainActor
-@Observable
-class ImportURLManager {
-    private let logger = Logger(subsystem: "Salty", category: "App")
-    var pendingImportURL: URL? {
-        didSet {
-            logger.debug("ImportURLManager pendingImportURL changed to: \(String(describing: self.pendingImportURL))")
-        }
-    }
-    var showingImportSheet = false
-}
-
 @main
 struct SaltyApp: App {
     private let logger = Logger(subsystem: "Salty", category: "App")
     @Dependency(\.context) var context
     @Environment(\.openWindow) private var openWindow
-    @State private var importURLManager = ImportURLManager()
     
     init() {
         if context == .live {
@@ -63,15 +49,6 @@ struct SaltyApp: App {
         WindowGroup {
             MainView()
                 .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
-                .onOpenURL { url in
-                    handleIncomingURL(url)
-                }
-                .sheet(isPresented: $importURLManager.showingImportSheet) {
-                    ImportRecipesFromFileView(preSelectedFileURL: importURLManager.pendingImportURL)
-                        #if os(macOS)
-                        .frame(minWidth: 500, minHeight: 400)
-                        #endif
-                }
         }
         .handlesExternalEvents(matching: ["salty-recipe"])
         .commands {
@@ -132,19 +109,6 @@ struct SaltyApp: App {
             SettingsView()
         }
         #endif
-    }
-    
-    private func handleIncomingURL(_ url: URL) {
-        // Check if this is a .saltyRecipe file
-        if url.pathExtension.lowercased() == "saltyrecipe" {
-            logger.debug("Received .saltyRecipe file: \(url)")
-            importURLManager.pendingImportURL = url
-            logger.debug("Set importURLManager.pendingImportURL to: \(url)")
-            logger.debug("Showing import sheet...")
-            importURLManager.showingImportSheet = true
-        } else {
-            logger.debug("Received unsupported file type: \(url)")
-        }
     }
 }
 

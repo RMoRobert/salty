@@ -192,12 +192,11 @@ struct Menus: Commands {
            }
            .disabled(sheetTracker.isAnySheetShown)
            Menu("Export…") {
-               Button("Export as Recipe File…") {
-                   NotificationCenter.default.post(name: .exportSelectedRecipes, object: nil)
-               }
-               Button("Export as HTML…") {
-                   NotificationCenter.default.post(name: .exportSelectedRecipesAsHTML, object: nil)
-               }
+               recipeExportFormatItems(
+                   recipeFile: { NotificationCenter.default.post(name: .exportSelectedRecipes, object: nil) },
+                   html: { NotificationCenter.default.post(name: .exportSelectedRecipesAsHTML, object: nil) },
+                   jsonLD: { NotificationCenter.default.post(name: .exportSelectedRecipesAsJSONLD, object: nil) }
+               )
            }
            .disabled(sheetTracker.isAnySheetShown)
            #if os(macOS)

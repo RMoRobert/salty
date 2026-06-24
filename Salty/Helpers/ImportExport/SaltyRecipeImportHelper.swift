@@ -12,7 +12,24 @@ import OSLog
 struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
     
-    static func importIntoDatabase(_ database: any DatabaseWriter, jsonFileUrl: URL) async throws {
+    /// Best-effort peek of the recipe name(s) in a .saltyRecipe file, for a confirmation prompt before
+    /// importing an opened/AirDropped file. Returns [] if the file can't be read or decoded.
+    static func peekRecipeNames(_ jsonFileUrl: URL) -> [String] {
+        guard let jsonData = getDataFromFile(jsonFileUrl) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let many = try? decoder.decode([SaltyRecipeExport].self, from: jsonData) {
+            return many.map(\.name)
+        }
+        if let one = try? decoder.decode(SaltyRecipeExport.self, from: jsonData) {
+            return [one.name]
+        }
+        return []
+    }
+
+    /// Imports the recipes in a .saltyRecipe file and returns the ids of those inserted (in file order).
+    @discardableResult
+    static func importIntoDatabase(_ database: any DatabaseWriter, jsonFileUrl: URL) async throws -> [String] {
         guard let jsonData = getDataFromFile(jsonFileUrl) else {
             logger.error("No JSON data found in file; returning")
             throw ImportError.noDataFound
@@ -37,10 +54,11 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
             
             var successCount = 0
             var failureCount = 0
-            
+            var insertedIds: [String] = []
+
             for saltyRecipe in saltyRecipes {
                 do {
-                    try await database.write { db in
+                    let newId = try await database.write { db -> String in
                         var recipe = saltyRecipe.convertToRecipe()
                         
                         // Save the recipe
@@ -127,7 +145,10 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                                 try Recipe.update(recipe).execute(db)
                             }
                         }
+
+                        return recipe.id
                     }
+                    insertedIds.append(newId)
                     successCount += 1
                 } catch {
                     failureCount += 1
@@ -136,6 +157,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
             }
             
             logger.info("Import completed: \(successCount) successful, \(failureCount) failed")
+            return insertedIds
         } catch {
             logger.error("Could not decode Salty recipe file. Error: \(error.localizedDescription)")
             throw ImportError.decodingFailed(error)

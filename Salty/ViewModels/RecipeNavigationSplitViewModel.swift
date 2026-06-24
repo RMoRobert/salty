@@ -32,6 +32,7 @@ extension Notification.Name {
     static let showRecipeInfoInspector = Notification.Name("showRecipeInfoInspector")
     static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
     static let exportSelectedRecipesAsHTML = Notification.Name("exportSelectedRecipesAsHTML")
+    static let exportSelectedRecipesAsJSONLD = Notification.Name("exportSelectedRecipesAsJSONLD")
     static let printSelectedRecipes = Notification.Name("printSelectedRecipes")
     static let openSelectedRecipesInNewWindows = Notification.Name("openSelectedRecipesInNewWindows")
 }
@@ -388,13 +389,29 @@ class RecipeNavigationSplitViewModel {
     func handleNewRecipeSaved(recipeId: String) {
         // Switch to "All Recipes" view so the new recipe will be visible
         selectedSidebarItemId = allRecipesID
-        
+
         // Select the newly saved recipe and scroll to it
         selectedRecipeIDs = [recipeId]
         shouldScrollToNewRecipe = true
-        
+
         // Clear the draft since it's now persisted
         draftRecipe = nil
+    }
+
+    /// Imports a confirmed, opened/AirDropped .saltyRecipe file, then selects and scrolls to the first
+    /// imported recipe (reusing the new-recipe-saved path).
+    func importOpenedRecipeFile(_ url: URL) async {
+        // Files handed over from outside the sandbox need security-scoped access while we read them.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let ids = try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: url)
+            if let firstId = ids.first {
+                handleNewRecipeSaved(recipeId: firstId)
+            }
+        } catch {
+            logger.error("Failed to import opened recipe file: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Export Methods

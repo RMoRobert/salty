@@ -18,40 +18,29 @@ extension UTType {
 
 extension SaltyRecipeExport: Transferable {
     static var transferRepresentation: some TransferRepresentation {
-        
-    /*
-     Have tried various representations here but can only get plain text to reliably populate sharing
-     destinations (e-mail, etc.). Keeping explicit "Export" option in menus (for file export) for now
-     but keeping this here so users have way to share as plain text via e-mail, text message, etc.
-     Will try to figure this out again some day...
-     */
-        
-        // Would be my preference, and seems OK to keep for now since UI is only using plainTextRepresentation for sharing
-        // and probably won't even see this (or next) -- but would like to make work some day:
-        CodableRepresentation(contentType: .saltyRecipe)
+        // A real .saltyRecipe FILE is the representation that AirDrops cleanly and lets the receiving
+        // device "Open in Salty" (the app registers this UTType in Info.plist). A FileRepresentation is
+        // far more reliable for this than CodableRepresentation, which historically failed to populate
+        // some share destinations. Plain text is kept as a fallback for Mail/Messages to recipients
+        // who don't have Salty.
+        FileRepresentation(contentType: .saltyRecipe) { recipe in
+            let safeName = recipe.name
+                .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: ":", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let filename = safeName.isEmpty ? "Recipe" : safeName
+            let url = URL.temporaryDirectory.appendingPathComponent(filename, conformingTo: .saltyRecipe)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601  // match SaltyRecipeImportHelper's decoder
+            try encoder.encode(recipe).write(to: url, options: .atomic)
+            return SentTransferredFile(url)
+        } importing: { received in
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(SaltyRecipeExport.self, from: Data(contentsOf: received.file))
+        }
 
-//        DataRepresentation(contentType: .saltyRecipe) { recipe in
-//            let data = try JSONEncoder().encode(recipe)
-//            return data
-//        } importing: { data in
-//            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
-//            return recipe
-//        }
-        
-//        FileRepresentation(contentType: .saltyRecipe) { recipe in
-//            let docsURL = URL.temporaryDirectory.appendingPathComponent("\(recipe.name).saltyRecipe", conformingTo: .saltyRecipe)
-//            let data = try JSONEncoder().encode(recipe)
-//            try data.write(to: docsURL)
-//            return SentTransferredFile(docsURL)
-//        } importing: { received in
-//            let data = try Data(contentsOf: received.file)
-//            let recipe = try JSONDecoder().decode(SaltyRecipeExport.self, from: data)
-//            return recipe
-//        }
-        
-        // ProxyRepresentation(exporting: \.plainTextRepresentation)
-        
-        // Plain text representation:
+        // Fallback: readable plain text for Mail/Messages to recipients without Salty.
         DataRepresentation(contentType: .plainText) { recipe in
             let text = recipe.plainTextRepresentation
             return text.data(using: .utf8) ?? Data()

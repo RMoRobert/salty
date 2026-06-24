@@ -270,7 +270,7 @@ struct RecipeNavigationSplitView: View {
                         .draggable(recipe.id)
                         #if !os(macOS)
                         .contextMenu {
-                            contextMenuForRecipe(recipe)
+                            recipeContextMenu(for: recipe)
                         }
                         #endif
                 }
@@ -435,6 +435,23 @@ struct RecipeNavigationSplitView: View {
                 #else
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {
+                        if let recipeId = viewModel.selectedRecipeIDs.first,
+                           let recipe = viewModel.fullRecipe(id: recipeId),
+                           let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+                            // Would like this to work with plain text fallback, but can't get to...
+                            // ShareLink(item: shareableRecipe,
+                            //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                            //           message: Text(shareableRecipe.plainTextRepresentation),
+                            //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                            // )
+                            ShareLink(item: shareableRecipe,
+                                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                                      message: Text(shareableRecipe.plainTextRepresentation),
+                                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                            )
+                            .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                        }
+                        Divider()
                         Button(action: {
                             viewModel.exportSelectedRecipes()
                         }) {
@@ -448,23 +465,7 @@ struct RecipeNavigationSplitView: View {
                         Button(action: {
                             viewModel.exportSelectedRecipesAsJSONLD()
                         }) {
-                            Label("Export as JSON-LD (Schema.org)…", systemImage: "curlybraces")
-                        }
-                        if let recipeId = viewModel.selectedRecipeIDs.first,
-                           let recipe = viewModel.fullRecipe(id: recipeId),
-                           let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
-                            // Would like this to work with plain text fallback, but can't get to...
-                            // ShareLink(item: shareableRecipe,
-                            //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                            //           message: Text(shareableRecipe.plainTextRepresentation),
-                            //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                            // )
-                            ShareLink(item: shareableRecipe.plainTextRepresentation + "\n\nShared from Salty Recipe Manager for iOS and macOS",
-                                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                                      message: Text(shareableRecipe.plainTextRepresentation),
-                                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                            )
-                            .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                            Label("Export as Schema.org JSON-LD…", systemImage: "curlybraces")
                         }
                         
                     } label: {
@@ -679,6 +680,9 @@ struct RecipeNavigationSplitView: View {
         .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipesAsHTML)) { _ in
             viewModel.showHTMLExportSettings()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipesAsJSONLD)) { _ in
+            viewModel.exportSelectedRecipesAsJSONLD()
+        }
         .sheet(isPresented: $viewModel.showingHTMLExportSettings) {
             HTMLExportSettingsView(options: $viewModel.htmlExportOptions) {
                 viewModel.performHTMLExport()
@@ -750,42 +754,9 @@ struct RecipeNavigationSplitView: View {
         if selectedIDs.count == 1,
            let recipeId = selectedIDs.first,
            let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
-            contextMenuForSingleRecipe(recipe)
+            recipeContextMenu(for: recipe)
         } else if selectedIDs.count > 1 {
             contextMenuForMultipleRecipes()
-        }
-    }
-    
-    @ViewBuilder
-    private func contextMenuForSingleRecipe(_ recipe: RecipeListItem) -> some View {
-        Button("Open Recipe in New Window", systemImage: "macwindow") {
-            openRecipeInNewWindow(recipeId: recipe.id)
-        }
-        .keyboardShortcut(.return)
-        Button("Edit", systemImage: "pencil") {
-            viewModel.recipeToEditID = recipe.id
-            viewModel.showingEditSheet = true
-        }
-        Menu("Export…") {
-            Button("Export as Recipe File…") {
-                viewModel.exportRecipe(recipe.id)
-            }
-            Button("Export as HTML…") {
-                viewModel.showHTMLExportSettingsForRecipe(recipe.id)
-            }
-            Button("Export as JSON-LD (Schema.org)…") {
-                viewModel.exportRecipeAsJSONLD(recipe.id)
-            }
-        }
-        Button(role: .destructive, action: {
-            Task { await viewModel.deleteRecipe(id: recipe.id) }
-        }) {
-            Label("Delete", systemImage: "trash")
-        }
-        .keyboardShortcut(.delete, modifiers: [.command])
-        Divider()
-        Button("Get Info", systemImage: "info.circle") {
-            recipeIDForInspector = recipe.id
         }
     }
 
@@ -796,15 +767,11 @@ struct RecipeNavigationSplitView: View {
         }
         .keyboardShortcut(.return)
         Menu("Export…") {
-            Button("Export as Recipe File…") {
-                viewModel.exportSelectedRecipes()
-            }
-            Button("Export as HTML…") {
-                viewModel.showHTMLExportSettings()
-            }
-            Button("Export as JSON-LD (Schema.org)…") {
-                viewModel.exportSelectedRecipesAsJSONLD()
-            }
+            recipeExportFormatItems(
+                recipeFile: { viewModel.exportSelectedRecipes() },
+                html: { viewModel.showHTMLExportSettings() },
+                jsonLD: { viewModel.exportSelectedRecipesAsJSONLD() }
+            )
         }
         Button(role: .destructive, action: {
             showingDeleteConfirmation = true
@@ -815,68 +782,52 @@ struct RecipeNavigationSplitView: View {
     }
     #endif
     
+    /// Single-recipe context menu, shared by the iOS list rows and the macOS selection menu. Identical
+    /// on both platforms except for "Open in New Window" (macOS only).
     @ViewBuilder
-    private func contextMenuForRecipe(_ recipe: RecipeListItem) -> some View {
+    private func recipeContextMenu(for recipe: RecipeListItem) -> some View {
+        #if os(macOS)
+        Button("Open Recipe in New Window", systemImage: "macwindow") {
+            openRecipeInNewWindow(recipeId: recipe.id)
+        }
+        .keyboardShortcut(.return)
+        #endif
+
         Button("Edit", systemImage: "pencil") {
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true
         }
+
         Menu("Export…") {
-            Button("Export as Recipe File…") {
-                if viewModel.selectedRecipeIDs.count > 1 {
-                    viewModel.exportSelectedRecipes()
-                } else {
-                    viewModel.exportRecipe(recipe.id)
-                }
-            }
-            Button("Export as HTML…") {
-                if viewModel.selectedRecipeIDs.count > 1 {
-                    viewModel.showHTMLExportSettings()
-                } else {
-                    viewModel.showHTMLExportSettingsForRecipe(recipe.id)
-                }
-            }
-            Button("Export as JSON-LD (Schema.org)…") {
-                if viewModel.selectedRecipeIDs.count > 1 {
-                    viewModel.exportSelectedRecipesAsJSONLD()
-                } else {
-                    viewModel.exportRecipeAsJSONLD(recipe.id)
-                }
-            }
-            #if !os(macOS)
-                // Putting here (iOS only) since can't seem to get to show on share sheet, but could be addressed in future:
-                Button(action: {
-                    viewModel.printRecipe(by: recipe.id)
-                }) {
-                    Label("Print…", systemImage: "printer")
-                }
-            #endif
+            recipeExportFormatItems(
+                recipeFile: { viewModel.exportRecipe(recipe.id) },
+                html: { viewModel.showHTMLExportSettingsForRecipe(recipe.id) },
+                jsonLD: { viewModel.exportRecipeAsJSONLD(recipe.id) }
+            )
         }
-        #if !os(macOS)
-        // Is in toolbar on macOS, but keep in context menu on iOS:
-        Group {
-            if let fullRecipe = viewModel.fullRecipe(id: recipe.id),
-               let shareableRecipe = viewModel.shareableRecipe(for: fullRecipe) {
-                ShareLink(item: shareableRecipe,
-                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                          message: Text(shareableRecipe.plainTextRepresentation),
-                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                )
-            }
+
+        if let fullRecipe = viewModel.fullRecipe(id: recipe.id),
+           let shareableRecipe = viewModel.shareableRecipe(for: fullRecipe) {
+            ShareLink(item: shareableRecipe,
+                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                      message: Text(shareableRecipe.plainTextRepresentation),
+                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+            )
         }
-        #endif
-        Button(role: .destructive, action: {
-            // Delete all selected recipes with prompt via same technique as menu item; or single recipe directly
-            if viewModel.selectedRecipeIDs.count > 1 {
-                showingDeleteConfirmation = true
-            } else {
-                Task { await viewModel.deleteRecipe(id: recipe.id) }
-            }
-        }) {
+
+        Button("Print…", systemImage: "printer") {
+            viewModel.printRecipe(by: recipe.id)
+        }
+
+        Button(role: .destructive) {
+            Task { await viewModel.deleteRecipe(id: recipe.id) }
+        } label: {
             Label("Delete", systemImage: "trash")
         }
         .keyboardShortcut(.delete, modifiers: [.command])
+
         Divider()
+
         Button("Get Info", systemImage: "info.circle") {
             recipeIDForInspector = recipe.id
         }

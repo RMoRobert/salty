@@ -8,6 +8,7 @@
 import SwiftUI
 import PhotosUI
 import OSLog
+import SQLiteData
 
 #if os(iOS)
 import VisionKit
@@ -20,6 +21,7 @@ import AVFoundation
 struct CreateRecipeFromImageView: View {
     private let logger = Logger(subsystem: "Salty", category: "Import")
     @Environment(\.dismiss) private var dismiss
+    @Dependency(\.defaultDatabase) private var database
     @State private var ocrService = RecipeOCRService()
     @State private var selectedImage: CGImage?
 #if os(iOS)
@@ -27,6 +29,12 @@ struct CreateRecipeFromImageView: View {
 #elseif os(macOS)
     @State private var multiPageImages: [CGImage] = []
 #endif
+    @State private var pdfData: Data?
+    @State private var pdfPageCount = 0
+    @State private var multipleRecipes = false
+    @State private var splitPageTexts: [String] = []
+    @State private var splitPageImages: [CGImage] = []
+    @State private var showingSplitSheet = false
     @State private var showingImagePicker = false
     @State private var showingDocumentScanner = false
     @State private var showingCamera = false
@@ -93,20 +101,24 @@ struct CreateRecipeFromImageView: View {
                 HStack(spacing: 12) {
 #if !os(macOS)
                     Button("Camera") {
+                        clearPDF()
                         showingCamera = true
                     }
                     .buttonStyle(.bordered)
-                    
+
                     Button("Document Scanner") {
+                        clearPDF()
                         showingDocumentScanner = true
                     }
                     .buttonStyle(.bordered)
                     Button("Photo Library") {
+                        clearPDF()
                         showingImagePicker = true
                     }
                     .buttonStyle(.bordered)
 #elseif os(macOS)
                     Button("Camera (beta)") {
+                        clearPDF()
                         showingCamera = true
                     }
                     .buttonStyle(.bordered)
@@ -118,6 +130,13 @@ struct CreateRecipeFromImageView: View {
 
                 }
                 .padding(.horizontal)
+
+                // Multi-page PDFs can hold several recipes; let the user opt in (off by default to avoid
+                // splitting a single recipe that happens to span pages).
+                if pdfData != nil && pdfPageCount > 1 {
+                    Toggle("This file contains multiple recipes", isOn: $multipleRecipes)
+                        .padding(.horizontal)
+                }
                 
                 // OCR results
                 if !ocrService.extractedText.isEmpty {
@@ -156,27 +175,42 @@ struct CreateRecipeFromImageView: View {
 #endif
                     
                     Button("Extract Text") {
+                        if let pdfData = pdfData {
+                            if multipleRecipes {
+                                Task {
+                                    let texts = await ocrService.extractPageTexts(fromPDFData: pdfData)
+                                    splitPageTexts = texts
+                                    splitPageImages = RecipeOCRService.pageImages(fromPDFData: pdfData)
+                                    if !texts.isEmpty { showingSplitSheet = true }
+                                }
+                            } else {
+                                Task {
+                                    await ocrService.extractText(fromPDFData: pdfData)
+                                }
+                            }
+                        } else {
 #if os(iOS)
-                        if let multiPageScan = multiPageScan {
-                            Task {
-                                await ocrService.extractTextFromMultiPageScan(multiPageScan)
+                            if let multiPageScan = multiPageScan {
+                                Task {
+                                    await ocrService.extractTextFromMultiPageScan(multiPageScan)
+                                }
+                            } else if let image = selectedImage {
+                                Task {
+                                    await ocrService.extractText(from: image)
+                                }
                             }
-                        } else if let image = selectedImage {
-                            Task {
-                                await ocrService.extractText(from: image)
-                            }
-                        }
 #elseif os(macOS)
-                        if !multiPageImages.isEmpty {
-                            Task {
-                                await ocrService.extractTextFromMultiPageScan(multiPageImages)
+                            if !multiPageImages.isEmpty {
+                                Task {
+                                    await ocrService.extractTextFromMultiPageScan(multiPageImages)
+                                }
+                            } else if let image = selectedImage {
+                                Task {
+                                    await ocrService.extractText(from: image)
+                                }
                             }
-                        } else if let image = selectedImage {
-                            Task {
-                                await ocrService.extractText(from: image)
-                            }
-                        }
 #endif
+                        }
                     }
                     .disabled(selectedImage == nil || ocrService.isProcessing)
                     
@@ -232,18 +266,23 @@ struct CreateRecipeFromImageView: View {
         #endif
         .fileImporter(
             isPresented: $showingFilePicker,
-            // TODO: Also allow PDF, either convert to image or read text from PDF directly
-            allowedContentTypes: [.image],
+            allowedContentTypes: [.image, .pdf],
             allowsMultipleSelection: false
         ) { result in
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    loadImageFromSecureURL(url)
+                    loadFileFromSecureURL(url)
                 }
             case .failure(let error):
                 logger.error("File picker error: \(error)")
             }
+        }
+        .sheet(isPresented: $showingSplitSheet) {
+            SplitRecipesView(pageTexts: splitPageTexts, pageImages: splitPageImages, onCreate: createRecipes)
+                #if os(macOS)
+                .frame(minWidth: 500, minHeight: 520)
+                #endif
         }
         .sheet(isPresented: $showingRecipeEditor) {
             if let recipe = parsedRecipe {
@@ -277,8 +316,7 @@ struct CreateRecipeFromImageView: View {
         showingRecipeEditor = true
     }
     
-    //if os(macOS)
-    private func loadImageFromSecureURL(_ url: URL) {
+    private func loadFileFromSecureURL(_ url: URL) {
         // Start accessing the security-scoped resource
         let accessing = url.startAccessingSecurityScopedResource()
         defer {
@@ -286,10 +324,56 @@ struct CreateRecipeFromImageView: View {
                 url.stopAccessingSecurityScopedResource()
             }
         }
-        
-        // Load the image while we have access
-        if let image = loadImage(from: url) {
-            selectedImage = image
+
+        if url.pathExtension.lowercased() == "pdf" {
+            loadPDF(from: url)
+        } else {
+            // A plain image file — clear any previously loaded PDF.
+            clearPDF()
+            if let image = loadImage(from: url) {
+                selectedImage = image
+            }
+        }
+    }
+
+    /// Reads a (possibly multi-page) PDF into memory and shows its first page as a preview. Text is
+    /// extracted later when the user taps "Extract Text" (digital text layer or per-page OCR).
+    private func loadPDF(from url: URL) {
+        guard let data = try? Data(contentsOf: url) else {
+            logger.error("Failed to read PDF data")
+            return
+        }
+        pdfData = data
+        pdfPageCount = RecipeOCRService.pageCount(fromPDFData: data)
+        multipleRecipes = false // default off so a single recipe spanning pages isn't split
+        selectedImage = RecipeOCRService.previewImage(fromPDFData: data)
+    }
+
+    /// Clears all PDF state (when an image source is chosen instead).
+    private func clearPDF() {
+        pdfData = nil
+        pdfPageCount = 0
+        multipleRecipes = false
+    }
+
+    /// Inserts the recipes parsed from a multi-recipe PDF split, then dismisses the import flow.
+    private func createRecipes(_ recipes: [Recipe]) {
+        guard !recipes.isEmpty else {
+            dismiss()
+            return
+        }
+        Task {
+            do {
+                try await database.write { db in
+                    for recipe in recipes {
+                        try Recipe.insert { recipe }.execute(db)
+                    }
+                }
+                logger.info("Created \(recipes.count) recipes from multi-recipe PDF")
+            } catch {
+                logger.error("Failed to create recipes from PDF: \(error.localizedDescription)")
+            }
+            dismiss()
         }
     }
     
