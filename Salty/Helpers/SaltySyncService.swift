@@ -916,18 +916,36 @@ class SaltySyncService {
     
     private func downloadRecipe(_ serverRecipe: ServerRecipe) async throws {
         let recipe = serverRecipe.toLocalRecipe()
-        
+
         logger.info("downloadRecipe called for '\(serverRecipe.name)' with categoryIds: \(serverRecipe.categoryIds ?? []), tagIds: \(serverRecipe.tagIds ?? [])")
-        
+
         try await database.write { db in
+            // The server has no FK on course_id, so it can serve a recipe whose course was deleted.
+            // Writing that dangling courseId would fail the local `courseId → course` FK, so null it on a
+            // local copy. (Courses sync before recipes, so a still-valid course is already present here.)
+            var toWrite = recipe
+            if let cid = toWrite.courseId,
+               try Int.fetchOne(db, sql: #"SELECT 1 FROM "course" WHERE "id" = ?"#, arguments: [cid]) == nil {
+                logger.warning("Recipe '\(toWrite.name)' references missing course \(cid); clearing it.")
+                toWrite.courseId = nil
+            }
+
             // Check if recipe already exists
-            let exists = try Recipe.where { $0.id.eq(recipe.id) }.fetchOne(db) != nil
-            
-            if exists {
-                try Recipe.update(recipe).execute(db)
+            let existing = try Recipe.where { $0.id.eq(recipe.id) }.fetchOne(db)
+
+            // Image state (filename, thumbnail, image timestamp) is owned ENTIRELY by the image-sync pass,
+            // never the body. Preserve the local image for an existing recipe so a text-only body update
+            // can't wipe it; leave a brand-new recipe imageless so the image pass sees the server image as
+            // newer and downloads its bytes.
+            toWrite.imageFilename = existing?.imageFilename
+            toWrite.imageThumbnailData = existing?.imageThumbnailData
+            toWrite.lastModifiedImageDate = existing?.lastModifiedImageDate
+
+            if existing != nil {
+                try Recipe.update(toWrite).execute(db)
                 logger.debug("Updated existing recipe: \(recipe.name)")
             } else {
-                try Recipe.insert { recipe }.execute(db)
+                try Recipe.insert { toWrite }.execute(db)
                 logger.debug("Inserted new recipe: \(recipe.name)")
             }
             
@@ -993,147 +1011,109 @@ class SaltySyncService {
     
     // MARK: - Image Sync
     
+    /// Independent image reconciliation, decoupled from the recipe-body sync and keyed on
+    /// `lastModifiedImageDate`. For each recipe the newer image side wins: push the local image (or its
+    /// removal) when local is newer, pull the server image (or apply its removal) when the server is newer.
+    /// With EQUAL image dates (incl. the legacy null==null state) an image is still propagated to whichever
+    /// side never received it, and a local image whose file went missing is recovered. Image BYTES move
+    /// only when the image actually changed — a text-only edit never re-transfers them.
     private func syncImages() async throws {
-        let localRecipes = try await database.read { db in
-            try Recipe.fetchAll(db)
-        }
-        
+        let manifest = try await fetchManifest()
+        let serverById = Dictionary(manifest.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+        let localRecipes = try await database.read { db in try Recipe.fetchAll(db) }
+        let localById = Dictionary(localRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+
         var imageErrors: [String] = []
-        var imagesAlreadyOnServer = 0
-        var totalImagesToSync = 0
-        var recipesWithImageFilename = 0
-        var recipesWithLoadableImage = 0
-        var recipesWithoutImage = 0
-        
-        logger.info("Image sync starting for \(localRecipes.count) recipes")
-        
-        for recipe in localRecipes {
-            // Upload local images that might not be on server
-            if let imageFilename = recipe.imageFilename {
-                recipesWithImageFilename += 1
-                
-                if let imageData = RecipeImageManager.shared.loadImage(filename: imageFilename) {
-                    recipesWithLoadableImage += 1
-                    totalImagesToSync += 1
-                    logger.debug("Recipe '\(recipe.name)': has image '\(imageFilename)' (\(imageData.count) bytes)")
-                    
-                    do {
-                        // URL-encode the filename for the check
-                        guard let encodedFilename = imageFilename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
-                            logger.warning("Could not URL-encode filename: \(imageFilename)")
-                            continue
-                        }
-                        
-                        // Check if image exists on server
-                        let imageExists = try await checkExists(endpoint: "/api/recipes/images/\(encodedFilename)")
-                        
-                        // Upload if: image doesn't exist on server, OR recipe was uploaded (local is newer)
-                        let recipeWasUploaded = syncProgress.uploadedRecipeIds.contains(recipe.id)
-                        
-                        if !imageExists {
-                            logger.debug("Uploading image for recipe: \(recipe.name) (not on server)")
-                            try await uploadImage(imageData, for: recipe.id)
-                            syncProgress.imagesUploaded += 1
-                            logger.info("Uploaded image for recipe: \(recipe.name)")
-                        } else if recipeWasUploaded {
-                            // Recipe was uploaded because local was newer - also update image
-                            logger.debug("Uploading image for recipe: \(recipe.name) (recipe was updated)")
-                            try await uploadImage(imageData, for: recipe.id)
-                            syncProgress.imagesUploaded += 1
-                            logger.info("Updated image for recipe: \(recipe.name)")
-                        } else {
-                            imagesAlreadyOnServer += 1
-                            logger.debug("Image already on server for recipe: \(recipe.name)")
-                        }
-                    } catch {
-                        // Log and continue instead of failing entire sync
-                        logger.error("Failed to upload image for recipe \(recipe.name): \(error.localizedDescription)")
-                        imageErrors.append(recipe.name)
+        logger.info("Image sync starting (\(manifest.count) server, \(localRecipes.count) local)")
+
+        for id in Set(serverById.keys).union(localById.keys) {
+            let server = serverById[id]
+            let local = localById[id]
+            let serverDate = (server?.lastModifiedImageDate ?? .distantPast).roundedToWireMillis
+            let localDate = (local?.lastModifiedImageDate ?? .distantPast).roundedToWireMillis
+            let serverFile = server?.imageFilename
+            let localFile = local?.imageFilename
+            do {
+                if localDate > serverDate {
+                    // Local image change wins → push it (or its removal) to the server.
+                    if let localFile, let data = RecipeImageManager.shared.loadImage(filename: localFile) {
+                        try await uploadImage(data, for: id, imageDate: local?.lastModifiedImageDate)
+                        syncProgress.imagesUploaded += 1
+                    } else if serverFile != nil {
+                        try await deleteServerImage(for: id, imageDate: local?.lastModifiedImageDate)
+                        syncProgress.imagesUploaded += 1
+                    }
+                } else if serverDate > localDate {
+                    // Server image change wins → pull it (or apply its removal) locally.
+                    if let serverFile {
+                        try await downloadImage(filename: serverFile, for: id, imageDate: server?.lastModifiedImageDate)
+                        syncProgress.imagesDownloaded += 1
+                    } else if localFile != nil {
+                        try await clearLocalImage(for: id, imageDate: server?.lastModifiedImageDate)
+                        syncProgress.imagesDownloaded += 1
                     }
                 } else {
-                    logger.warning("Recipe '\(recipe.name)': has imageFilename '\(imageFilename)' but file not found locally")
-                }
-            } else {
-                recipesWithoutImage += 1
-            }
-            
-            // Download server images if:
-            // 1. We don't have the file locally (no filename or file missing)
-            // 2. The recipe was downloaded (server was newer) - server image may be different
-            let recipeWasDownloaded = syncProgress.downloadedRecipeIds.contains(recipe.id)
-            let needsDownload: Bool
-            let downloadReason: String
-            
-            if recipeWasDownloaded {
-                // Recipe was downloaded (server was newer) - always get server's image
-                needsDownload = true
-                downloadReason = "recipe was updated from server"
-            } else if let imageFilename = recipe.imageFilename {
-                // Has filename but file doesn't exist locally - need to download
-                needsDownload = RecipeImageManager.shared.loadImage(filename: imageFilename) == nil
-                downloadReason = "file missing locally"
-            } else {
-                // No filename at all - check if server has one
-                needsDownload = true
-                downloadReason = "no local image"
-            }
-            
-            if needsDownload {
-                do {
-                    // Check if server has an image for this recipe
-                    if let serverImageFilename = try await fetchRecipeImageFilename(recipeId: recipe.id) {
-                        logger.debug("Server has image '\(serverImageFilename)' for recipe '\(recipe.name)' (\(downloadReason)), downloading...")
-                        try await downloadImage(filename: serverImageFilename, for: recipe.id)
+                    // Equal image dates: propagate an image the other side never received, or recover a local
+                    // image whose file is missing. (A removal stamps a fresh, unequal date — equality is never
+                    // a removal.)
+                    if let serverFile, localFile == nil {
+                        try await downloadImage(filename: serverFile, for: id, imageDate: server?.lastModifiedImageDate)
                         syncProgress.imagesDownloaded += 1
-                        logger.info("Downloaded image for recipe: \(recipe.name) (\(downloadReason))")
+                    } else if let localFile, serverFile == nil,
+                              let data = RecipeImageManager.shared.loadImage(filename: localFile) {
+                        try await uploadImage(data, for: id, imageDate: local?.lastModifiedImageDate)
+                        syncProgress.imagesUploaded += 1
+                    } else if let serverFile, let localFile,
+                              RecipeImageManager.shared.loadImage(filename: localFile) == nil {
+                        try await downloadImage(filename: serverFile, for: id, imageDate: server?.lastModifiedImageDate)
+                        syncProgress.imagesDownloaded += 1
                     }
-                } catch {
-                    logger.error("Failed to download image for recipe \(recipe.name): \(error.localizedDescription)")
-                    imageErrors.append(recipe.name)
                 }
+            } catch {
+                logger.error("Image sync failed for recipe \(id): \(error.localizedDescription)")
+                imageErrors.append(id)
             }
         }
-        
-        // Log detailed summary
-        logger.info("Image sync summary: \(recipesWithImageFilename) have imageFilename, \(recipesWithLoadableImage) loadable, \(recipesWithoutImage) without image")
-        logger.info("Image sync: \(self.syncProgress.imagesUploaded) uploaded, \(imagesAlreadyOnServer) already existed, \(imageErrors.count) failed, \(self.syncProgress.imagesDownloaded) downloaded")
-        
-        // Only throw if we have errors and made no progress at all
-        // (i.e., nothing uploaded, nothing downloaded, and nothing was already synced)
-        if !imageErrors.isEmpty {
-            if syncProgress.imagesUploaded == 0 && syncProgress.imagesDownloaded == 0 && imagesAlreadyOnServer == 0 {
-                throw SyncError.uploadFailed("Image sync failed for: \(imageErrors.joined(separator: ", "))")
-            } else {
-                // Some succeeded, just log a warning
-                logger.warning("Some images failed to sync: \(imageErrors.joined(separator: ", "))")
-            }
+
+        logger.info("Image sync: \(self.syncProgress.imagesUploaded) uploaded, \(self.syncProgress.imagesDownloaded) downloaded, \(imageErrors.count) failed")
+        if !imageErrors.isEmpty, syncProgress.imagesUploaded == 0, syncProgress.imagesDownloaded == 0 {
+            throw SyncError.uploadFailed("Image sync failed for: \(imageErrors.joined(separator: ", "))")
         }
     }
     
-    private func uploadImage(_ imageData: Data, for recipeId: String) async throws {
+    /// Uploads image bytes. [imageDate] (the recipe's lastModifiedImageDate) is sent as a form field and
+    /// stored verbatim server-side so this device never sees the server image as "newer" and re-downloads it.
+    private func uploadImage(_ imageData: Data, for recipeId: String, imageDate: Date?) async throws {
         // URL-encode the recipe ID
         guard let encodedRecipeId = recipeId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "\(serverUrl)/api/recipes/\(encodedRecipeId)/image") else {
             throw SyncError.uploadFailed("Invalid recipe ID for URL: \(recipeId)")
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         addAuthHeader(to: &request)
-        
+
         let boundary = UUID().uuidString
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
+
         // Prepare image data (converts HEIC to JPEG if needed)
         let prepared = prepareImageForUpload(imageData)
-        
+
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.\(prepared.extension)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: \(prepared.mimeType)\r\n\r\n".data(using: .utf8)!)
         body.append(prepared.data)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        
+        body.append("\r\n".data(using: .utf8)!)
+        if let imageDate {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"lastModifiedImageDate\"\r\n\r\n".data(using: .utf8)!)
+            body.append(Self.wireDateString(imageDate).data(using: .utf8)!)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
         request.httpBody = body
         
         let (responseData, response) = try await URLSession.shared.data(for: request)
@@ -1288,37 +1268,39 @@ class SaltySyncService {
         #endif
     }
     
-    private func downloadImage(filename: String, for recipeId: String) async throws {
+    /// Downloads image bytes and records the server's [imageDate] locally, so the next sync sees the local
+    /// and server image timestamps as equal and doesn't re-transfer.
+    private func downloadImage(filename: String, for recipeId: String, imageDate: Date?) async throws {
         let url = URL(string: "\(serverUrl)/api/recipes/images/\(filename)")!
         logger.debug("Downloading image from: \(url)")
-        
+
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
-        
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             logger.warning("No HTTP response for image download: \(filename)")
             return
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             logger.warning("Image download failed for '\(filename)': HTTP \(httpResponse.statusCode)")
             return
         }
-        
+
         logger.debug("Downloaded image '\(filename)': \(data.count) bytes")
-        
-        // Save image locally and update recipe
+
+        // Save image locally and update recipe (filename + thumbnail + image timestamp together).
         if let result = RecipeImageManager.shared.saveImage(data, for: recipeId) {
             logger.debug("Saved image as '\(result.filename)' with \(result.thumbnailData.count) byte thumbnail")
             try await database.write { db in
                 try db.execute(sql: """
-                    UPDATE recipe 
-                    SET imageFilename = ?, imageThumbnailData = ?
+                    UPDATE recipe
+                    SET imageFilename = ?, imageThumbnailData = ?, lastModifiedImageDate = ?
                     WHERE id = ?
                     """,
-                    arguments: [result.filename, result.thumbnailData, recipeId]
+                    arguments: [result.filename, result.thumbnailData, imageDate, recipeId]
                 )
             }
             logger.info("Updated recipe \(recipeId) with downloaded image")
@@ -1326,12 +1308,50 @@ class SaltySyncService {
             logger.error("Failed to save downloaded image for recipe \(recipeId)")
         }
     }
-    
-    private func fetchRecipeImageFilename(recipeId: String) async throws -> String? {
-        let serverRecipe = try? await fetchFromServer(ServerRecipe.self, endpoint: "/api/recipes/\(recipeId)")
-        return serverRecipe?.imageFilename
+
+    /// Removes the recipe's image on the server, sending the (client-authoritative) removal timestamp.
+    private func deleteServerImage(for recipeId: String, imageDate: Date?) async throws {
+        guard let encodedId = recipeId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            throw SyncError.uploadFailed("Invalid recipe ID for URL: \(recipeId)")
+        }
+        var components = URLComponents(string: "\(serverUrl)/api/recipes/\(encodedId)/image")
+        if let imageDate { components?.queryItems = [URLQueryItem(name: "lastModifiedImageDate", value: Self.wireDateString(imageDate))] }
+        guard let url = components?.url else { throw SyncError.uploadFailed("Invalid URL for image delete: \(recipeId)") }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        addAuthHeader(to: &request)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw SyncError.uploadFailed("Image delete failed for recipe \(recipeId)")
+        }
     }
-    
+
+    /// Clears the recipe's local image (file + filename + thumbnail) and records the server's removal
+    /// timestamp, applying a server-side image deletion locally.
+    private func clearLocalImage(for recipeId: String, imageDate: Date?) async throws {
+        let filename = try await database.read { db in
+            try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db)?.imageFilename
+        }
+        if let filename { RecipeImageManager.shared.deleteImage(filename: filename) }
+        try await database.write { db in
+            try db.execute(sql: """
+                UPDATE recipe
+                SET imageFilename = NULL, imageThumbnailData = NULL, lastModifiedImageDate = ?
+                WHERE id = ?
+                """,
+                arguments: [imageDate, recipeId]
+            )
+        }
+    }
+
+    /// The wire timestamp format the server expects (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`, milliseconds).
+    private static func wireDateString(_ date: Date) -> String {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return iso.string(from: date)
+    }
+
     // MARK: - Network Helpers
     
     private func fetchFromServer<T: Decodable>(_ type: T.Type, endpoint: String) async throws -> T {
@@ -1468,12 +1488,11 @@ class SaltySyncService {
     /// milliseconds, so the reconciler saw local as newer on every sync and re-uploaded forever. This
     /// is the inverse of the decode path in `fetchFromServerWithTotalCount`, which prefers `.SSS'Z'`.
     private func makeWireEncoder() -> JSONEncoder {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let style = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, enc in
             var container = enc.singleValueContainer()
-            try container.encode(iso.string(from: date))
+            try container.encode(date.formatted(style))
         }
         return encoder
     }
@@ -1639,6 +1658,9 @@ enum SyncError: LocalizedError {
 struct ServerRecipeManifestEntry: Codable {
     var id: String
     var lastModifiedDate: Date?
+    // Image filename + image timestamp let the client reconcile image transfer independently of the body.
+    var imageFilename: String?
+    var lastModifiedImageDate: Date?
 }
 
 struct ServerRecipe: Codable {
@@ -1653,6 +1675,7 @@ struct ServerRecipe: Codable {
     var difficulty: Int?
     var rating: Int?
     var imageFilename: String?
+    var lastModifiedImageDate: Date?
     var isFavorite: Bool?
     var wantToMake: Bool?
     var yield: String?
@@ -1675,7 +1698,7 @@ struct ServerRecipe: Codable {
     enum CodingKeys: String, CodingKey {
         case id, name, createdDate, lastModifiedDate, lastPrepared
         case source, sourceDetails, introduction
-        case difficulty, rating, imageFilename
+        case difficulty, rating, imageFilename, lastModifiedImageDate
         case isFavorite, wantToMake, yield, servings
         case courseId, course
         case directions, ingredients, notes, variations
@@ -1696,6 +1719,7 @@ struct ServerRecipe: Codable {
             difficulty: recipe.difficulty.rawValue,
             rating: recipe.rating.rawValue,
             imageFilename: recipe.imageFilename,
+            lastModifiedImageDate: recipe.lastModifiedImageDate,
             isFavorite: recipe.isFavorite,
             wantToMake: recipe.wantToMake,
             yield: recipe.yield,
@@ -1724,6 +1748,7 @@ struct ServerRecipe: Codable {
             rating: Rating(rawValue: rating ?? 0) ?? .notSet,
             imageFilename: imageFilename,
             imageThumbnailData: nil, // Will be set when image is downloaded
+            lastModifiedImageDate: lastModifiedImageDate,
             isFavorite: isFavorite ?? false,
             wantToMake: wantToMake ?? false,
             yield: yield ?? "",

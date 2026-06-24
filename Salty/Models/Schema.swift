@@ -35,6 +35,10 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable, TableRecord  {
     var rating: Rating = .notSet
     var imageFilename: String?
     var imageThumbnailData: Data?
+    // Bumped ONLY when the image changes (set/replaced/removed), independent of lastModifiedDate, so a
+    // text-only edit never re-transfers the image and an image-only edit never re-transfers the body.
+    // Owned by the image-sync pass; appended at the end of the table via a shared migration.
+    var lastModifiedImageDate: Date?
     var isFavorite: Bool = false
     var wantToMake: Bool = false
     var yield: String = ""
@@ -128,7 +132,7 @@ extension Recipe {
             if let result = RecipeImageManager.shared.saveImage(imageData, for: id) {
                 self.imageFilename = result.filename
                 self.imageThumbnailData = result.thumbnailData
-                self.lastModifiedDate = Date() // Ensure sync detects image changes
+                self.lastModifiedImageDate = Date() // Image-only change: bump the image date, NOT lastModifiedDate
             }
         } else {
             // Remove existing image
@@ -137,10 +141,10 @@ extension Recipe {
             }
             self.imageFilename = nil
             self.imageThumbnailData = nil
-            self.lastModifiedDate = Date() // Ensure sync detects image removal
+            self.lastModifiedImageDate = Date() // Image-only change (removal): bump the image date only
         }
     }
-    
+
     /// Removes the image and cleans up external storage
     mutating func removeImage() {
         if let filename = imageFilename {
@@ -148,14 +152,19 @@ extension Recipe {
         }
         self.imageFilename = nil
         self.imageThumbnailData = nil
-        self.lastModifiedDate = Date() // Ensure sync detects image removal
+        self.lastModifiedImageDate = Date() // Image-only change (removal): bump the image date only
     }
     
     /// Bumps lastModifiedDate so sync propagates changes to recipe relationships or metadata.
+    /// Updates ONLY the timestamp column — a full-row `Recipe.update` would re-write `courseId`, which
+    /// fails the `courseId → course` FK if that recipe carries a dangling course reference (introduced
+    /// by the FK-less server or a peer app that didn't enforce the constraint). GRDB stores Date in the
+    /// same "yyyy-MM-dd HH:mm:ss.SSS" UTC format as the rest of the schema.
     static func touchLastModified(recipeId: String, in db: Database) throws {
-        guard var recipe = try Recipe.where({ $0.id.eq(recipeId) }).fetchOne(db) else { return }
-        recipe.lastModifiedDate = Date()
-        try Recipe.update(recipe).execute(db)
+        try db.execute(
+            sql: #"UPDATE "recipe" SET "lastModifiedDate" = ? WHERE "id" = ?"#,
+            arguments: [Date(), recipeId],
+        )
     }
     
     static func touchLastModified(recipeIds: some Sequence<String>, in db: Database) throws {
@@ -471,6 +480,12 @@ func appDatabase() throws -> any DatabaseWriter {
         logger.info("open \(path)")
         database = try DatabasePool(path: path, configuration: configuration)
     }
+    // These GRDB migrations coordinate the BASE tables across both apps. SaltyKMP mirrors their
+    // identifiers in `GRDB_MIGRATIONS` (shared/.../db/Database.kt) and seeds them into `grdb_migrations`
+    // on a KMP-created DB so this migrator skips them. If you add a new base migration ("0005…") here,
+    // add the SAME identifier to KMP's `GRDB_MIGRATIONS`. For changes BOTH apps need on EXISTING shared
+    // tables, prefer the `saltyMigration` ledger (`saltySharedMigrations` below) instead of a new GRDB
+    // migration, so KMP applies it too.
     var migrator = DatabaseMigrator()
 #if DEBUG
     migrator.eraseDatabaseOnSchemaChange = false
@@ -620,6 +635,12 @@ func appDatabase() throws -> any DatabaseWriter {
     logger.info("Starting database migration...")
     try migrator.migrate(database)
     logger.info("Database migration completed successfully")
+
+    // Cross-platform shared migrations. GRDB's migrator (grdb_migrations) and SaltyKMP's SQLDelight
+    // migrator (PRAGMA user_version) only coordinate the BASE tables; for any later change BOTH apps
+    // need on the shared saltyRecipeDB.sqlite, the `saltyMigration` ledger is the single source of truth
+    // so it runs exactly once, whoever opens the file first. Mirror of SaltyKMP's applySharedMigrations.
+    try runSaltySharedMigrations(database)
     
 #if DEBUG
     if context == .preview {
@@ -630,6 +651,85 @@ func appDatabase() throws -> any DatabaseWriter {
 #endif
     
     return database
+}
+
+// MARK: - Cross-platform shared migrations (the `saltyMigration` ledger)
+
+/// A schema/data change that BOTH the Salty (GRDB) app and the SaltyKMP app must apply to a shared
+/// `saltyRecipeDB.sqlite`. Coordinated via the `saltyMigration` table — NOT GRDB's `grdb_migrations` —
+/// so it runs once per DB regardless of which app opens it first.
+///
+/// Keep this list in lockstep with SaltyKMP's `SHARED_MIGRATIONS`
+/// (shared/src/commonMain/kotlin/com/inuvro/saltykmp/db/Database.kt), using the SAME `id` for a shared
+/// change. Namespace platform-only steps ("swift:…" / "kmp:…") so the other side never references them.
+/// Use `ADD COLUMN` and append columns at the end of the table (so the other platform's `SELECT *` keeps
+/// working); the ledger provides run-once, so the SQL itself needn't be idempotent.
+struct SaltySharedMigration: Sendable {
+    let id: String
+    let apply: @Sendable (GRDB.Database) throws -> Void
+}
+
+/// The shared migration list — EMPTY today, matching SaltyKMP. Append future cross-app changes here AND
+/// in SaltyKMP's `SHARED_MIGRATIONS` with the identical `id`. Example:
+///
+///     SaltySharedMigration(id: "2026-07-recipe-add-prepNotes") { db in
+///         try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "prepNotes" TEXT"#)
+///     }
+///
+/// Do NOT coordinate a shared-table change by adding a new GRDB `migrator.registerMigration("0005…")` —
+/// that path only coordinates the BASE tables (0001–0004), and KMP wouldn't apply it. Shared changes go
+/// through this ledger on BOTH apps.
+let saltySharedMigrations: [SaltySharedMigration] = [
+    // Decouples image transfer from recipe-body sync. Guard on column existence so this is safe whether the
+    // column is already present (a KMP-created DB whose Schema.sq has it) or not (an older GRDB DB). Mirror:
+    // SaltyKMP's SHARED_MIGRATIONS with the SAME id.
+    SaltySharedMigration(id: "2026-06-recipe-add-lastModifiedImageDate") { db in
+        let exists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('recipe') WHERE name = 'lastModifiedImageDate'"
+        ) ?? 0 > 0
+        if !exists {
+            try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "lastModifiedImageDate" DATETIME"#)
+        }
+    }
+]
+
+/// Applies any shared migrations not yet recorded in `saltyMigration`, then records them (platform
+/// `swift`). Idempotent and cheap, so it runs on every launch — catching migrations added after a DB
+/// already existed and ones the KMP app recorded but this app hasn't seen. `migrations` is injectable
+/// for tests.
+func runSaltySharedMigrations(
+    _ writer: any DatabaseWriter,
+    _ migrations: [SaltySharedMigration] = saltySharedMigrations
+) throws {
+    let appliedDate: String = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
+    }()
+    try writer.write { db in
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS "saltyMigration" (
+                "identifier" TEXT NOT NULL PRIMARY KEY,
+                "platform" TEXT,
+                "appliedDate" TEXT NOT NULL
+            )
+            """)
+        for migration in migrations {
+            let alreadyApplied = try Int.fetchOne(
+                db,
+                sql: #"SELECT 1 FROM "saltyMigration" WHERE "identifier" = ?"#,
+                arguments: [migration.id]
+            ) != nil
+            if alreadyApplied { continue }
+            logger.info("Running shared migration: \(migration.id)")
+            try migration.apply(db)
+            try db.execute(
+                sql: #"INSERT OR IGNORE INTO "saltyMigration" ("identifier", "platform", "appliedDate") VALUES (?, 'swift', ?)"#,
+                arguments: [migration.id, appliedDate]
+            )
+        }
+    }
 }
 
 
