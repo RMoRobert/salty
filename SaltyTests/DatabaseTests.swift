@@ -430,4 +430,47 @@ struct DatabaseIntegrationTests {
             #expect(ids == ["r2", "r1"])
         }
     }
+
+    // MARK: - List projection (RecipeListItem)
+
+    @Suite struct Projection {
+
+        /// The SELECT projects the RecipeListItem columns positionally — its decoder reads columns by
+        /// position, so this exact column order (and count) is the decode contract. A mismatch would
+        /// silently load the wrong field into each property at runtime, which compilation can't catch.
+        /// (We can't decode RecipeListItem itself here — StructuredQueries' generated witnesses crash
+        /// from the test bundle — so we assert the generated SQL's column shape instead.)
+        @Test func projectionSelectsListItemColumnsInPositionalOrder() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(
+                    sql: "INSERT INTO recipe (id, name, source, sourceDetails, introduction, rating, isFavorite) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    arguments: ["r1", "Soup", "Grandma", "p. 12", "Cozy and warm", 4, true]
+                )
+            }
+            let (sqlText, _) = RecipeListQueryBuilder.fragment(
+                scope: .all, searchPattern: nil, options: [],
+                includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+            ).prepare { _ in "?" }
+
+            let row = try db.read { db in try Row.fetchOne(db, sql: sqlText) }
+            #expect(row != nil)
+
+            // Column order MUST match RecipeListItem's stored-property declaration order.
+            let columnNames = row.map { $0.map { name, _ in name } } ?? []
+            #expect(columnNames == [
+                "id", "name", "source", "sourceDetails", "introduction",
+                "createdDate", "lastModifiedDate", "rating", "isFavorite", "imageThumbnailData",
+            ])
+
+            // Spot-check that each named column carries its own value (not a neighbor's).
+            #expect(row?["id"] == "r1")
+            #expect(row?["name"] == "Soup")
+            #expect(row?["source"] == "Grandma")
+            #expect(row?["sourceDetails"] == "p. 12")
+            #expect(row?["introduction"] == "Cozy and warm")
+            #expect(row?["rating"] == 4)
+            #expect(row?["isFavorite"] == true)
+        }
+    }
 }

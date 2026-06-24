@@ -445,8 +445,13 @@ struct RecipeNavigationSplitView: View {
                         }) {
                             Label("Export as HTML…", systemImage: "text.page")
                         }
+                        Button(action: {
+                            viewModel.exportSelectedRecipesAsJSONLD()
+                        }) {
+                            Label("Export as JSON-LD (Schema.org)…", systemImage: "curlybraces")
+                        }
                         if let recipeId = viewModel.selectedRecipeIDs.first,
-                           let recipe = viewModel.recipes.first(where: { $0.id == recipeId }),
+                           let recipe = viewModel.fullRecipe(id: recipeId),
                            let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
                             // Would like this to work with plain text fallback, but can't get to...
                             // ShareLink(item: shareableRecipe,
@@ -569,7 +574,7 @@ struct RecipeNavigationSplitView: View {
             .searchable(text: $viewModel.searchString)
         } detail: {
             if let recipeId = viewModel.selectedRecipeIDs.first,
-                let recipe = viewModel.recipes.first(where: { $0.id == recipeId }) {
+                let recipe = viewModel.fullRecipe(id: recipeId) {
                 Group {
                     if useWebRecipeDetailView {
                         RecipeDetailWebView(recipe: recipe)
@@ -752,7 +757,7 @@ struct RecipeNavigationSplitView: View {
     }
     
     @ViewBuilder
-    private func contextMenuForSingleRecipe(_ recipe: Recipe) -> some View {
+    private func contextMenuForSingleRecipe(_ recipe: RecipeListItem) -> some View {
         Button("Open Recipe in New Window", systemImage: "macwindow") {
             openRecipeInNewWindow(recipeId: recipe.id)
         }
@@ -768,6 +773,9 @@ struct RecipeNavigationSplitView: View {
             Button("Export as HTML…") {
                 viewModel.showHTMLExportSettingsForRecipe(recipe.id)
             }
+            Button("Export as JSON-LD (Schema.org)…") {
+                viewModel.exportRecipeAsJSONLD(recipe.id)
+            }
         }
         Button(role: .destructive, action: {
             Task { await viewModel.deleteRecipe(id: recipe.id) }
@@ -780,7 +788,7 @@ struct RecipeNavigationSplitView: View {
             recipeIDForInspector = recipe.id
         }
     }
-    
+
     @ViewBuilder
     private func contextMenuForMultipleRecipes() -> some View {
         Button("Open Recipes in New Windows", systemImage: "macwindow") {
@@ -794,6 +802,9 @@ struct RecipeNavigationSplitView: View {
             Button("Export as HTML…") {
                 viewModel.showHTMLExportSettings()
             }
+            Button("Export as JSON-LD (Schema.org)…") {
+                viewModel.exportSelectedRecipesAsJSONLD()
+            }
         }
         Button(role: .destructive, action: {
             showingDeleteConfirmation = true
@@ -805,7 +816,7 @@ struct RecipeNavigationSplitView: View {
     #endif
     
     @ViewBuilder
-    private func contextMenuForRecipe(_ recipe: Recipe) -> some View {
+    private func contextMenuForRecipe(_ recipe: RecipeListItem) -> some View {
         Button("Edit", systemImage: "pencil") {
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true
@@ -825,6 +836,13 @@ struct RecipeNavigationSplitView: View {
                     viewModel.showHTMLExportSettingsForRecipe(recipe.id)
                 }
             }
+            Button("Export as JSON-LD (Schema.org)…") {
+                if viewModel.selectedRecipeIDs.count > 1 {
+                    viewModel.exportSelectedRecipesAsJSONLD()
+                } else {
+                    viewModel.exportRecipeAsJSONLD(recipe.id)
+                }
+            }
             #if !os(macOS)
                 // Putting here (iOS only) since can't seem to get to show on share sheet, but could be addressed in future:
                 Button(action: {
@@ -837,7 +855,8 @@ struct RecipeNavigationSplitView: View {
         #if !os(macOS)
         // Is in toolbar on macOS, but keep in context menu on iOS:
         Group {
-            if let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+            if let fullRecipe = viewModel.fullRecipe(id: recipe.id),
+               let shareableRecipe = viewModel.shareableRecipe(for: fullRecipe) {
                 ShareLink(item: shareableRecipe,
                           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
                           message: Text(shareableRecipe.plainTextRepresentation),
@@ -873,7 +892,7 @@ struct RecipeNavigationSplitView: View {
 // MARK: - Export Document
 
 struct ExportDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.saltyRecipe, .html] }
+    static var readableContentTypes: [UTType] { [.saltyRecipe, .html, .json] }
     
     var data: Data
     var suggestedName: String
@@ -900,7 +919,7 @@ struct ExportDocument: FileDocument {
 // MARK: - Inspector View
 
 private struct RecipeInfoInspectorView: View {
-    let recipe: Recipe
+    let recipe: RecipeListItem
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(recipe.name)

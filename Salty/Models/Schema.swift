@@ -174,21 +174,45 @@ extension Recipe {
     }
 }
 
-// TODO: Consider using something like this when presenting List view on main screen, as lack of lazy loading might mean we're fetching too much to start...
-// struct RecipeSummary: Identifiable, Hashable, Equatable {
-//     let id: String
-//     let name: String
-//     let createdDate: Date
-//     let lastModifiedDate: Date
-//     let lastPrepared: Date?
-//     let source: String
-//     let sourceDetails: String
-//     let introduction: String
-//     let difficulty: Difficulty
-//     let rating: Rating
-//     let imageThumbnailData: Data?
-//     let isFavorite: Bool
-// }
+/// Lightweight projection of `recipe` for the main list. Rows render only name/summary/rating/favorite/
+/// thumbnail (plus created/modified dates in the info popover), so fetching this instead of a full
+/// `Recipe` avoids decoding the ingredients/directions/notes/variations/preparationTimes/nutrition JSON
+/// blobs for every row. Full rows are fetched on demand (detail view, edit, export, print, share) via
+/// `RecipeNavigationSplitViewModel.fullRecipe(id:)`.
+///
+/// IMPORTANT: the SELECT column order in `RecipeListQueryBuilder` must match the stored-property order
+/// below — the raw-SQL decoder reads columns positionally. `lastModifiedDate` and `imageThumbnailData`
+/// are included so that any edit (body edits bump `lastModifiedDate`; image edits change the thumbnail)
+/// changes this projection and therefore refreshes the observing list/detail.
+@Selection
+struct RecipeListItem: Identifiable, Hashable, Equatable {
+    let id: String
+    let name: String
+    let source: String
+    let sourceDetails: String
+    let introduction: String
+    let createdDate: Date
+    let lastModifiedDate: Date
+    let rating: Rating
+    let isFavorite: Bool
+    let imageThumbnailData: Data?
+}
+
+extension RecipeListItem {
+    /// Mirrors `Recipe.summary` — the best available one-line subtitle.
+    var summary: String {
+        introduction != "" ? introduction : (source != "" ? source : (sourceDetails != "" ? sourceDetails : ""))
+    }
+
+    /// Project an in-memory `Recipe` (used for previews and the preview view model).
+    init(recipe r: Recipe) {
+        self.init(
+            id: r.id, name: r.name, source: r.source, sourceDetails: r.sourceDetails,
+            introduction: r.introduction, createdDate: r.createdDate, lastModifiedDate: r.lastModifiedDate,
+            rating: r.rating, isFavorite: r.isFavorite, imageThumbnailData: r.imageThumbnailData
+        )
+    }
+}
 
 
 struct Note: Codable, Hashable, Equatable, Identifiable {

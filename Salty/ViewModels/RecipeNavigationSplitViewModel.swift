@@ -105,11 +105,17 @@ class RecipeNavigationSplitViewModel {
     private var database
     
     // MARK: - Data (using SQLiteData property wrappers)
+    // The list holds a lightweight projection (see RecipeListItem); full rows are fetched on demand via
+    // fullRecipe(id:). An explicit initial statement is supplied so the query is valid before the view's
+    // .task calls updateRecipesQuery() (a no-arg @FetchAll would default to a non-existent table).
     @ObservationIgnored
-//    @FetchAll(#sql("SELECT \(Recipe.columns) FROM \(Recipe.self) ORDER BY \(Recipe.name) COLLATE NOCASE"))
-//    var recipes: [Recipe]
-    @FetchAll
-    var recipes: [Recipe]
+    @FetchAll(
+        RecipeListQueryBuilder.statement(
+            scope: .all, searchPattern: nil, options: [],
+            includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+        )
+    )
+    var recipes: [RecipeListItem]
     
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
@@ -173,55 +179,14 @@ class RecipeNavigationSplitViewModel {
     // var printHTML: String?
     
 
-//    // TODO: Do more of this in database and not filtering afterwards
-//    // Consider also using "@Select" instead of retrieving entire recipe data for preview only
-//    var filteredRecipes: [Recipe] {
-//        var recipesToFilter: [Recipe]
-//        
-//        if selectedSidebarItemId == allRecipesID {
-//            recipesToFilter = recipes
-//        } else if let categoryId = selectedSidebarItemId,
-//                  let category = categories.first(where: { $0.id == categoryId }) {
-//            // Filter recipes for the selected category
-//            do {
-//                let recipeIds = try database.read { db in
-//                    try RecipeCategory
-//                        .where { $0.categoryId.eq(category.id) }
-//                        .fetchAll(db)
-//                        .map { $0.recipeId }
-//                }
-//                
-//                recipesToFilter = recipes.filter { recipe in
-//                    recipeIds.contains(recipe.id)
-//                }
-//            } catch {
-//                recipesToFilter = []
-//            }
-//        } else {
-//            recipesToFilter = []
-//        }
-//        
-//        // Apply search filter if search string is not empty
-//        if !searchString.isEmpty {
-//            let normalizedSearch = searchString
-//                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-//                .trimmingCharacters(in: .whitespacesAndNewlines)
-//            
-//            recipesToFilter = recipesToFilter.filter { recipe in
-//                let normalizedName = recipe.name
-//                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-//                
-//                return normalizedName.contains(normalizedSearch)
-//            }
-//        }
-//        
-//        if isFavoritesFilterActive == true {
-//            recipesToFilter = recipesToFilter.filter(\.self.isFavorite)
-//        }
-//        
-//        return recipesToFilter
-//    }
-    
+    // Sidebar scope, search, favorites, and sort are all applied in SQL via `updateRecipesQuery()`
+    // (see RecipeListQueryBuilder) — no in-memory filtering remains.
+    //
+    // Remaining optimization: the list still loads full Recipe rows, decoding the
+    // ingredients/directions/notes/variations/preparationTimes/nutrition JSON blobs the rows never
+    // display. Fetching a lightweight projection instead (id/name/summary/rating/favorite/thumbnail)
+    // would cut that — see the RecipeSummary stub in Schema.swift.
+
     var navigationTitle: String {
         if selectedSidebarItemId == allRecipesID {
             return "Recipes"
@@ -385,25 +350,30 @@ class RecipeNavigationSplitViewModel {
     func recipeToEdit(recipeId: String?) -> Recipe? {
         guard let recipeId = recipeId else { return nil }
         
-        // Check if this is a draft recipe first
-        if let draftRecipe = draftRecipe, draftRecipe.id == recipeId {
+        return fullRecipe(id: recipeId)
+    }
+
+    /// Resolves the full `Recipe` for an id. The list now holds lightweight `RecipeListItem` projections,
+    /// so every caller that needs full recipe data (detail view, edit, export, print, share) goes through
+    /// here: the in-progress draft first, then a single-row read from the database.
+    func fullRecipe(id recipeId: String) -> Recipe? {
+        if let draftRecipe, draftRecipe.id == recipeId {
             return draftRecipe
         }
-        
-        // First try to find in the current filtered recipes list
-        if let recipe = recipes.first(where: { $0.id == recipeId }) {
-            return recipe
-        }
-        
-        // If not found in filtered list (e.g., category removed when selected and Edit view open), fetch directly from database
         do {
             return try database.read { db in
                 try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db)
             }
         } catch {
-            logger.error("Error fetching recipe for edit: \(error)")
+            logger.error("Error fetching full recipe \(recipeId): \(error)")
             return nil
         }
+    }
+
+    /// Resolves full `Recipe`s for the given ids (preserving order), skipping any that can't be found.
+    /// Used by multi-selection export/print.
+    func fullRecipes(ids: [String]) -> [Recipe] {
+        ids.compactMap { fullRecipe(id: $0) }
     }
     
     func clearDraftRecipe() {
@@ -434,14 +404,14 @@ class RecipeNavigationSplitViewModel {
     func exportRecipe(_ recipeId: String) {
         Task {
             do {
-                guard let recipe = recipes.first(where: { $0.id == recipeId }) else {
+                guard let recipe = fullRecipe(id: recipeId) else {
                     await MainActor.run {
                         exportErrorMessage = "Recipe not found"
                         showingExportErrorAlert = true
                     }
                     return
                 }
-                
+
                 let exportRecipe = try SaltyRecipeExport.fromRecipe(recipe, database: database)
                 let jsonData = try exportRecipe.toJSONData()
                 
@@ -477,8 +447,10 @@ class RecipeNavigationSplitViewModel {
     func exportSelectedRecipes() {
         Task {
             do {
-                let recipesToExport = recipes.filter { selectedRecipeIDs.contains($0.id) }
-                
+                // Preserve the displayed order via the projection's ids, then fetch full rows.
+                let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
+                let recipesToExport = fullRecipes(ids: orderedIds)
+
                 if recipesToExport.isEmpty {
                     await MainActor.run {
                         exportErrorMessage = "No recipes selected for export"
@@ -486,7 +458,7 @@ class RecipeNavigationSplitViewModel {
                     }
                     return
                 }
-                
+
                 let exportRecipes = try recipesToExport.map { recipe in
                     try SaltyRecipeExport.fromRecipe(recipe, database: database)
                 }
@@ -513,30 +485,112 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    // MARK: - Schema.org JSON-LD export
+
+    /// Exports a single recipe as schema.org/Recipe JSON-LD.
+    func exportRecipeAsJSONLD(_ recipeId: String) {
+        Task {
+            do {
+                guard let recipe = fullRecipe(id: recipeId) else {
+                    await MainActor.run {
+                        exportErrorMessage = "Recipe not found"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+                let data = try SchemaOrgRecipeJSONLDExporter().data(for: recipe, metadata: jsonLDMetadata(for: recipe))
+                await MainActor.run {
+                    exportData = data
+                    exportContentType = .json
+                    exportFileName = "\(recipe.name).json"
+                    showingExportSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingExportErrorAlert = true
+                }
+            }
+        }
+    }
+
+    /// Exports the selected recipes as schema.org/Recipe JSON-LD (one object, or an array if several).
+    func exportSelectedRecipesAsJSONLD() {
+        Task {
+            do {
+                let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
+                let recipesToExport = fullRecipes(ids: orderedIds)
+
+                guard !recipesToExport.isEmpty else {
+                    await MainActor.run {
+                        exportErrorMessage = "No recipes selected for export"
+                        showingExportErrorAlert = true
+                    }
+                    return
+                }
+
+                let items = recipesToExport.map { (recipe: $0, metadata: jsonLDMetadata(for: $0)) }
+                let data = try SchemaOrgRecipeJSONLDExporter().data(for: items)
+                await MainActor.run {
+                    exportData = data
+                    exportContentType = .json
+                    let count = recipesToExport.count
+                    exportFileName = count == 1 ? "\(recipesToExport.first!.name).json" : "\(count)_recipes.json"
+                    showingExportSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingExportErrorAlert = true
+                }
+            }
+        }
+    }
+
+    /// Resolves the course / category / tag names for a recipe (best-effort — returns empty metadata on
+    /// error so the export still proceeds without them).
+    private func jsonLDMetadata(for recipe: Recipe) -> SchemaOrgRecipeJSONLDExporter.LibraryMetadata {
+        do {
+            return try database.read { db in
+                let courseName = try recipe.courseId.flatMap { courseId in
+                    try Course.where { $0.id.eq(courseId) }.fetchOne(db)?.name
+                }
+                let categoryIds = try RecipeCategory.where { $0.recipeId.eq(recipe.id) }.fetchAll(db).map(\.categoryId)
+                let categoryNames = try Category.where { categoryIds.contains($0.id) }.fetchAll(db)
+                    .map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                let tagIds = try RecipeTag.where { $0.recipeId.eq(recipe.id) }.fetchAll(db).map(\.tagId)
+                let tagNames = try Tag.where { tagIds.contains($0.id) }.fetchAll(db)
+                    .map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                return .init(courseName: courseName, categoryNames: categoryNames, tagNames: tagNames)
+            }
+        } catch {
+            logger.error("Error resolving library metadata for JSON-LD export: \(error)")
+            return .init()
+        }
+    }
+
     /// Shows HTML export settings for a single recipe
     /// - Parameter recipeId: The ID of the recipe to export
     func showHTMLExportSettingsForRecipe(_ recipeId: String) {
-        guard recipes.first(where: { $0.id == recipeId }) != nil else {
+        guard recipes.contains(where: { $0.id == recipeId }) else {
             exportErrorMessage = "Recipe not found"
             showingExportErrorAlert = true
             return
         }
-        
+
         htmlExportRecipeId = recipeId
         showingHTMLExportSettings = true
         htmlExportOptions = HTMLExportOptions() // Reset to defaults
     }
-    
+
     /// Shows HTML export settings for selected recipes
     func showHTMLExportSettings() {
-        let recipesToExport = recipes.filter { selectedRecipeIDs.contains($0.id) }
-        
-        if recipesToExport.isEmpty {
+        if selectedRecipeIDs.isEmpty {
             exportErrorMessage = "No recipes selected for export"
             showingExportErrorAlert = true
             return
         }
-        
+
         htmlExportRecipeId = nil // Clear single recipe ID when exporting multiple
         showingHTMLExportSettings = true
         htmlExportOptions = HTMLExportOptions() // Reset to defaults
@@ -549,7 +603,7 @@ class RecipeNavigationSplitViewModel {
                 let recipesToExport: [Recipe]
                 if let recipeId = htmlExportRecipeId {
                     // Single recipe export from detail view
-                    guard let recipe = recipes.first(where: { $0.id == recipeId }) else {
+                    guard let recipe = fullRecipe(id: recipeId) else {
                         await MainActor.run {
                             exportErrorMessage = "Recipe not found"
                             showingExportErrorAlert = true
@@ -558,9 +612,10 @@ class RecipeNavigationSplitViewModel {
                     }
                     recipesToExport = [recipe]
                 } else {
-                    // Multiple recipes from list view
-                    recipesToExport = recipes.filter { selectedRecipeIDs.contains($0.id) }
-                    
+                    // Multiple recipes from list view (preserve displayed order via projection ids)
+                    let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
+                    recipesToExport = fullRecipes(ids: orderedIds)
+
                     if recipesToExport.isEmpty {
                         await MainActor.run {
                             exportErrorMessage = "No recipes selected for export"
@@ -628,34 +683,33 @@ class RecipeNavigationSplitViewModel {
     /// Prints the selected recipe(s)
     func printSelectedRecipes() {
         logger.info("printSelectedRecipes called, selectedRecipeIDs: \(self.selectedRecipeIDs)")
-        let recipesToPrint = recipes.filter { selectedRecipeIDs.contains($0.id) }
-        
-        logger.info("Found \(recipesToPrint.count) recipes to print")
-        
-        if recipesToPrint.isEmpty {
+        let idsToPrint = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
+
+        logger.info("Found \(idsToPrint.count) recipes to print")
+
+        guard let firstId = idsToPrint.first else {
             logger.warning("No recipes selected for printing")
             exportErrorMessage = "No recipes selected for printing"
             showingExportErrorAlert = true
             return
         }
-        
+
         // For now, print only the first selected recipe
         // TODO: Support printing multiple recipes
-        let recipe = recipesToPrint.first!
-        printRecipe(by: recipe.id)
+        printRecipe(by: firstId)
     }
     
     /// Prints a recipe by its ID
     func printRecipe(by recipeId: String) {
         logger.info("printRecipe called for recipe ID: \(recipeId)")
         
-        guard let recipe = recipes.first(where: { $0.id == recipeId }) else {
+        guard let recipe = fullRecipe(id: recipeId) else {
             logger.warning("Recipe not found for ID: \(recipeId)")
             exportErrorMessage = "Recipe not found"
             showingExportErrorAlert = true
             return
         }
-        
+
         logger.info("Printing recipe: \(recipe.name)")
         // Print with the user's selected recipe theme (matches the web detail view).
         let theme = RecipeHtmlTheme(rawValue: UserDefaults.standard.string(forKey: "recipeHtmlTheme") ?? "") ?? .modern
@@ -1015,7 +1069,7 @@ class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
     private let previewTags: [Tag]
     
     // MARK: - Override @FetchAll properties for preview
-    override var recipes: [Recipe] { previewRecipes }
+    override var recipes: [RecipeListItem] { previewRecipes.map { RecipeListItem(recipe: $0) } }
     override var categories: [Category] { previewCategories }
     override var courses: [Course] { previewCourses }
     override var tags: [Tag] { previewTags }
@@ -1030,6 +1084,12 @@ class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
     }
     
     // MARK: - Override database-dependent methods
+
+    /// Resolve full recipes from in-memory preview data instead of the database.
+    override func fullRecipe(id recipeId: String) -> Recipe? {
+        previewRecipes.first { $0.id == recipeId }
+    }
+
     override func addNewRecipe() {
         // No-op for preview
     }

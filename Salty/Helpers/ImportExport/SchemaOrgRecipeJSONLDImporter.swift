@@ -18,7 +18,9 @@ import Foundation
 import SwiftSoup
 import OSLog
 
-// TODO: Create exporter ; add this file type to importable types as well!
+// The inverse (Recipe -> JSON-LD) lives in SchemaOrgRecipeJSONLDExporter.
+// TODO: Also accept raw .json/.jsonld files as an importable type (this class currently ingests JSON-LD
+// only via HTML/URL; parseJSONLD(_:) already handles bare JSON-LD data if wired to a file importer).
 
 class SchemaOrgRecipeJSONLDImporter {
     private let logger = Logger(subsystem: "Salty", category: "App")
@@ -487,15 +489,13 @@ class SchemaOrgRecipeJSONLDImporter {
     }
     
     private func parseNutritionValue(_ value: String) -> Double? {
-        // Extract numeric value from strings like "240 calories", "9g", "300mg"
-        let cleanValue = value.replacingOccurrences(of: " calories", with: "")
-                             .replacingOccurrences(of: "g", with: "")
-                             .replacingOccurrences(of: "mg", with: "")
-                             .replacingOccurrences(of: "mcg", with: "")
-                             .replacingOccurrences(of: "µg", with: "")
-                             .trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        return Double(cleanValue)
+        // Pull the leading numeric value out of strings like "240 calories", "9g", "300 mg", "1.5 g".
+        // (Extracting the number is unit-agnostic; the previous approach stripped "g" before "mg"/"µg",
+        // which mangled "300 mg" into "300 m" and lost every milligram/microgram value.)
+        guard let range = value.range(of: #"[-+]?\d*\.?\d+"#, options: .regularExpression) else {
+            return nil
+        }
+        return Double(value[range])
     }
     
     // MARK: - Utility methods

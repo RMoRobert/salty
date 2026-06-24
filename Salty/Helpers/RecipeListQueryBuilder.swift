@@ -28,6 +28,7 @@ enum RecipeListScope: Equatable {
 enum RecipeListQueryBuilder {
 
     /// The full `SELECT … FROM recipe [WHERE …] ORDER BY …` statement, ready for `$recipes.load`.
+    /// Selects the lightweight `RecipeListItem` projection rather than full recipe rows.
     static func statement(
         scope: RecipeListScope,
         searchPattern: String?,
@@ -35,7 +36,7 @@ enum RecipeListQueryBuilder {
         includeFavorites: Bool,
         sortOrder: RecipeListSortOrderSetting,
         sortDirection: RecipeListSortDirection
-    ) -> SQLQueryExpression<Recipe> {
+    ) -> SQLQueryExpression<RecipeListItem> {
         SQLQueryExpression(
             fragment(
                 scope: scope,
@@ -45,7 +46,7 @@ enum RecipeListQueryBuilder {
                 sortOrder: sortOrder,
                 sortDirection: sortDirection
             ),
-            as: Recipe.self
+            as: RecipeListItem.self
         )
     }
 
@@ -70,7 +71,9 @@ enum RecipeListQueryBuilder {
             conditions.append("\(Recipe.isFavorite) = \(bind: true)")
         }
 
-        var sql: QueryFragment = "SELECT \(Recipe.columns) FROM \(Recipe.self)"
+        // Lightweight projection. The column order here MUST match RecipeListItem's stored-property
+        // order — the raw-SQL decoder reads columns positionally.
+        var sql: QueryFragment = "SELECT \(Recipe.id), \(Recipe.name), \(Recipe.source), \(Recipe.sourceDetails), \(Recipe.introduction), \(Recipe.createdDate), \(Recipe.lastModifiedDate), \(Recipe.rating), \(Recipe.isFavorite), \(Recipe.imageThumbnailData) FROM \(Recipe.self)"
         if !conditions.isEmpty {
             sql = "\(sql) WHERE \(conditions.joined(separator: " AND "))"
         }

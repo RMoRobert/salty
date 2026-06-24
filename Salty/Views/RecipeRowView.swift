@@ -21,7 +21,7 @@ func createXPImage(_ value: Data) -> Image {
 
 struct RecipeRowView: View {
     @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
-    let recipe: Recipe
+    let recipe: RecipeListItem
     private var hasBottomRowData: Bool {
         recipe.rating != .notSet
     }
@@ -134,5 +134,5 @@ struct RecipeRowView: View {
 
 
 #Preview {
-    RecipeRowView(recipe: SampleData.sampleRecipes[0])
+    RecipeRowView(recipe: RecipeListItem(recipe: SampleData.sampleRecipes[0]))
 }

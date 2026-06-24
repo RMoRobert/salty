@@ -74,7 +74,7 @@ struct RecipeListQueryBuilderTests {
     }
 
     @Test func notesAndVariationsAreIndependentOptions() {
-        // SELECT lists every column, so substring checks are unreliable here — count LIKE clauses.
+        // Substring checks on the SELECT projection are unreliable here — count LIKE clauses instead.
         // Each is its own field and searches two JSON value fields (title+content / name+text),
         // so each contributes two LIKEs via json_extract.
         func likeCount(_ opts: Set<RecipeListSearchOptions>) -> Int {
