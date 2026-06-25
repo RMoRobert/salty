@@ -762,7 +762,7 @@ struct RecipeNavigationSplitView: View {
 
     @ViewBuilder
     private func contextMenuForMultipleRecipes() -> some View {
-        Button("Open Recipes in New Windows", systemImage: "macwindow") {
+        Button("Open in New Windows", systemImage: "macwindow") {
             openSelectedRecipesInNewWindows()
         }
         .keyboardShortcut(.return)
@@ -787,16 +787,24 @@ struct RecipeNavigationSplitView: View {
     @ViewBuilder
     private func recipeContextMenu(for recipe: RecipeListItem) -> some View {
         #if os(macOS)
-        Button("Open Recipe in New Window", systemImage: "macwindow") {
+        Button("Open in New Window", systemImage: "macwindow") {
             openRecipeInNewWindow(recipeId: recipe.id)
         }
         .keyboardShortcut(.return)
         #endif
 
         Button("Edit", systemImage: "pencil") {
+            
             viewModel.recipeToEditID = recipe.id
             viewModel.showingEditSheet = true
         }
+        Button(role: .destructive) {
+            Task { await viewModel.deleteRecipe(id: recipe.id) }
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+        .keyboardShortcut(.delete, modifiers: [.command])
+        Divider()
 
         Menu("Export…") {
             recipeExportFormatItems(
@@ -819,12 +827,6 @@ struct RecipeNavigationSplitView: View {
             viewModel.printRecipe(by: recipe.id)
         }
 
-        Button(role: .destructive) {
-            Task { await viewModel.deleteRecipe(id: recipe.id) }
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-        .keyboardShortcut(.delete, modifiers: [.command])
 
         Divider()
 
