@@ -1,5 +1,5 @@
 # Privacy
 
-This app does not collect or transmit any information about the user or device to the developers. All data is stored locally on the device by default. (Your specific OS and storage selection may choose to store data in other locations if opted in.)
+This app does not collect or transmit any information about the user or device to the developers. All data is stored locally on the device by default, unless you opt to self-host and sync to an optional Salty Server instance, whichi  is under your control. (Your specific OS and storage selection may choose to store data in other locations if opted in.)
 
 See [LICENSE](license).
