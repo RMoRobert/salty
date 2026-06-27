@@ -75,19 +75,19 @@ enum RecipeHtmlTheme: String, CaseIterable, Identifiable, Codable {
     }
 
     /* The Aqua theme is borderless — clear every border the base stylesheet draws (panels, photo
-       frame, metadata pills, tags). Panel backgrounds/shadows stay (handled below). */
+       frame, metadata pills). Panel backgrounds/shadows stay (handled below). Tag/category chips keep
+       their solid border. */
     #recipe-info-container,
     #recipe-introduction-container,
     #recipe-ingredients-container,
     #recipe-directions-container,
     #recipe-notes-container,
     #recipe-variations-container,
-    #recipe-tags-container,
+    #recipe-meta-container,
     #recipe-image,
     #recipe-prep-time-list li,
     #recipe-yield-item,
-    #recipe-servings-item,
-    .recipe-tag {
+    #recipe-servings-item {
         border: none !important;
     }
 
@@ -108,14 +108,14 @@ enum RecipeHtmlTheme: String, CaseIterable, Identifiable, Codable {
 
         #recipe-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7); }
 
-        /* Glassy "lozenge" panels */
+        /* Glassy "lozenge" panels (Categories + Tags share one, like the other sections) */
         #recipe-info-container,
         #recipe-introduction-container,
         #recipe-ingredients-container,
         #recipe-directions-container,
         #recipe-notes-container,
         #recipe-variations-container,
-        #recipe-tags-container {
+        #recipe-meta-container {
             background: linear-gradient(180deg, #ffffff 0%, #eef3f9 100%) !important;
             border-radius: var(--salty-card-radius) !important;
             box-shadow: var(--salty-card-shadow) !important;

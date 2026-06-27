@@ -13,12 +13,15 @@ import WebViewKit
 struct RecipeDetailWebView: View {
     @State var recipe: Recipe
     @AppStorage("recipeHtmlTheme") private var theme: RecipeHtmlTheme = .modern
+    @Dependency(\.defaultDatabase) private var database
 
     var body: some View {
-        WebView(htmlString: recipe.asHtmlWithOptions(options: HTMLExportOptions(), theme: theme))
-            // WebViewKit loads the HTML once on creation, so recreate it when the theme changes
-            // (the .id forces a fresh WebView, reloading with the new theme's CSS).
-            .id(theme)
+        let names = recipe.libraryNames(database: database)
+        WebView(htmlString: recipe.asHtmlWithOptions(options: HTMLExportOptions(), theme: theme,
+                                                     course: names.course, categories: names.categories, tags: names.tags))
+            // WebViewKit loads the HTML once on creation, so recreate it when the theme or content changes
+            // (the .id forces a fresh WebView, reloading with the new content).
+            .id("\(theme)-\(names.course ?? "")-\(names.categories.joined(separator: ","))-\(names.tags.joined(separator: ","))")
     }
 }
 

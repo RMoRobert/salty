@@ -567,23 +567,8 @@ class RecipeNavigationSplitViewModel {
     /// Resolves the course / category / tag names for a recipe (best-effort — returns empty metadata on
     /// error so the export still proceeds without them).
     private func jsonLDMetadata(for recipe: Recipe) -> SchemaOrgRecipeJSONLDExporter.LibraryMetadata {
-        do {
-            return try database.read { db in
-                let courseName = try recipe.courseId.flatMap { courseId in
-                    try Course.where { $0.id.eq(courseId) }.fetchOne(db)?.name
-                }
-                let categoryIds = try RecipeCategory.where { $0.recipeId.eq(recipe.id) }.fetchAll(db).map(\.categoryId)
-                let categoryNames = try Category.where { categoryIds.contains($0.id) }.fetchAll(db)
-                    .map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-                let tagIds = try RecipeTag.where { $0.recipeId.eq(recipe.id) }.fetchAll(db).map(\.tagId)
-                let tagNames = try Tag.where { tagIds.contains($0.id) }.fetchAll(db)
-                    .map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-                return .init(courseName: courseName, categoryNames: categoryNames, tagNames: tagNames)
-            }
-        } catch {
-            logger.error("Error resolving library metadata for JSON-LD export: \(error)")
-            return .init()
-        }
+        let names = recipe.libraryNames(database: database)
+        return .init(courseName: names.course, categoryNames: names.categories, tagNames: names.tags)
     }
 
     /// Shows HTML export settings for a single recipe
@@ -645,7 +630,8 @@ class RecipeNavigationSplitViewModel {
                 if recipesToExport.count == 1 {
                     // Single recipe export
                     let recipe = recipesToExport.first!
-                    let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions)
+                    let names = recipe.libraryNames(database: database)
+                    let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions, course: names.course, categories: names.categories, tags: names.tags)
                     guard let htmlData = htmlString.data(using: .utf8) else {
                         await MainActor.run {
                             exportErrorMessage = "Failed to convert HTML to data"
@@ -664,7 +650,10 @@ class RecipeNavigationSplitViewModel {
                     }
                 } else {
                     // Multiple recipes - create a combined HTML document
-                    let htmlParts = recipesToExport.map { $0.asHtmlWithOptions(options: htmlExportOptions) }
+                    let htmlParts = recipesToExport.map { recipe -> String in
+                        let names = recipe.libraryNames(database: database)
+                        return recipe.asHtmlWithOptions(options: htmlExportOptions, course: names.course, categories: names.categories, tags: names.tags)
+                    }
                     let combinedHTML = """
                     <!DOCTYPE html>
                     <html>
@@ -730,7 +719,8 @@ class RecipeNavigationSplitViewModel {
         logger.info("Printing recipe: \(recipe.name)")
         // Print with the user's selected recipe theme (matches the web detail view).
         let theme = RecipeHtmlTheme(rawValue: UserDefaults.standard.string(forKey: "recipeHtmlTheme") ?? "") ?? .modern
-        let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions, theme: theme)
+        let names = recipe.libraryNames(database: database)
+        let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions, theme: theme, course: names.course, categories: names.categories, tags: names.tags)
         
         // Print using platform-specific implementation
         #if os(macOS)

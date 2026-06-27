@@ -42,13 +42,12 @@ class LibraryCoursesEditViewModel {
         do {
             try await database.write { db in
                 // Update recipes that reference this course to have no course
-                // TODO: Is this needed or will DB take care of with cascade? 
                 let recipesToUpdate = try Recipe
                     .where { $0.courseId.eq(courseToDelete.id) }
                     .fetchAll(db)
                 
                 for var recipe in recipesToUpdate {
-                    recipe.courseId = nil
+                    recipe.courseId = nil // not sure if strictly necessary, but harmless, and this loop is needed anyway for next...
                     recipe.lastModifiedDate = Date()
                     try Recipe.update(recipe).execute(db)
                 }

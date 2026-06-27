@@ -41,7 +41,11 @@ extension Recipe {
     //   .recipe-note-container / .recipe-note-heading / .recipe-note-text
     //   .recipe-variation-container / .recipe-variation-heading / .recipe-variation-text
     //   .recipe-rating-star-filled / .recipe-rating-star-empty
-    func asHtmlWithOptions(options: HTMLExportOptions, theme: RecipeHtmlTheme = .modern) -> String {
+    // `course`/`categories`/`tags` are passed in because they live in separate tables, not on Recipe —
+    // callers resolve them (see Recipe.libraryNames(database:)). Empty by default so callers without DB
+    // access still work.
+    func asHtmlWithOptions(options: HTMLExportOptions, theme: RecipeHtmlTheme = .modern,
+                           course: String? = nil, categories: [String] = [], tags: [String] = []) -> String {
         let doc = Document(.html) {
             Html {
                 Head {
@@ -58,6 +62,14 @@ extension Recipe {
                                 if !source.isEmpty { P(source).id("recipe-source") }
                                 if !sourceDetails.isEmpty { P(sourceDetails).id("recipe-sourceDetails") }
                                 
+                                if let course = course, !course.isEmpty {
+                                    P {
+                                        Span("Course:").id("recipe-course-label")
+                                        Span(course).id("recipe-course-text")
+                                    }
+                                    .id("recipe-course-container")
+                                }
+
                                 Div {
                                     if !yield.isEmpty {
                                         P(yield).id("recipe-yield-item")
@@ -65,8 +77,6 @@ extension Recipe {
                                     if let servings = servings, servings > 0 {
                                         P("\(servings)").id("recipe-servings-item")
                                     }
-                                    // Note: course name would require database lookup - would need to be passed as parameter
-                                    // For now, course is not displayed in HTML export
                                 }
                                 .class("recipe-yield-and-servings-container")
                                 
@@ -222,19 +232,28 @@ extension Recipe {
                             .id("recipe-variations-container")
                         }
                         
-                    // TODO: Adapt to new tags table (not row) -- and see if can apply to course and category, too?
-//                        if tags.count > 0 {
-//                            Section {
-//                                H2("Tags").id("recipe-tags")
-//                                Ul {
-//                                    for tag in tags {
-//                                        Li(tag).class("recipe-tag")
-//                                    }
-//                                }.id(("tags-list"))
-//                            }
-//                            .id("recipe-tags-container")
-//                        }
-                        
+                        if !categories.isEmpty || !tags.isEmpty {
+                            Section {
+                                if !categories.isEmpty {
+                                    H2("Categories").id("recipe-categories")
+                                    Ul {
+                                        for category in categories {
+                                            Li(category).class("recipe-category")
+                                        }
+                                    }.id("categories-list")
+                                }
+                                if !tags.isEmpty {
+                                    H2("Tags").id("recipe-tags")
+                                    Ul {
+                                        for tag in tags {
+                                            Li(tag).class("recipe-tag")
+                                        }
+                                    }.id("tags-list")
+                                }
+                            }
+                            .id("recipe-meta-container")
+                        }
+
                     }
                 }
             }
@@ -745,7 +764,7 @@ html {
     --salty-surface: #ffffff;
     --salty-panel-bg: #f8f9fa;
     --salty-text: rgb(25, 25, 25);
-    --salty-text-secondary: #86868b;
+    --salty-text-secondary: #5a5a5e;
     --salty-heading: #1d1d1f;
     --salty-accent: #0a84ff;
     --salty-link: blue;
@@ -1041,6 +1060,22 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     text-transform: capitalize;
 }
 
+#recipe-course-container {
+    margin: 0.75em 0;
+    display: block;
+}
+
+#recipe-course-label {
+    font-weight: 600;
+    color: var(--salty-text-secondary);
+    margin-right: 0.5em;
+}
+
+#recipe-course-text {
+    font-weight: 500;
+    color: var(--salty-heading);
+}
+
 /* Recipe Header Styling */
 #recipe-name {
     font-size: 2.5em;
@@ -1255,15 +1290,12 @@ h2 {
 /* Tags Styling */
 .recipe-tag {
     display: inline-block;
-    /* background: linear-gradient(135deg, var(--salty-accent) 0%, #5856d6 100%);
-    color: white; */
     padding: 0.5em 1em;
     margin: 0.25em;
     border: 1px solid var(--salty-border);
     border-radius: 20px;
     font-size: 0.9em;
     font-weight: 500;
-    box-shadow: 0 2px 5px rgba(0, 122, 255, 0.3);
 }
 
 #tags-list {
@@ -1273,14 +1305,33 @@ h2 {
     margin: 1em 0;
 }
 
+/* Categories Styling — same capsule as tags, just a slightly smaller font. */
+.recipe-category {
+    display: inline-block;
+    padding: 0.5em 1em;
+    margin: 0.25em;
+    border: 1px solid var(--salty-border);
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+#categories-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin: 1em 0;
+}
+
 /* Container Styling */
+/* #recipe-meta-container holds Categories + Tags together in one card, like the other sections. */
 #recipe-info-container,
 #recipe-introduction-container,
 #recipe-ingredients-container,
 #recipe-directions-container,
 #recipe-notes-container,
 #recipe-variations-container,
-#recipe-tags-container {
+#recipe-meta-container {
     background: white;
     border-radius: 20px;
     padding: 1.5em 2em;
@@ -1322,7 +1373,7 @@ body {
     #recipe-directions-container,
     #recipe-notes-container,
     #recipe-variations-container,
-    #recipe-tags-container {
+    #recipe-meta-container {
         padding: 1.5em;
         margin: 0.5em 0;
     }
@@ -1383,7 +1434,7 @@ body {
     #recipe-directions-container,
     #recipe-notes-container,
     #recipe-variations-container,
-    #recipe-tags-container {
+    #recipe-meta-container {
         break-inside: auto !important;
         page-break-inside: auto !important;
         border: none !important;

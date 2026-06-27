@@ -19,8 +19,23 @@ struct MainView: View {
     @State private var importConfirmNames: [String] = []
     @State private var showingImportConfirm = false
 
+    @State private var autoSync = AutoSyncCoordinator.shared
+    
+
     var body: some View {
         RecipeNavigationSplitView(viewModel: viewModel)
+            .task { autoSync.start() }
+            .overlay(alignment: .top) {
+                if  autoSync.showFailureBanner {
+                    AutoSyncFailureBanner(
+                        onRetry: { Task { await autoSync.retryNow() } },
+                        onDismiss: { autoSync.dismissFailureBanner() },
+                        onPause: { autoSync.pauseForOneDay() }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy, value: autoSync.showFailureBanner)
             .onOpenURL { handleIncomingURL($0) }
             .alert("Import Recipe", isPresented: $showingImportConfirm) {
                 Button("Cancel", role: .cancel) { importConfirmURL = nil }

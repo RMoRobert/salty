@@ -9,15 +9,6 @@ import SwiftUI
 import SQLiteData
 import OSLog
 
-/// Returns the heading text with a trailing colon on macOS (platform convention) and unchanged on iOS.
-private func platformSpecificHeadingName(_ text: String) -> String {
-    #if os(macOS)
-    return text + ":"
-    #else
-    return text
-    #endif
-}
-
 struct SettingsView: View {
     @Dependency(\.defaultDatabase) private var database
     @State private var diagnosticsInfo: [String: Any] = [:]
@@ -41,8 +32,8 @@ struct SettingsView: View {
             }
         }
         #if os(macOS)
-        .scenePadding()
-        .frame(maxWidth: 450, minHeight: 350)
+        .formStyle(.grouped)
+        .frame(width: 500, height: 600)
         #endif
         .onAppear {
             diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
@@ -65,21 +56,19 @@ struct DatabaseSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Button("Select Custom Database Location…") {
-                    showingOpenDatabaseSheet = true
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom):")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
+                        .font(.caption)
+                        .textSelection(.enabled)
+                    Button("Select Custom Database Location…") {
+                            showingOpenDatabaseSheet = true
+                        }
+                        
                 }
-                #if os(macOS)
-                .padding(.bottom, 6)
-                #endif
-                
-                Text(FileManager.customSaltyLibraryDirectory == nil ? "Current Location (Default):" : "Current Location (Custom):")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
-                    .font(.caption)
-                    .padding(6)
-                    .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Button("Reset to Default Location", role: .destructive) {
                     showingResetConfirmation = true
@@ -90,12 +79,7 @@ struct DatabaseSettingsView: View {
                 .controlSize(.small)
                 #endif
             } header: {
-                Text(platformSpecificHeadingName("Database Location"))
-                     #if os(macOS)
-                     .font(.headline)
-                     .bold()
-                     .padding(.top, 8)
-                     #endif
+                Text("Database Location")
             }
             
             Section {
@@ -120,12 +104,7 @@ struct DatabaseSettingsView: View {
                     Text("Show Diagnostics")
                 }
             } header: {
-                Text(platformSpecificHeadingName("Database Diagnostics"))
-                    #if os(macOS)
-                    .font(.headline)
-                    .bold()
-                    .padding(.top, 8)
-                    #endif
+                Text("Database Diagnostics")
             }
         }
         .alert("Reset Database Location", isPresented: $showingResetConfirmation) {
@@ -156,7 +135,9 @@ struct ServerSettingsView: View {
     @AppStorage("serverUse") private var serverUse = false
     @AppStorage("serverUrl") private var serverUrl: String = ""
     @AppStorage("savePasswordInKeychain") private var savePasswordInKeychain = false
+    @AppStorage("autoSyncEnabled") private var autoSyncEnabled = false
     @State private var syncService = SaltySyncService.shared
+    @State private var autoSync = AutoSyncCoordinator.shared
     @State private var showingSyncAlert = false
     @State private var syncAlertMessage = ""
     @State private var syncAlertIsError = false
@@ -194,30 +175,32 @@ struct ServerSettingsView: View {
 #endif
                 }
                 
-                TextField(platformSpecificHeadingName("Server URL"), text: $serverUrl)
-                    .disabled(!serverUse)
-                    .textContentType(.URL)
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Server URL", text: $serverUrl)
+                        .disabled(!serverUse)
+                        .textContentType(.URL)
 #if os(iOS)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
 #endif
-                VStack(alignment: .leading) {
                     if (!serverUrl.isEmpty && !serverUrl.starts(with: "https")) {
                         Text("WARNING: It is recommended to use HTTPS for better security.")
                             .font(.caption)
                             .foregroundStyle(Color.red)
                             .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     Text(verbatim: "Example: https://sever.example.com:8443")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 
-                TextField(platformSpecificHeadingName("Username"), text: $syncService.serverUsername)
+                TextField("Username", text: $syncService.serverUsername)
                     .disabled(!serverUse)
                 
-                SecureField(platformSpecificHeadingName("Password"), text: $password)
+                SecureField("Password", text: $password)
                     .disabled(!serverUse)
                     .onChange(of: password) { oldValue, newValue in
                         // Only save to Keychain if sync is enabled and user wants to save it
@@ -226,33 +209,39 @@ struct ServerSettingsView: View {
                         }
                     }                
                 if serverUse {
-                    Toggle("Save password securely in Keychain", isOn: $savePasswordInKeychain)
-                        .onChange(of: savePasswordInKeychain) { oldValue, newValue in
-                            if newValue && !password.isEmpty {
-                                // Save current password to Keychain
-                                syncService.serverPassword = password
-                            } else if !newValue {
-                                // Remove from Keychain (but keep in memory for current session)
-                                syncService.serverPassword = ""
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Save password securely in Keychain", isOn: $savePasswordInKeychain)
+                            .onChange(of: savePasswordInKeychain) { oldValue, newValue in
+                                if newValue && !password.isEmpty {
+                                    // Save current password to Keychain
+                                    syncService.serverPassword = password
+                                } else if !newValue {
+                                    // Remove from Keychain (but keep in memory for current session)
+                                    syncService.serverPassword = ""
+                                }
                             }
-                        }
-                    
-                    Text("If not saved, you will need to enter your password on every sync.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text("If not saved, you will need to enter your password on every sync.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             } header: {
-                Text(platformSpecificHeadingName("Server Configuration"))
-                     #if os(macOS)
-                     .font(.headline)
-                     .bold()
-                     .padding(.top, 6)
-                     .padding(.bottom, 4)
-                     #endif
+                Text("Server Configuration")
             }
             
             Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Sync automatically", isOn: $autoSyncEnabled)
+                        .disabled(!serverUse)
+                    Text("Syncs in the background after you make changes, on launch, and when returning to the app. Requires saving your password in the Keychain. Occasional failures are silent; persistent ones show a dismissable banner.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 Button {
                     Task {
                         // Always use the current UI credentials for sync (token for background tasks only -- not yet implemented)
@@ -328,21 +317,39 @@ struct ServerSettingsView: View {
                 }
                 
                 if let error = syncService.lastSyncError {
-                    HStack {
+                    HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+
+                if autoSync.isPaused, let until = autoSync.pausedUntil {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "pause.circle.fill")
+                            .foregroundStyle(.secondary)
+                        Text("Automatic sync paused until \(until.formatted(date: .abbreviated, time: .shortened)).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Resume") { autoSync.resume() }
+                            .controlSize(.small)
+                    }
+                }
+
+//                #if DEBUG
+//                Button("Show Test Failure Banner") {
+//                    AutoSyncCoordinator.shared.showFailureBanner = true
+//                }
+//                .controlSize(.small)
+//                #endif
             } header: {
-                Text(platformSpecificHeadingName("Sync"))
-                    #if os(macOS)
-                    .font(.headline)
-                    .bold()
-                    .padding(.top, 4)
-                    #endif
+                Text("Sync")
             }
             
             Section {
@@ -351,7 +358,7 @@ struct ServerSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
-                Text(platformSpecificHeadingName("How Sync Works"))
+                Text("How Sync Works")
             }
         }
         .alert(syncAlertIsError ? "Sync Failed" : "Sync Complete", isPresented: $showingSyncAlert) {
@@ -360,7 +367,7 @@ struct ServerSettingsView: View {
             Text(syncAlertMessage)
         }
         .confirmationDialog("Force Full Re-Sync?", isPresented: $showingForceResyncConfirm, titleVisibility: .visible) {
-            Button("Delete Local & Re-Download", role: .destructive) {
+            Button("Delete Local, Pull from Server", role: .destructive) {
                 Task {
                     syncService.logout()
                     syncService.serverPassword = password
@@ -370,9 +377,19 @@ struct ServerSettingsView: View {
                     }
                 }
             }
+            Button("Delete Server, Push from Local", role: .destructive) {
+                Task {
+                    syncService.logout()
+                    syncService.serverPassword = password
+                    await performForcePush()
+                    if !savePasswordInKeychain {
+                        syncService.serverPassword = ""
+                    }
+                }
+            }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This deletes ALL local recipes, courses, categories, and tags, then re-downloads everything from the server. The server is not changed.")
+            Text("A full re-sync will delete all content from either the local device or the server and force a re-sync from the other direction. We suggest making a database backup before using this option. Please select a force-sync method.")
         }
         .onAppear {
             if serverUse && !hasLoadedPassword {
@@ -406,7 +423,7 @@ struct ServerSettingsView: View {
             showingSyncAlert = true
         } catch {
             syncAlertIsError = true
-            syncAlertMessage = error.localizedDescription
+            syncAlertMessage = friendlySyncMessage(error)
             showingSyncAlert = true
         }
     }
@@ -419,7 +436,20 @@ struct ServerSettingsView: View {
             showingSyncAlert = true
         } catch {
             syncAlertIsError = true
-            syncAlertMessage = error.localizedDescription
+            syncAlertMessage = friendlySyncMessage(error)
+            showingSyncAlert = true
+        }
+    }
+
+    private func performForcePush() async {
+        do {
+            try await syncService.forceFullResyncToServer()
+            syncAlertIsError = false
+            syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.summary)"
+            showingSyncAlert = true
+        } catch {
+            syncAlertIsError = true
+            syncAlertMessage = friendlySyncMessage(error)
             showingSyncAlert = true
         }
     }
@@ -491,18 +521,18 @@ struct GeneralSettingsView: View {
                     Text("Summary (Default)").tag(RecipeListViewStyle.summary)
                     Text("Small Icons").tag(RecipeListViewStyle.smallIcons)
                 } label: {
-                    Text(platformSpecificHeadingName("Style"))
+                    Text("Style")
                         .accessibilityLabel("Recipe List View Style")
                 }
             } header: {
-                Text(platformSpecificHeadingName("Recipe List View Style"))
+                Text("Recipe List View Style")
             }
             Section {
                 Toggle("Show Categories", isOn: showCategoriesBinding)
                 Toggle("Show Courses", isOn: showCoursesBinding)
                 Toggle("Show Tags", isOn: showTagsBinding)
             } header: {
-                Text(platformSpecificHeadingName("Sidebar Items"))
+                Text("Sidebar Items")
                     #if os(macOS)
                     .padding(.top)
                     #endif
@@ -525,14 +555,14 @@ struct ThemeSettingsView: View {
                 Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
                     .fixedSize(horizontal: false, vertical: true)
                 if useWebRecipeDetailView {
-                    Picker(platformSpecificHeadingName("Theme"), selection: $recipeHtmlTheme) {
+                    Picker("Theme", selection: $recipeHtmlTheme) {
                         ForEach(RecipeHtmlTheme.allCases) { theme in
                             Text(theme.displayName).tag(theme)
                         }
                     }
                 }
             } header: {
-                Text(platformSpecificHeadingName("Recipe Display"))
+                Text("Recipe Display")
                     #if os(macOS)
                     .padding(.top)
                     #endif
@@ -541,7 +571,7 @@ struct ThemeSettingsView: View {
                 Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
-                Text(platformSpecificHeadingName("Editing"))
+                Text("Editing")
                     #if os(macOS)
                     .padding(.top)
                     #endif
@@ -586,33 +616,27 @@ struct AdvancedSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Text(platformSpecificHeadingName("Database Backups"))
-                    #if os(macOS)
-                    .font(.headline)
-                    .bold()
-                    .padding(.top, 8)
-                    #endif
+                Text("Database Backups")
             }
             
             Section {
-                Button("Clean Up Orphaned Images") {
-                    Task {
-                        await RecipeImageManager.shared.cleanupOrphanedImages()
+                // Group the button + caption into ONE Form row (a VStack) so no separator is drawn
+                // between them — matches the "control with description beneath" cells in System Settings.
+                VStack(alignment: .leading, spacing: 6) {
+                    Button("Clean Up Orphaned Images") {
+                        Task {
+                            await RecipeImageManager.shared.cleanupOrphanedImages()
+                        }
                     }
+                    .buttonStyle(.bordered)
+                    Text("This will remove all images stored alongside your recipe library database that are not referenced in the database. It should be safe, but we suggest having a backup before running (as you should periodically regardless).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.bordered)
-                
-                Text("This will remove all images stored alongside your recipe library database that are not referenced in the database. It should be safe, but we suggest having a backup before running (as you should periodically regardless).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             } header: {
-                Text(platformSpecificHeadingName("Image Cleanup"))
-                    #if os(macOS)
-                    .font(.headline)
-                    .bold()
-                    .padding(.top, 8)
-                    #endif
+                Text("Image Cleanup")
             }
         }
         .alert("Delete All Backups", isPresented: $showingDeleteConfirmation) {

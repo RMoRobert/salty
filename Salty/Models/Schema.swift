@@ -677,6 +677,22 @@ func appDatabase() throws -> any DatabaseWriter {
     return database
 }
 
+/// Flush the WAL into the main `.sqlite` so another app (SaltyKMP, syncing the linked folder) sees the
+/// latest data in the *main* file — and leaves an empty WAL so the handoff is a single clean file.
+/// Best-effort: if a reader still holds the WAL we fall back to a passive checkpoint, which never blocks.
+/// Call when the app quiesces (background / terminate), not on every save.
+func checkpointDatabaseForHandoff(_ writer: any DatabaseWriter) {
+    do {
+        try writer.writeWithoutTransaction { db in
+            _ = try db.checkpoint(.truncate)
+        }
+    } catch {
+        try? writer.writeWithoutTransaction { db in
+            _ = try db.checkpoint(.passive)
+        }
+    }
+}
+
 // MARK: - Cross-platform shared migrations (the `saltyMigration` ledger)
 
 /// A schema/data change that BOTH the Salty (GRDB) app and the SaltyKMP app must apply to a shared

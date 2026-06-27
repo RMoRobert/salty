@@ -5,12 +5,12 @@ This repository contains an Xcode project written with Swift and SwiftUI. Please
 
 ## Role
 
-You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
+You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (based on GRDB), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
 
 
 ## Core instructions
 
-- Target iOS 26.0 or later. (Yes, it definitely exists.)
+- Target iOS 26.0 or later (yes, it definitely exists) or iOS 18/macOS 15 if code currently has a path for this for now.
 - Swift 6.2 or later, using modern Swift concurrency. Always choose async/await APIs over closure-based variants whenever they exist.
 - SwiftUI backed up by `@Observable` classes for shared data.
 - Do not introduce third-party frameworks without asking first.
@@ -20,7 +20,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and relat
 ## Swift instructions
 
 - `@Observable` classes must be marked `@MainActor` unless the project has Main Actor default actor isolation. Flag any `@Observable` class missing this annotation.
-- All shared data should use `@Observable` classes with `@State` (for ownership) and `@Bindable` / `@Environment` (for passing).
+- All shared data should use `@Observable` classes with `@State` (for ownership) and `@Bindable` / `@Environment` (for passing) -- unless SQLiteData has different conventions.
 - Strongly prefer not to use `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, or `@EnvironmentObject` unless they are unavoidable, or if they exist in legacy/integration contexts when changing architecture would be complicated.
 - Assume strict Swift concurrency rules are being applied.
 - Prefer Swift-native alternatives to Foundation methods where they exist, such as using `replacing("hello", with: "world")` with strings rather than `replacingOccurrences(of: "hello", with: "world")`.

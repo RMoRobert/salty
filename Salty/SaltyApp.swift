@@ -8,14 +8,25 @@
 import OSLog
 import SQLiteData
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct SaltyApp: App {
-    private let logger = Logger(subsystem: "Salty", category: "App")
-    @Dependency(\.context) var context
     @Environment(\.openWindow) private var openWindow
-    
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// The live database writer, kept so we can checkpoint its WAL when the app quiesces (so SaltyKMP,
+    /// syncing the linked folder, sees the latest data in the main `.sqlite`). Nil in non-live contexts.
+    private let database: (any DatabaseWriter)?
+
     init() {
+        // Locals (not stored properties): init must not touch `self` until `database` is assigned below.
+        let logger = Logger(subsystem: "Salty", category: "App")
+        @Dependency(\.context) var context
+
+        var createdDatabase: (any DatabaseWriter)? = nil
         if context == .live {
             do {
                 // Begin (and hold) security-scoped access to the database location before opening it.
@@ -31,10 +42,21 @@ struct SaltyApp: App {
                     }
                 }
 
-                try prepareDependencies {
-                    $0.defaultDatabase = try Salty.appDatabase()
+                let db = try Salty.appDatabase()
+                createdDatabase = db
+                prepareDependencies {
+                    $0.defaultDatabase = db
                 }
-                
+
+#if os(macOS)
+                // Cmd-Q doesn't reliably drive scenePhase → checkpoint on terminate so the handoff file is current.
+                NotificationCenter.default.addObserver(
+                    forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+                ) { [db] _ in
+                    checkpointDatabaseForHandoff(db)
+                }
+#endif
+
                 // Create backup after successful database initialization
                 let backupManager = DatabaseBackupManager()
                 backupManager.createBackupIfNeeded()
@@ -43,6 +65,7 @@ struct SaltyApp: App {
                 logger.error("Failed to initialize database: \(error)")
             }
         }
+        self.database = createdDatabase
     }
     
     var body: some Scene {
@@ -51,6 +74,19 @@ struct SaltyApp: App {
                 .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
         }
         .handlesExternalEvents(matching: ["salty-recipe"])
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .background:
+                // iOS: fires on background. (macOS quit handled by the willTerminate observer in init.)
+                if let database { checkpointDatabaseForHandoff(database) }
+                AutoSyncCoordinator.shared.appWillBackground()
+            case .active:
+                // Launch / return-to-foreground: pull server-side changes if auto-sync is on (throttled).
+                Task { await AutoSyncCoordinator.shared.appBecameActive() }
+            default:
+                break
+            }
+        }
         .commands {
             Menus()
         }

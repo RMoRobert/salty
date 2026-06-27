@@ -139,8 +139,8 @@ class SaltySyncService {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw SyncError.authenticationFailed("Login failed (HTTP \(httpResponse.statusCode)): \(body)")
+            logger.error("Login failed HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+            throw SyncError.authenticationFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
         }
         
         // Parse response
@@ -264,7 +264,7 @@ class SaltySyncService {
             logger.info("Sync completed successfully")
             
         } catch {
-            lastSyncError = error.localizedDescription
+            lastSyncError = friendlySyncMessage(error)
             logger.error("Sync failed at step '\(self.syncProgress.currentStep)': \(error)")
             throw error
         }
@@ -346,8 +346,120 @@ class SaltySyncService {
             syncProgress.currentStep = "Full re-sync complete!"
             logger.info("Force full re-sync complete: \(serverRecipes.count) recipes")
         } catch {
-            lastSyncError = error.localizedDescription
+            lastSyncError = friendlySyncMessage(error)
             logger.error("Force full re-sync failed at '\(self.syncProgress.currentStep)': \(error)")
+            throw error
+        }
+    }
+
+    /// Force a full re-sync in the opposite direction: make the server an exact mirror of this
+    /// device. Every local recipe/course/category/tag is pushed (overwriting the server copy), and
+    /// anything present on the server but absent locally is deleted from the server. One-way
+    /// (local → server) — the local database is the source of truth and is never modified, so it's a
+    /// safe recovery path when the server holds stale or corrupt data. A failure partway leaves the
+    /// server partially updated, but local data is untouched and a retry resolves it.
+    func forceFullResyncToServer() async throws {
+        guard serverEnabled, !serverUrl.isEmpty else { throw SyncError.serverNotConfigured }
+        guard hasCredentials else { throw SyncError.credentialsNotConfigured }
+        guard !isSyncing else {
+            logger.warning("Sync already in progress, skipping force re-sync")
+            return
+        }
+
+        isSyncing = true
+        lastSyncError = nil
+        syncProgress = SyncProgress()
+        defer { isSyncing = false }
+
+        do {
+            syncProgress.currentStep = "Authenticating..."
+            try await ensureAuthenticated()
+            _ = try await registerDevice() // ensure the device is registered (state is otherwise ignored)
+
+            // Snapshot the current server inventory so we know which items to overwrite vs. delete.
+            syncProgress.currentStep = "Inspecting server..."
+            let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
+            let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
+            let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
+            let serverRecipeIds = try await fetchManifest().map { $0.id }
+
+            // Read the full local state — the source of truth, never modified here.
+            let localCourses = try await database.read { db in try Course.fetchAll(db) }
+            let localCategories = try await database.read { db in try Category.fetchAll(db) }
+            let localTags = try await database.read { db in try Tag.fetchAll(db) }
+            let localRecipes = try await database.read { db in try Recipe.fetchAll(db) }
+
+            let serverCourseIds = Set(serverCourses.map { $0.id })
+            let serverCategoryIds = Set(serverCategories.map { $0.id })
+            let serverTagIds = Set(serverTags.map { $0.id })
+
+            // Push vocab first — recipes link courses/categories/tags by id, which must already exist
+            // server-side. Update items the server already has, create the rest.
+            syncProgress.currentStep = "Uploading to server..."
+            for c in localCourses {
+                if serverCourseIds.contains(c.id) {
+                    try await putToServer(c, endpoint: "/api/courses/\(c.id)")
+                } else {
+                    try await postToServer(c, endpoint: "/api/courses")
+                }
+            }
+            for c in localCategories {
+                if serverCategoryIds.contains(c.id) {
+                    try await putToServer(c, endpoint: "/api/categories/\(c.id)")
+                } else {
+                    try await postToServer(c, endpoint: "/api/categories")
+                }
+            }
+            for t in localTags {
+                if serverTagIds.contains(t.id) {
+                    try await putToServer(t, endpoint: "/api/tags/\(t.id)")
+                } else {
+                    try await postToServer(t, endpoint: "/api/tags")
+                }
+            }
+            syncProgress.itemsUploaded += localCourses.count + localCategories.count + localTags.count
+
+            // Push recipes (uploadRecipe overwrites existing or creates new as needed).
+            syncProgress.currentStep = "Uploading recipes..."
+            for recipe in localRecipes {
+                try await uploadRecipe(recipe)
+                syncProgress.itemsUploaded += 1
+                syncProgress.uploadedRecipeIds.insert(recipe.id)
+            }
+
+            // Remove anything on the server that no longer exists locally (it was deleted from the
+            // source of truth). Recipes first, then vocab they may reference.
+            syncProgress.currentStep = "Removing stale server data..."
+            let localRecipeIds = Set(localRecipes.map { $0.id })
+            let orphanRecipeIds = serverRecipeIds.filter { !localRecipeIds.contains($0) }
+            if !orphanRecipeIds.isEmpty {
+                try await deleteRecipesOnServer(recipeIds: orphanRecipeIds)
+            }
+            let localCourseIds = Set(localCourses.map { $0.id })
+            for c in serverCourses where !localCourseIds.contains(c.id) {
+                try await deleteOnServer(endpoint: "/api/courses/\(c.id)")
+            }
+            let localCategoryIds = Set(localCategories.map { $0.id })
+            for c in serverCategories where !localCategoryIds.contains(c.id) {
+                try await deleteOnServer(endpoint: "/api/categories/\(c.id)")
+            }
+            let localTagIds = Set(localTags.map { $0.id })
+            for t in serverTags where !localTagIds.contains(t.id) {
+                try await deleteOnServer(endpoint: "/api/tags/\(t.id)")
+            }
+
+            // Images: reconciled by timestamp. Because every recipe was just pushed with this device's
+            // image metadata, the server never wins here — local images upload to fill any gaps.
+            syncProgress.currentStep = "Uploading images..."
+            try await syncImages()
+
+            try await completeSyncOnServer()
+            lastSyncDate = Date()
+            syncProgress.currentStep = "Full re-sync complete!"
+            logger.info("Force full re-sync to server complete: \(localRecipes.count) recipes")
+        } catch {
+            lastSyncError = friendlySyncMessage(error)
+            logger.error("Force full re-sync to server failed at '\(self.syncProgress.currentStep)': \(error)")
             throw error
         }
     }
@@ -1431,7 +1543,7 @@ class SaltySyncService {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
             logger.error("HTTP \(statusCode) from \(endpoint): \(responseBody.prefix(500))")
-            throw SyncError.networkError("Failed to fetch from \(endpoint) (HTTP \(statusCode))")
+            throw SyncError.networkError(SyncError.httpMessage(status: statusCode, body: data))
         }
         
         let decoder = JSONDecoder()
@@ -1512,8 +1624,8 @@ class SaltySyncService {
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            let body = String(data: data, encoding: .utf8) ?? "No body"
-            throw SyncError.uploadFailed("POST to \(endpoint) failed (HTTP \(statusCode)): \(body.prefix(200))")
+            logger.error("POST to \(endpoint) failed HTTP \(statusCode): \(String(data: data, encoding: .utf8)?.prefix(200) ?? "")")
+            throw SyncError.uploadFailed(SyncError.httpMessage(status: statusCode, body: data))
         }
     }
     
@@ -1532,8 +1644,8 @@ class SaltySyncService {
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            let body = String(data: data, encoding: .utf8) ?? "No body"
-            throw SyncError.uploadFailed("PUT to \(endpoint) failed (HTTP \(statusCode)): \(body.prefix(200))")
+            logger.error("PUT to \(endpoint) failed HTTP \(statusCode): \(String(data: data, encoding: .utf8)?.prefix(200) ?? "")")
+            throw SyncError.uploadFailed(SyncError.httpMessage(status: statusCode, body: data))
         }
     }
     
@@ -1647,6 +1759,77 @@ enum SyncError: LocalizedError {
         case .parseError(let message):
             return "Parse error: \(message)"
         }
+    }
+}
+
+extension SyncError {
+    /// User-facing message for a non-2xx HTTP response that never surfaces the raw response body, which
+    /// could be HTML error page (proxy 502, captive portal, wrong address) that shouldn't be shown as raw text.
+    /// If the body is small JSON carrying an `error`/`message`/`detail` field, that text is preferred.
+    static func httpMessage(status: Int, body: Data) -> String {
+        if let serverMessage = serverJSONMessage(from: body) { return serverMessage }
+        // An HTML body (not Salty Server JSON) means something else must have answered: a reverse proxy,
+        // captive portal, etc. In particular, NGINX returns HTML 403 page (and actual 403 code) if access
+        // list does not allow, so lead with that possibility since that is likely a common Salty Server setup:
+        if bodyLooksLikeHTML(body) {
+            return "Access to the server was forbidden (HTTP \(status)). A reverse proxy, firewall, portal (sever responded with HTML), or other issue may be blocking access. Verify your network connection, server setup, and try again."
+        }
+        switch status {
+        case 401:
+            return "The server rejected your saved username or password (HTTP 401)."
+        case 403:
+            return "Access to the server was forbidden (HTTP 403). Check firewall or IP restrictions, and verify your username and password."
+        case 404:
+            return "The server didn't recognize that request (HTTP 404). Check server address."
+        case 408, 429:
+            return "Error: HTTP \(status). Server may be busy. Try again in a moment."
+        case 500...599:
+            return "Error: HTTP \(status). Ensure server is functional and try again."
+        default:
+            return "The server returned an unexpected response (HTTP \(status))."
+        }
+    }
+
+    /// True when the body looks like an HTML/markup page rather than our JSON API response. Our API always
+    /// returns JSON (starts with `{` or `[`); a leading `<` means an HTML/XML page from a proxy/gateway.
+    private static func bodyLooksLikeHTML(_ data: Data) -> Bool {
+        guard !data.isEmpty,
+              let prefix = String(data: data.prefix(512), encoding: .utf8)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        return prefix.hasPrefix("<")
+    }
+
+    /// Extracts a human message from a SMALL JSON error body. Returns nil for HTML / large / non-JSON bodies.
+    private static func serverJSONMessage(from data: Data) -> String? {
+        guard !data.isEmpty, data.count < 4096,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        for key in ["message", "error", "detail"] {
+            if let text = object[key] as? String, !text.isEmpty { return text }
+        }
+        return nil
+    }
+}
+
+/// Maps ANY error thrown during sync to a friendly, HTML-free string for display. Covers our own
+/// `SyncError` (already friendly), connectivity failures (`URLError`), and unreadable responses
+/// (`DecodingError`, e.g. an HTML page where JSON was expected).
+func friendlySyncMessage(_ error: Error) -> String {
+    switch error {
+    case let urlError as URLError:
+        switch urlError.code {
+        case .notConnectedToInternet, .networkConnectionLost:
+            return "No internet connection. Connect to a network and try again."
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .timedOut, .secureConnectionFailed:
+            return "Couldn't reach the server. It may be offline or only reachable on your home network. Check the server address in Settings."
+        default:
+            return "Couldn't reach the server (\(urlError.localizedDescription))"
+        }
+    case is DecodingError:
+        return "The server returned a response the app couldn't read. Check that the address points to your Salty server."
+    case let syncError as SyncError:
+        return syncError.errorDescription ?? "Sync failed."
+    default:
+        return error.localizedDescription
     }
 }
 

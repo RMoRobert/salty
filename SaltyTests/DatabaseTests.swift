@@ -167,6 +167,39 @@ struct DatabaseIntegrationTests {
             #expect(categoryStillExists == 1)
         }
 
+        @Test func deletingCourseSetsRecipeCourseIdToNull() async throws {
+            // recipe.courseId is a `references("course", onDelete: .setNull)` FK, so deleting a course must
+            // clear courseId on its recipes (not delete them). LibraryCoursesEditViewModel relies on this;
+            // it additionally bumps lastModifiedDate so the change syncs, which is app logic, not tested here.
+            let db = try makeTestDatabase()
+
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO course (id, name) VALUES (?, ?)", arguments: ["co-1", "Dessert"])
+                try db.execute(sql: "INSERT INTO recipe (id, name, courseId) VALUES (?, ?, ?)", arguments: ["r-1", "Cake", "co-1"])
+            }
+
+            let before = try await db.read {
+                try String.fetchOne($0, sql: "SELECT courseId FROM recipe WHERE id = 'r-1'")
+            }
+            #expect(before == "co-1")
+
+            try await db.write { db in
+                try db.execute(sql: "DELETE FROM course WHERE id = ?", arguments: ["co-1"])
+            }
+
+            // The recipe survives...
+            let recipeStillExists = try await db.read {
+                try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM recipe WHERE id = 'r-1'") ?? 0
+            }
+            #expect(recipeStillExists == 1)
+
+            // ...with its course reference set to NULL.
+            let courseIdAfter = try await db.read {
+                try String.fetchOne($0, sql: "SELECT courseId FROM recipe WHERE id = 'r-1'")
+            }
+            #expect(courseIdAfter == nil)
+        }
+
         @Test func eachTestDatabaseIsIsolated() async throws {
             let db1 = try makeTestDatabase()
             let db2 = try makeTestDatabase()
