@@ -665,7 +665,12 @@ func appDatabase() throws -> any DatabaseWriter {
     // need on the shared saltyRecipeDB.sqlite, the `saltyMigration` ledger is the single source of truth
     // so it runs exactly once, whoever opens the file first. Mirror of SaltyKMP's applySharedMigrations.
     try runSaltySharedMigrations(database)
-    
+
+    // Defensive: the shared DB may be written by SaltyKMP or raw SQL, which can leave non-optional
+    // `recipe` columns NULL. GRDB would then fail to decode the row (JSON columns and Dates can't be
+    // nil), making the recipe unopenable. Runs every launch and only touches offending rows.
+    coalesceNullRecipeColumns(database)
+
 #if DEBUG
     if context == .preview {
       try database.write { db in
@@ -675,6 +680,36 @@ func appDatabase() throws -> any DatabaseWriter {
 #endif
     
     return database
+}
+
+/// Backfills NULLs in `recipe` columns that the Swift model treats as non-optional, so a row authored by
+/// another writer (SaltyKMP, a raw `INSERT`, an older import) still decodes. Best-effort and idempotent:
+/// each `UPDATE` only matches rows that are actually NULL, so re-running is a cheap no-op. The
+/// genuinely-optional columns (`lastPrepared`, `image*`, `servings`, `courseId`, `nutrition`,
+/// `lastModifiedImageDate`) are intentionally left alone. `difficulty`/`rating` coalesce to 0 (`.notSet`).
+///
+/// NOTE: this repairs existing rows but does not prevent future NULL writes. SaltyKMP's `Schema.sq` now
+/// declares these columns `NOT NULL DEFAULT` (mirroring this set) so fresh shared DBs enforce the
+/// invariant; this pass stays as the cross-platform safety net for older DBs and raw writers.
+func coalesceNullRecipeColumns(_ writer: any DatabaseWriter) {
+    // Each group maps a SQL substitution to the columns that should never be NULL in a decodable row.
+    let substitutions: [(value: String, columns: [String])] = [
+        ("'[]'", ["directions", "ingredients", "notes", "variations", "preparationTimes"]),
+        ("''", ["name", "source", "sourceDetails", "introduction", "yield"]),
+        ("0", ["isFavorite", "wantToMake", "difficulty", "rating"]),
+        ("CURRENT_TIMESTAMP", ["createdDate", "lastModifiedDate"]),
+    ]
+    do {
+        try writer.write { db in
+            for (value, columns) in substitutions {
+                for column in columns {
+                    try db.execute(sql: #"UPDATE "recipe" SET "\#(column)" = \#(value) WHERE "\#(column)" IS NULL"#)
+                }
+            }
+        }
+    } catch {
+        logger.error("Recipe NULL-coalescing pass failed: \(error.localizedDescription)")
+    }
 }
 
 /// Flush the WAL into the main `.sqlite` so another app (SaltyKMP, syncing the linked folder) sees the

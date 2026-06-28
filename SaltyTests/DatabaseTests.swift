@@ -506,4 +506,76 @@ struct DatabaseIntegrationTests {
             #expect(row?["isFavorite"] == true)
         }
     }
+
+    // MARK: - NULL coalescing (cross-platform safety net)
+
+    /// The shared DB can be written by SaltyKMP or raw SQL, which may leave columns the Swift model
+    /// treats as non-optional set to NULL. `coalesceNullRecipeColumns` backfills those so the row still
+    /// decodes. These insert deliberately-NULL rows (the GRDB schema permits them) and verify the pass.
+    @Suite struct NullCoalescing {
+
+        @Test func backfillsNullColumnsSoRowIsDecodable() async throws {
+            let db = try makeTestDatabase()
+
+            // A row as another writer might leave it: every non-optional column NULL.
+            try await db.write { db in
+                try db.execute(sql: """
+                    INSERT INTO recipe (id, name, createdDate, lastModifiedDate, source, sourceDetails,
+                        introduction, yield, difficulty, rating, isFavorite, wantToMake,
+                        directions, ingredients, notes, variations, preparationTimes)
+                    VALUES ('r-null', 'Name', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                        NULL, NULL, NULL, NULL, NULL)
+                    """)
+            }
+
+            // Runs every launch from appDatabase(); call it directly here against the NULL row.
+            coalesceNullRecipeColumns(db)
+            // Idempotent: a second pass must be a harmless no-op.
+            coalesceNullRecipeColumns(db)
+
+            let row = try #require(try db.read { try Row.fetchOne($0, sql: "SELECT * FROM recipe WHERE id = 'r-null'") })
+
+            // JSON columns are now valid empty-array JSON (decodable, not NULL).
+            for column in ["directions", "ingredients", "notes", "variations", "preparationTimes"] {
+                let json: String = row[column]
+                #expect(json == "[]")
+            }
+            #expect(try JSONDecoder().decode([Direction].self, from: Data((row["directions"] as String).utf8)).isEmpty)
+
+            // Text → "", bool/enum → 0, dates → a non-empty timestamp.
+            for column in ["source", "sourceDetails", "introduction", "yield"] {
+                #expect((row[column] as String) == "")
+            }
+            for column in ["isFavorite", "wantToMake", "difficulty", "rating"] {
+                #expect((row[column] as Int) == 0)
+            }
+            for column in ["createdDate", "lastModifiedDate"] {
+                #expect(!(row[column] as String).isEmpty)
+            }
+        }
+
+        @Test func preservesExistingNonNullValues() async throws {
+            let db = try makeTestDatabase()
+
+            let directionsJSON = #"[{"id":"d1","isHeading":false,"text":"Mix"}]"#
+            try await db.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT INTO recipe (id, name, source, isFavorite, difficulty, directions)
+                    VALUES ('r-keep', 'Keep', 'Grandma', 1, 3, ?)
+                    """,
+                    arguments: [directionsJSON]
+                )
+            }
+
+            coalesceNullRecipeColumns(db)
+
+            // The WHERE … IS NULL guard must leave populated columns untouched.
+            let row = try #require(try db.read { try Row.fetchOne($0, sql: "SELECT * FROM recipe WHERE id = 'r-keep'") })
+            #expect((row["source"] as String) == "Grandma")
+            #expect((row["isFavorite"] as Int) == 1)
+            #expect((row["difficulty"] as Int) == 3)
+            #expect((row["directions"] as String) == directionsJSON)
+        }
+    }
 }

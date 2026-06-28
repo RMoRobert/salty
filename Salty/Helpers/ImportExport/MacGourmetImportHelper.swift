@@ -51,17 +51,14 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                             
                             for categoryName in uniqueCategories {
                                 // Find existing category or create new one
-                                var category = try Category.where { $0.name.eq(categoryName) }.fetchOne(db)
-                                
-                                if category == nil {
+                                let category: Category
+                                if let existing = try Category.where { $0.name.eq(categoryName) }.fetchOne(db) {
+                                    category = existing
+                                } else {
                                     category = Category(id: UUID().uuidString, name: categoryName, lastModifiedDate: Date())
-                                    try Category.insert {
-                                        category!
-                                    }.execute(db)
+                                    try Category.insert { category }.execute(db)
                                 }
-                                
-                                guard let category = category else { continue }
-                                
+
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeCategory
                                     .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(category.id) }
@@ -80,16 +77,16 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                         // Set course if present
                         if let courseName = mgRecipe.courseName, !courseName.isEmpty, courseName != "--" {
                             // Check for existing course or create new one
-                            var course = try Course.where { $0.name.eq(courseName) }.fetchOne(db)
-                            if course == nil {
+                            let course: Course
+                            if let existing = try Course.where { $0.name.eq(courseName) }.fetchOne(db) {
+                                course = existing
+                            } else {
                                 course = Course(id: UUID().uuidString, name: courseName, lastModifiedDate: Date())
-                                try Course.insert { course! }.execute(db)
+                                try Course.insert { course }.execute(db)
                             }
-                            // Set the recipe's courseId if found or inserted
-                            if let course = course {
-                                recipe.courseId = course.id
-                                try Recipe.update(recipe).execute(db)
-                            }
+                            // Set the recipe's courseId
+                            recipe.courseId = course.id
+                            try Recipe.update(recipe).execute(db)
                         }
                     }
                     successCount += 1

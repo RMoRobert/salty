@@ -24,7 +24,17 @@ import OSLog
 
 class SchemaOrgRecipeJSONLDImporter {
     private let logger = Logger(subsystem: "Salty", category: "App")
-    
+
+    /// Bounds applied to untrusted web content so a malicious or accidentally huge page can't exhaust
+    /// memory or stall the UI while parsing. Generous enough for any real recipe.
+    private enum Limits {
+        static let maxInputBytes = 8 * 1024 * 1024      // cap on fetched HTML / JSON-LD payload
+        static let maxScriptTags = 50                   // JSON-LD <script> blocks scanned per page
+        static let maxFieldLength = 20_000              // per string field (name, instruction, etc.)
+        static let maxArrayItems = 1_000                // ingredients / directions / notes per recipe
+        static let requestTimeout: TimeInterval = 15
+    }
+
     // MARK: - Main parsing method
     
     /// Parses schema.org Recipe data from HTML containing JSON-LD
@@ -33,21 +43,27 @@ class SchemaOrgRecipeJSONLDImporter {
     func parseRecipes(from html: String) -> [Recipe] {
         var recipes: [Recipe] = []
         
+        // Guard against pathologically large pages before handing them to the HTML parser.
+        guard html.utf8.count <= Limits.maxInputBytes else {
+            logger.error("HTML input exceeds \(Limits.maxInputBytes) byte limit; refusing to parse")
+            return []
+        }
+
         do {
             let doc = try SwiftSoup.parse(html)
             let scriptTags = try doc.select("script[type=application/ld+json]")
-            
+
             logger.info("Found \(scriptTags.count) JSON-LD script tags")
-            
-            for scriptTag in scriptTags {
+
+            for scriptTag in scriptTags.prefix(Limits.maxScriptTags) {
                 let jsonContent = try scriptTag.html()
-                
+
                 if let jsonData = jsonContent.data(using: .utf8) {
                     let parsedRecipes = parseJSONLD(jsonData)
                     recipes.append(contentsOf: parsedRecipes)
                 }
             }
-            
+
         } catch {
             logger.error("Error parsing HTML: \(error)")
         }
@@ -160,17 +176,21 @@ class SchemaOrgRecipeJSONLDImporter {
         return nil
     }
     
-    /// Decodes common HTML entities that might appear in JSON-LD data
+    /// Decodes common HTML entities that might appear in JSON-LD data, and clamps the result so a single
+    /// oversized field can't blow up memory or downstream rendering. `&amp;` is decoded LAST so that an
+    /// already-escaped sequence like `&amp;lt;` resolves to the literal `&lt;` rather than being
+    /// double-decoded into `<`.
     private func decodeHTMLEntities(_ text: String) -> String {
-        return text
+        let decoded = text
             .replacingOccurrences(of: "&apos;", with: "'")
             .replacingOccurrences(of: "&#39;", with: "'")
             .replacingOccurrences(of: "&#x27;", with: "'")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#34;", with: "\"")
-            .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+        return decoded.count > Limits.maxFieldLength ? String(decoded.prefix(Limits.maxFieldLength)) : decoded
     }
     
     private func extractAuthor(from dict: [String: Any]) -> String {
@@ -242,7 +262,7 @@ class SchemaOrgRecipeJSONLDImporter {
         
         if let recipeInstructions = dict["recipeInstructions"] {
             if let instructionsArray = recipeInstructions as? [[String: Any]] {
-                for (_, instruction) in instructionsArray.enumerated() {
+                for instruction in instructionsArray.prefix(Limits.maxArrayItems) {
                     if let text = instruction["text"] as? String {
                         directions.append(Direction(
                             id: UUID().uuidString,
@@ -252,7 +272,7 @@ class SchemaOrgRecipeJSONLDImporter {
                     }
                 }
             } else if let instructionsArray = recipeInstructions as? [String] {
-                for instruction in instructionsArray {
+                for instruction in instructionsArray.prefix(Limits.maxArrayItems) {
                     directions.append(Direction(
                         id: UUID().uuidString,
                         isHeading: false,
@@ -276,7 +296,7 @@ class SchemaOrgRecipeJSONLDImporter {
         var ingredients: [Ingredient] = []
         
         if let recipeIngredients = dict["recipeIngredient"] as? [String] {
-            for ingredient in recipeIngredients {
+            for ingredient in recipeIngredients.prefix(Limits.maxArrayItems) {
                 ingredients.append(Ingredient(
                     id: UUID().uuidString,
                     isHeading: false,
@@ -542,15 +562,35 @@ extension SchemaOrgRecipeJSONLDImporter {
     /// - Parameter url: URL to fetch and parse
     /// - Returns: Array of Recipe objects found at the URL
     func parseRecipes(from url: URL) async -> [Recipe] {
+        // Only fetch real web URLs — reject file://, custom schemes, and anything that could coax the app
+        // into reading local resources (SSRF-style abuse of an importer that takes an arbitrary URL).
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            logger.error("Refusing to fetch non-http(s) URL: \(url)")
+            return []
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = Limits.requestTimeout
+
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            // expectedContentLength is -1 when unknown; only enforce when the server advertises a size.
+            if response.expectedContentLength > Int64(Limits.maxInputBytes) {
+                logger.error("Response content length \(response.expectedContentLength) exceeds limit; refusing to parse")
+                return []
+            }
+            guard data.count <= Limits.maxInputBytes else {
+                logger.error("Fetched \(data.count) bytes, exceeds \(Limits.maxInputBytes) limit; refusing to parse")
+                return []
+            }
             if let html = String(data: data, encoding: .utf8) {
                 return parseRecipes(from: html)
             }
         } catch {
             logger.error("Error fetching URL \(url): \(error)")
         }
-        
+
         return []
     }
 }

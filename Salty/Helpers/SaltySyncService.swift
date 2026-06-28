@@ -1383,7 +1383,12 @@ class SaltySyncService {
     /// Downloads image bytes and records the server's [imageDate] locally, so the next sync sees the local
     /// and server image timestamps as equal and doesn't re-transfer.
     private func downloadImage(filename: String, for recipeId: String, imageDate: Date?) async throws {
-        let url = URL(string: "\(serverUrl)/api/recipes/images/\(filename)")!
+        // `filename` is server-controlled; percent-encode it and guard the URL so a malformed name
+        // surfaces as a recoverable error instead of crashing the sync.
+        guard let encodedFilename = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "\(serverUrl)/api/recipes/images/\(encodedFilename)") else {
+            throw SyncError.downloadFailed("Invalid image URL for filename: \(filename)")
+        }
         logger.debug("Downloading image from: \(url)")
 
         var request = URLRequest(url: url)
@@ -1459,9 +1464,7 @@ class SaltySyncService {
 
     /// The wire timestamp format the server expects (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`, milliseconds).
     private static func wireDateString(_ date: Date) -> String {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return iso.string(from: date)
+        SyncWireDate.string(from: date)
     }
 
     // MARK: - Network Helpers
@@ -1530,9 +1533,18 @@ class SaltySyncService {
         return items
     }
 
+    /// Builds a request URL from `serverUrl` and an endpoint path, throwing rather than force-unwrapping
+    /// so a misconfigured server URL can't crash a sync.
+    private func makeURL(endpoint: String) throws -> URL {
+        guard let url = URL(string: "\(serverUrl)\(endpoint)") else {
+            throw SyncError.networkError("Invalid URL: \(serverUrl)\(endpoint)")
+        }
+        return url
+    }
+
     /// Fetches and decodes `T`, also returning the server's `X-Total-Count` header value if present.
     private func fetchFromServerWithTotalCount<T: Decodable>(_ type: T.Type, endpoint: String) async throws -> (value: T, totalCount: Int?) {
-        let url = URL(string: "\(serverUrl)\(endpoint)")!
+        let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
 
@@ -1610,7 +1622,7 @@ class SaltySyncService {
     }
 
     private func postToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
-        let url = URL(string: "\(serverUrl)\(endpoint)")!
+        let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1630,7 +1642,7 @@ class SaltySyncService {
     }
     
     private func putToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
-        let url = URL(string: "\(serverUrl)\(endpoint)")!
+        let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1692,6 +1704,47 @@ class SaltySyncService {
         }
     }
 
+}
+
+/// Canonical conversion between a `Date` and the Salty Server wire timestamp
+/// (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'` — UTC, millisecond precision). Centralized so the encode and decode
+/// paths can never drift: a past drift (`JSONEncoder`'s `.iso8601` strategy dropping fractional seconds)
+/// floored uploads to whole seconds while the local copy and the server's echo kept milliseconds, so the
+/// reconciler saw local as newer and re-uploaded every recipe on every sync. Pairs with
+/// `Date.roundedToWireMillis`, which compares instants at this same millisecond resolution. `internal`
+/// (not `private`) so the round-trip can be unit-tested.
+enum SyncWireDate {
+    /// Serializes to the wire format the server expects (millisecond fractional seconds, trailing `Z`).
+    static func string(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
+    /// Parses a server timestamp, tolerating the format variants the server and GRDB are known to emit:
+    /// ISO-8601 with then without fractional seconds, a `T`-separated value lacking a timezone, GRDB's
+    /// space-separated local format, and a microsecond-precision variant. Order matters — the canonical
+    /// `.SSS'Z'` form is tried first.
+    static func date(from string: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: string) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: string) { return date }
+
+        for format in [
+            "yyyy-MM-dd'T'HH:mm:ss",        // no timezone
+            "yyyy-MM-dd HH:mm:ss.SSS",      // GRDB default (space-separated)
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", // microseconds
+        ] {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            formatter.dateFormat = format
+            if let date = formatter.date(from: string) { return date }
+        }
+        return nil
+    }
 }
 
 extension Date {
