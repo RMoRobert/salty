@@ -974,27 +974,7 @@ class SaltySyncService {
     
     /// Parse server date string to Date
     private func parseServerDate(_ dateStr: String) -> Date? {
-        let formatters: [DateFormatter] = {
-            let formats = [
-                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-                "yyyy-MM-dd'T'HH:mm:ss",
-                "yyyy-MM-dd'T'HH:mm:ss.SSS"
-            ]
-            return formats.map { format in
-                let formatter = DateFormatter()
-                formatter.dateFormat = format
-                formatter.timeZone = TimeZone(identifier: "UTC")
-                return formatter
-            }
-        }()
-        
-        for formatter in formatters {
-            if let date = formatter.date(from: dateStr) {
-                return date
-            }
-        }
-        return nil
+        SyncWireDate.date(from: dateStr)
     }
     
     private func uploadRecipe(_ recipe: Recipe) async throws {
@@ -1562,35 +1542,10 @@ class SaltySyncService {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
-            
-            // Try ISO8601 with fractional seconds first (e.g., 2025-10-17T21:43:10.000Z)
-            // This should match what Salty Server uses by default with its database
-            let isoFormatter = ISO8601DateFormatter()
-            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = isoFormatter.date(from: dateString) {
-                return date
+            guard let date = SyncWireDate.date(from: dateString) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
             }
-            // But if not, try some likely alternatives...
-            // Try without fractional seconds (e.g., 2025-10-17T21:43:10Z)
-            isoFormatter.formatOptions = [.withInternetDateTime]
-            if let date = isoFormatter.date(from: dateString) {
-                return date
-            }
-            // Try without timezone (e.g., 2025-10-17T21:43:10)
-            let dateFormatter = DateFormatter()
-            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-            dateFormatter.timeZone = TimeZone(identifier: "UTC")
-            dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-            if let date = dateFormatter.date(from: dateString) {
-                return date
-            }
-            // Fallback: Try GRDB default format (e.g., 2025-10-17 21:43:10.000)
-            dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-            if let date = dateFormatter.date(from: dateString) {
-                return date
-            }
-            
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+            return date
         }
         
         do {
@@ -1612,11 +1567,10 @@ class SaltySyncService {
     /// milliseconds, so the reconciler saw local as newer on every sync and re-uploaded forever. This
     /// is the inverse of the decode path in `fetchFromServerWithTotalCount`, which prefers `.SSS'Z'`.
     private func makeWireEncoder() -> JSONEncoder {
-        let style = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, enc in
             var container = enc.singleValueContainer()
-            try container.encode(date.formatted(style))
+            try container.encode(SyncWireDate.string(from: date))
         }
         return encoder
     }
