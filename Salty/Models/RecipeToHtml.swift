@@ -858,11 +858,6 @@ main {
    border-radius: var(--salty-card-radius);
    box-shadow: var(--salty-card-shadow);
    border: 1px solid var(--salty-border);
-   transition: transform 0.2s ease;
-}
-
-#recipe-image:hover {
-   transform: scale(1.02);
 }
 
 /* Recipe Content Area */
