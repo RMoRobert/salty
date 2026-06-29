@@ -69,6 +69,26 @@ struct DatabaseIntegrationTests {
             #expect(categoryHasLastModified == 1)
         }
 
+        /// Regression for the 0003 idempotency guard. Simulates the KMP-seeded case (the `variations`
+        /// column already exists but 0003 isn't recorded as applied): re-running the migrator must NOT
+        /// fail with "duplicate column name: variations".
+        @Test func migration0003IsIdempotentWhenVariationsColumnExists() throws {
+            let queue = try DatabaseQueue()
+            try saltyMigrator().migrate(queue)
+
+            // Un-record 0003 while leaving its column in place.
+            try queue.write { db in
+                try db.execute(
+                    sql: "DELETE FROM grdb_migrations WHERE identifier = ?",
+                    arguments: ["0003: Add 'variations' column to 'recipe' table"]
+                )
+            }
+
+            #expect(throws: Never.self) {
+                try saltyMigrator().migrate(queue)
+            }
+        }
+
         @Test func foreignKeysAreEnabled() async throws {
             let db = try makeTestDatabase()
             let fkEnabled = try await db.read { try Int.fetchOne($0, sql: "PRAGMA foreign_keys") ?? 0 }

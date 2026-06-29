@@ -10,6 +10,32 @@ import OSLog
 
 private let fileLogger = Logger(subsystem: "Salty", category: "FileAccess")
 
+// MARK: - Size-limited file reads (import hardening)
+
+/// Upper bounds on files pulled in through the import flows, so an extra-large  file
+/// can't exhaust memory. Should be egenerous enough for most real recipe photos, scans, or cookbook PDFs.
+enum ImportFileLimits {
+    static let maxImageBytes = 100 * 1024 * 1024   // 100 MB
+    static let maxPDFBytes = 500 * 1024 * 1024    // 500 MB
+}
+
+extension Data {
+    /// Reads `url` only when the file is within `maxBytes`, returning nil (and logging) if it's too large
+    /// or unreadable — so callers bail gracefully instead of loading a huge file entirely into memory.
+    static func contents(of url: URL, maxBytes: Int) -> Data? {
+        if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > maxBytes {
+            fileLogger.error("Refusing to read oversized import file: \(size) bytes exceeds \(maxBytes)-byte limit")
+            return nil
+        }
+        do {
+            return try Data(contentsOf: url, options: .mappedIfSafe)
+        } catch {
+            fileLogger.error("Failed to read import file: \(error.localizedDescription)")
+            return nil
+        }
+    }
+}
+
 extension FileManager {
 
     // MARK: - Constants

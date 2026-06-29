@@ -339,8 +339,8 @@ struct CreateRecipeFromImageView: View {
     /// Reads a (possibly multi-page) PDF into memory and shows its first page as a preview. Text is
     /// extracted later when the user taps "Extract Text" (digital text layer or per-page OCR).
     private func loadPDF(from url: URL) {
-        guard let data = try? Data(contentsOf: url) else {
-            logger.error("Failed to read PDF data")
+        guard let data = Data.contents(of: url, maxBytes: ImportFileLimits.maxPDFBytes) else {
+            logger.error("Failed to read PDF data (missing or exceeds size limit)")
             return
         }
         pdfData = data
@@ -378,21 +378,17 @@ struct CreateRecipeFromImageView: View {
     }
     
     private func loadImage(from url: URL) -> CGImage? {
-        do {
-            // Read the file data first
-            let imageData = try Data(contentsOf: url)
-            
-            // Create image source from data instead of URL
-            guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
-                  let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-                logger.error("Failed to create image from data")
-                return nil
-            }
-            return cgImage
-        } catch {
-            logger.error("Failed to read image data: \(error)")
+        guard let imageData = Data.contents(of: url, maxBytes: ImportFileLimits.maxImageBytes) else {
+            logger.error("Failed to read image data (missing or exceeds size limit)")
             return nil
         }
+        // Create image source from data instead of URL
+        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            logger.error("Failed to create image from data")
+            return nil
+        }
+        return cgImage
     }
     //endif
 }

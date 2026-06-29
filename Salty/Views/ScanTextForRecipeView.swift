@@ -502,21 +502,17 @@ struct ScanTextForRecipeView: View {
     }
     
     private func loadImage(from url: URL) -> CGImage? {
-        do {
-            // Read the file data first
-            let imageData = try Data(contentsOf: url)
-            
-            // Create image source from data instead of URL
-            guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
-                  let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-                logger.error("Failed to create image from data")
-                return nil
-            }
-            return cgImage
-        } catch {
-            logger.error("Failed to read image data: \(error)")
+        guard let imageData = Data.contents(of: url, maxBytes: ImportFileLimits.maxImageBytes) else {
+            logger.error("Failed to read image data (missing or exceeds size limit)")
             return nil
         }
+        // Create image source from data instead of URL
+        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            logger.error("Failed to create image from data")
+            return nil
+        }
+        return cgImage
     }
     #endif
 }

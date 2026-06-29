@@ -510,6 +510,38 @@ func appDatabase() throws -> any DatabaseWriter {
     // add the SAME identifier to KMP's `GRDB_MIGRATIONS`. For changes BOTH apps need on EXISTING shared
     // tables, prefer the `saltyMigration` ledger (`saltySharedMigrations` below) instead of a new GRDB
     // migration, so KMP applies it too.
+    let migrator = saltyMigrator()
+    logger.info("Starting database migration...")
+    try migrator.migrate(database)
+    logger.info("Database migration completed successfully")
+
+    // Cross-platform shared migrations. GRDB's migrator (grdb_migrations) and SaltyKMP's SQLDelight
+    // migrator (PRAGMA user_version) only coordinate the BASE tables; for any later change BOTH apps
+    // need on the shared saltyRecipeDB.sqlite, the `saltyMigration` ledger is the single source of truth
+    // so it runs exactly once, whoever opens the file first. Mirror of SaltyKMP's applySharedMigrations.
+    try runSaltySharedMigrations(database)
+
+    // Defensive: the shared DB may be written by SaltyKMP or raw SQL, which can leave non-optional
+    // `recipe` columns NULL. GRDB would then fail to decode the row (JSON columns and Dates can't be
+    // nil), making the recipe unopenable. Runs every launch and only touches offending rows.
+    coalesceNullRecipeColumns(database)
+
+#if DEBUG
+    if context == .preview {
+      try database.write { db in
+        try db.seedSampleData()
+      }
+    }
+#endif
+
+    return database
+}
+
+/// Builds the GRDB migrator for the base tables (0001–0004), extracted from `appDatabase()` so the
+/// migrations can be applied to a test database in isolation. SaltyKMP mirrors these identifiers (see the
+/// note in `appDatabase()`); keep new base migrations idempotent so a KMP-seeded DB that already has a
+/// column can re-run them safely.
+func saltyMigrator() -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
 #if DEBUG
     migrator.eraseDatabaseOnSchemaChange = false
@@ -611,9 +643,17 @@ func appDatabase() throws -> any DatabaseWriter {
     
     migrator.registerMigration("0003: Add 'variations' column to 'recipe' table") { db in
         logger.info("Running '0003: Add variations column...' migration")
-        
-        try db.alter(table: "recipe") { t in
-            t.add(column: "variations", .jsonText)
+        // Idempotent (like 0004): a KMP-created DB may already have this column from its Schema.sq while
+        // this migration isn't yet recorded in grdb_migrations — guard on existence so re-applying can't
+        // fail with "duplicate column name: variations".
+        let hasColumn = (try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('recipe') WHERE name = 'variations'"
+        ) ?? 0) > 0
+        if !hasColumn {
+            try db.alter(table: "recipe") { t in
+                t.add(column: "variations", .jsonText)
+            }
         }
     }
 
@@ -656,30 +696,7 @@ func appDatabase() throws -> any DatabaseWriter {
 //        try db.drop(table: "recipeCourse")
 //    }
 
-    logger.info("Starting database migration...")
-    try migrator.migrate(database)
-    logger.info("Database migration completed successfully")
-
-    // Cross-platform shared migrations. GRDB's migrator (grdb_migrations) and SaltyKMP's SQLDelight
-    // migrator (PRAGMA user_version) only coordinate the BASE tables; for any later change BOTH apps
-    // need on the shared saltyRecipeDB.sqlite, the `saltyMigration` ledger is the single source of truth
-    // so it runs exactly once, whoever opens the file first. Mirror of SaltyKMP's applySharedMigrations.
-    try runSaltySharedMigrations(database)
-
-    // Defensive: the shared DB may be written by SaltyKMP or raw SQL, which can leave non-optional
-    // `recipe` columns NULL. GRDB would then fail to decode the row (JSON columns and Dates can't be
-    // nil), making the recipe unopenable. Runs every launch and only touches offending rows.
-    coalesceNullRecipeColumns(database)
-
-#if DEBUG
-    if context == .preview {
-      try database.write { db in
-        try db.seedSampleData()
-      }
-    }
-#endif
-    
-    return database
+    return migrator
 }
 
 /// Backfills NULLs in `recipe` columns that the Swift model treats as non-optional, so a row authored by
