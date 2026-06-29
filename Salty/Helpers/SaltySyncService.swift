@@ -25,7 +25,12 @@ class SaltySyncService {
     static let shared = SaltySyncService()
     
     private let logger = Logger(subsystem: "Salty", category: "Sync")
-    
+
+    /// URLSession used for all server calls. Defaults to `.shared`; injectable so tests can stub responses
+    /// (e.g. a `URLProtocol`-backed session) and exercise the error paths without a live server.
+    @ObservationIgnored
+    private let session: URLSession
+
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
@@ -105,7 +110,10 @@ class SaltySyncService {
         #endif
     }
     
-    private init() {}
+    /// `session` defaults to `.shared` for the app singleton; tests inject a stubbed session.
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
     
     // MARK: - Authentication Methods
     
@@ -128,7 +136,7 @@ class SaltySyncService {
         
         logger.info("Attempting login for user: \(self.serverUsername)")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.authenticationFailed("Invalid response from server")
@@ -810,7 +818,7 @@ class SaltySyncService {
         ]
         request.httpBody = try JSONEncoder().encode(body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -833,8 +841,8 @@ class SaltySyncService {
         return DeviceInfo(deviceId: deviceId, lastSyncDate: lastSyncDate, isFirstSync: isFirstSync)
     }
     
-    /// Mark sync as complete on server
-    private func completeSyncOnServer() async throws {
+    /// Mark sync as complete on server. Internal (not private) so its non-2xx throw is unit-testable.
+    func completeSyncOnServer() async throws {
         guard let url = URL(string: "\(serverUrl)/api/recipes/sync/device/\(deviceId)/complete") else {
             throw SyncError.uploadFailed("Invalid server URL")
         }
@@ -843,12 +851,12 @@ class SaltySyncService {
         request.httpMethod = "POST"
         addAuthHeader(to: &request)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
-        
+        let (data, response) = try await session.data(for: request)
+
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
-            logger.warning("Failed to mark sync complete on server")
-            return
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw SyncError.uploadFailed("Failed to mark sync complete on server: \(SyncError.httpMessage(status: statusCode, body: data))")
         }
     }
     
@@ -941,8 +949,8 @@ class SaltySyncService {
         }
     }
     
-    /// Delete recipes on the server
-    private func deleteRecipesOnServer(recipeIds: [String]) async throws {
+    /// Delete recipes on the server. Internal (not private) so its non-2xx throw is unit-testable.
+    func deleteRecipesOnServer(recipeIds: [String]) async throws {
         guard let url = URL(string: "\(serverUrl)/api/recipes/sync/delete") else {
             throw SyncError.uploadFailed("Invalid server URL")
         }
@@ -958,14 +966,14 @@ class SaltySyncService {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
-            logger.warning("Failed to delete recipes on server")
-            return
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw SyncError.uploadFailed("Failed to delete recipes on server: \(SyncError.httpMessage(status: statusCode, body: data))")
         }
-        
+
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let deleted = json["deleted"] as? Int {
             logger.info("Server deleted \(deleted) recipe(s)")
@@ -1208,7 +1216,7 @@ class SaltySyncService {
 
         request.httpBody = body
         
-        let (responseData, response) = try await URLSession.shared.data(for: request)
+        let (responseData, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.uploadFailed("No HTTP response received")
@@ -1362,7 +1370,8 @@ class SaltySyncService {
     
     /// Downloads image bytes and records the server's [imageDate] locally, so the next sync sees the local
     /// and server image timestamps as equal and doesn't re-transfer.
-    private func downloadImage(filename: String, for recipeId: String, imageDate: Date?) async throws {
+    /// Internal (not private) so its failure-path throws are unit-testable.
+    func downloadImage(filename: String, for recipeId: String, imageDate: Date?) async throws {
         // `filename` is server-controlled; percent-encode it and guard the URL so a malformed name
         // surfaces as a recoverable error instead of crashing the sync.
         guard let encodedFilename = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
@@ -1374,16 +1383,14 @@ class SaltySyncService {
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            logger.warning("No HTTP response for image download: \(filename)")
-            return
+            throw SyncError.downloadFailed("No HTTP response for image download: \(filename)")
         }
 
         guard httpResponse.statusCode == 200 else {
-            logger.warning("Image download failed for '\(filename)': HTTP \(httpResponse.statusCode)")
-            return
+            throw SyncError.downloadFailed("Image download failed for '\(filename)': \(SyncError.httpMessage(status: httpResponse.statusCode, body: data))")
         }
 
         logger.debug("Downloaded image '\(filename)': \(data.count) bytes")
@@ -1402,7 +1409,7 @@ class SaltySyncService {
             }
             logger.info("Updated recipe \(recipeId) with downloaded image")
         } else {
-            logger.error("Failed to save downloaded image for recipe \(recipeId)")
+            throw SyncError.downloadFailed("Failed to save downloaded image for recipe \(recipeId)")
         }
     }
 
@@ -1418,7 +1425,7 @@ class SaltySyncService {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         addAuthHeader(to: &request)
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw SyncError.uploadFailed("Image delete failed for recipe \(recipeId)")
         }
@@ -1528,7 +1535,7 @@ class SaltySyncService {
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -1585,7 +1592,7 @@ class SaltySyncService {
         let encoder = makeWireEncoder()
         request.httpBody = try encoder.encode(object)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -1605,7 +1612,7 @@ class SaltySyncService {
         let encoder = makeWireEncoder()
         request.httpBody = try encoder.encode(object)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -1624,7 +1631,7 @@ class SaltySyncService {
         request.httpMethod = "DELETE"
         addAuthHeader(to: &request)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 else {
@@ -1643,7 +1650,7 @@ class SaltySyncService {
         addAuthHeader(to: &request)
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 return false
