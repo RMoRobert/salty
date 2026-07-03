@@ -183,14 +183,14 @@ struct ServerSettingsView: View {
                         .keyboardType(.URL)
                         .autocapitalization(.none)
 #endif
-                    if (!serverUrl.isEmpty && !serverUrl.starts(with: "https")) {
+                    if (!serverUrl.isEmpty && !serverUrl.lowercased().starts(with: "https")) {
                         Text("WARNING: It is recommended to use HTTPS for better security.")
                             .font(.caption)
                             .foregroundStyle(Color.red)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Text(verbatim: "Example: https://sever.example.com:8443")
+                    Text(verbatim: "Example: https://server.example.com:8443")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

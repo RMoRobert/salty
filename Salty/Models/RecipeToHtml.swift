@@ -10,6 +10,21 @@ import SwiftHtml
 import ImageIO
 import UniformTypeIdentifiers
 
+extension String {
+    /// SwiftHtml's DocumentRenderer emits text content verbatim (no entity encoding), so every
+    /// user-editable string interpolated into the recipe document must pass through this first —
+    /// recipe text can come from untrusted sources (web import, shared .saltyRecipe files, sync)
+    /// and would otherwise be interpreted as markup/script in the WKWebView and HTML exports.
+    /// `&` must be replaced first so already-produced entities aren't double-escaped.
+    var htmlEscaped: String {
+        self.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+}
+
 extension Recipe {
     var asHtml: String {
         return asHtmlWithOptions(options: HTMLExportOptions())
@@ -49,7 +64,7 @@ extension Recipe {
         let doc = Document(.html) {
             Html {
                 Head {
-                    Title(name)
+                    Title(name.htmlEscaped)
                     Meta().charset("utf-8")
                     Meta().name("viewport").content("width=device-width, initial-scale=1.0")
                     Style(getDefaultCSS() + "\n\n" + theme.overrideCSS)
@@ -58,21 +73,21 @@ extension Recipe {
                     Main {
                         Section {
                             Div {
-                                H1(name).id("recipe-name")
-                                if !source.isEmpty { P(source).id("recipe-source") }
-                                if !sourceDetails.isEmpty { P(sourceDetails).id("recipe-sourceDetails") }
+                                H1(name.htmlEscaped).id("recipe-name")
+                                if !source.isEmpty { P(source.htmlEscaped).id("recipe-source") }
+                                if !sourceDetails.isEmpty { P(sourceDetails.htmlEscaped).id("recipe-sourceDetails") }
                                 
                                 if let course = course, !course.isEmpty {
                                     P {
                                         Span("Course:").id("recipe-course-label")
-                                        Span(course).id("recipe-course-text")
+                                        Span(course.htmlEscaped).id("recipe-course-text")
                                     }
                                     .id("recipe-course-container")
                                 }
 
                                 Div {
                                     if !yield.isEmpty {
-                                        P(yield).id("recipe-yield-item")
+                                        P(yield.htmlEscaped).id("recipe-yield-item")
                                     }
                                     if let servings = servings, servings > 0 {
                                         P("\(servings)").id("recipe-servings-item")
@@ -123,9 +138,9 @@ extension Recipe {
                                         Ul {
                                             for prepTime in preparationTimes {
                                                 Li {
-                                                    Span(prepTime.type).class("recipe-prep-time-type")
+                                                    Span(prepTime.type.htmlEscaped).class("recipe-prep-time-type")
                                                     Span("").class("recipe-prep-time-separator")
-                                                    Span(prepTime.timeString).class("recipe-prep-time-time")
+                                                    Span(prepTime.timeString.htmlEscaped).class("recipe-prep-time-time")
                                                 }
                                             }
                                         }.id("recipe-prep-time-list")
@@ -147,7 +162,7 @@ extension Recipe {
                         
                         if options.includeIntroduction && !introduction.isEmpty {
                             Section {
-                                P(introduction)
+                                P(introduction.htmlEscaped)
                                     .class("recipe-introduction")
                             }
                             .id("recipe-introduction-container")
@@ -159,11 +174,11 @@ extension Recipe {
                                     Ul {
                                         for ingredient in ingredients {
                                             if ingredient.isHeading {
-                                                Li(ingredient.text)
+                                                Li(ingredient.text.htmlEscaped)
                                                     .class("recipe-ingredient-heading")
                                             }
                                             else {
-                                                Li(ingredient.text)
+                                                Li(ingredient.text.htmlEscaped)
                                                     .class("recipe-ingredient")
                                             }
                                         }
@@ -179,7 +194,7 @@ extension Recipe {
                                 Ul {
                                     for (index, direction) in directions.enumerated() {
                                         if let isHeading = direction.isHeading, isHeading {
-                                                Li(direction.text)
+                                                Li(direction.text.htmlEscaped)
                                                     .class("recipe-directions-heading")
                                         }
                                         else {
@@ -187,7 +202,7 @@ extension Recipe {
                                             Li {
                                                 Span("\(stepNumber).")
                                                     .class("recipe-directions-step-number")
-                                                Span(direction.text)
+                                                Span(direction.text.htmlEscaped)
                                                     .class("recipe-directions-step-text")
                                             }
                                             .class("recipe-directions-step")
@@ -205,9 +220,9 @@ extension Recipe {
                                 H2("Notes").id("recipe-notes")
                                 for note in notes {
                                     Div {
-                                        H3(note.title)
+                                        H3(note.title.htmlEscaped)
                                             .class("recipe-note-heading")
-                                        P(note.content)
+                                        P(note.content.htmlEscaped)
                                             .class("recipe-note-text")
                                     }
                                     .class("recipe-note-container")
@@ -221,9 +236,9 @@ extension Recipe {
                                 H2("Variations").id("recipe-variations-heading")
                                 for variation in variations {
                                     Div {
-                                        H3(variation.variationName)
+                                        H3(variation.variationName.htmlEscaped)
                                             .class("recipe-variation-heading")
-                                        P(variation.text)
+                                        P(variation.text.htmlEscaped)
                                             .class("recipe-variation-text")
                                     }
                                     .class("recipe-variation-container")
@@ -238,7 +253,7 @@ extension Recipe {
                                     H2("Categories").id("recipe-categories")
                                     Ul {
                                         for category in categories {
-                                            Li(category).class("recipe-category")
+                                            Li(category.htmlEscaped).class("recipe-category")
                                         }
                                     }.id("categories-list")
                                 }
@@ -246,7 +261,7 @@ extension Recipe {
                                     H2("Tags").id("recipe-tags")
                                     Ul {
                                         for tag in tags {
-                                            Li(tag).class("recipe-tag")
+                                            Li(tag.htmlEscaped).class("recipe-tag")
                                         }
                                     }.id("tags-list")
                                 }

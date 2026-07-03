@@ -59,19 +59,26 @@ enum IngredientScaler {
                   let high = parseNumberToken(rangeMatch.high) else {
                 return nil
             }
-            let scaledLow = formatScaledAmount(low * factor)
-            let scaledHigh = formatScaledAmount(high * factor)
+            let scaledLow = formatScaledAmount(low * factor, preferFraction: prefersFraction(rangeMatch.low))
+            let scaledHigh = formatScaledAmount(high * factor, preferFraction: prefersFraction(rangeMatch.high))
             return "\(scaledLow)-\(scaledHigh)\(rangeMatch.suffix)"
         }
-        
+
         if let singleMatch = matchLeadingNumber(atStartOf: trimmed) {
             guard let value = parseNumberToken(singleMatch.numberToken) else {
                 return nil
             }
-            return formatScaledAmount(value * factor) + singleMatch.suffix
+            return formatScaledAmount(value * factor, preferFraction: prefersFraction(singleMatch.numberToken)) + singleMatch.suffix
         }
-        
+
         return nil
+    }
+
+    /// Fraction-style output suits tokens the author wrote as fractions or whole numbers ("1 1/2", "2");
+    /// decimal-authored tokens ("7.5") keep decimal output so metric-style quantities don't turn into
+    /// unidiomatic fractions ("3.75 grams", not "3 3/4 grams").
+    private static func prefersFraction(_ numberToken: String) -> Bool {
+        !numberToken.contains(".")
     }
     
     // MARK: - Number parsing
@@ -153,15 +160,42 @@ enum IngredientScaler {
         return numerator / denominator
     }
     
-    static func formatScaledAmount(_ value: Double) -> String {
+    static func formatScaledAmount(_ value: Double, preferFraction: Bool = true) -> String {
         guard value.isFinite else { return "0" }
         if abs(value) < 1e-9 { return "0" }
-        
+
+        if preferFraction, let mixed = mixedFractionString(value) {
+            return mixed
+        }
+
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 3
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.3f", value)
+    }
+
+    /// Denominators a cook would actually write (halves, thirds, quarters, sixths, eighths),
+    /// ascending so the first hit is already in lowest terms (0.75 matches 3/4 before 6/8).
+    private static let fractionDenominators = [2, 3, 4, 6, 8]
+
+    /// Renders a value as a "1 1/3"-style mixed fraction when it matches a common cooking fraction
+    /// EXACTLY — the tolerance (1e-6) only absorbs Double round-off from parsing/scaling, which is
+    /// ~1e-15 (1/3 × 4 = 1.333…). A genuinely inexact amount — even a close decimal approximation
+    /// like 0.667 (off from 2/3 by 3e-4) — returns nil and keeps its decimal form.
+    private static func mixedFractionString(_ value: Double) -> String? {
+        guard value > 0 else { return nil }
+        let whole = Int(value)
+        let frac = value - Double(whole)
+        // Whole numbers already render cleanly as decimals ("2"); only step in for a fractional part.
+        for den in fractionDenominators {
+            let num = (frac * Double(den)).rounded()
+            guard num >= 1, num <= Double(den - 1),
+                  abs(frac - num / Double(den)) < 0.000_001 else { continue }
+            let fracText = "\(Int(num))/\(den)"
+            return whole > 0 ? "\(whole) \(fracText)" : fracText
+        }
+        return nil
     }
 }

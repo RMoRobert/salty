@@ -83,4 +83,35 @@ struct SaltySyncServiceErrorPathTests {
             try await service.downloadImage(filename: "missing.jpg", for: "r1", imageDate: nil)
         }
     }
+
+    /// A body over the size cap must throw (before any disk/database write), so a hostile or corrupt
+    /// server response can't balloon local storage. The cap is injected small so the test doesn't need
+    /// a multi-hundred-MB fixture.
+    @Test func downloadImageThrowsWhenBodyExceedsSizeCap() async {
+        let service = makeService(status: 200, body: Data(count: 64))
+        await #expect(throws: SyncError.self) {
+            try await service.downloadImage(filename: "big.jpg", for: "r1", imageDate: nil, maxBytes: 32)
+        }
+    }
+}
+
+/// The image filename in a download URL is server-controlled. It must be encoded as a SINGLE path
+/// component — in particular "/" must be percent-encoded — so a hostile value can't traverse out of
+/// `/api/recipes/images/` and point the authenticated request at another endpoint.
+struct SyncImageFilenameEncodingTests {
+
+    @Test func leavesNormalFilenamesUntouched() {
+        let filename = "0198B5C6-1234-7ABC-8DEF-0123456789AB.jpg"
+        #expect(SaltySyncService.encodedImagePathComponent(filename) == filename)
+    }
+
+    @Test func encodesSlashesSoTraversalStaysInsideTheImagesPath() {
+        #expect(SaltySyncService.encodedImagePathComponent("../../api/auth/login")
+                == "..%2F..%2Fapi%2Fauth%2Flogin")
+    }
+
+    @Test func encodesQueryAndFragmentDelimiters() {
+        let encoded = SaltySyncService.encodedImagePathComponent("x.jpg?admin=1#frag")
+        #expect(encoded == "x.jpg%3Fadmin=1%23frag")
+    }
 }

@@ -1368,13 +1368,28 @@ class SaltySyncService {
         #endif
     }
     
+    /// Percent-encodes a server-supplied image filename as a SINGLE path component: unlike
+    /// `.urlPathAllowed`, "/" is also encoded, so a hostile value can't traverse out of
+    /// `/api/recipes/images/` and steer the authenticated request to another endpoint. Legit
+    /// filenames are always `<recipeId>.<ext>`, which this encoding leaves untouched.
+    /// Internal (not private) for unit testing; nonisolated because it's pure (the enclosing class is @MainActor).
+    nonisolated static func encodedImagePathComponent(_ filename: String) -> String? {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return filename.addingPercentEncoding(withAllowedCharacters: allowed)
+    }
+
     /// Downloads image bytes and records the server's [imageDate] locally, so the next sync sees the local
     /// and server image timestamps as equal and doesn't re-transfer.
-    /// Internal (not private) so its failure-path throws are unit-testable.
-    func downloadImage(filename: String, for recipeId: String, imageDate: Date?) async throws {
+    /// [maxBytes] rejects an oversized (hostile or corrupt) response before it's written to disk/database;
+    /// syncImages treats the throw as a per-recipe failure, so one bad image doesn't abort the whole sync.
+    /// Internal (not private) so its failure-path throws are unit-testable; maxBytes is injectable so the
+    /// cap can be tested without a multi-hundred-MB fixture.
+    func downloadImage(filename: String, for recipeId: String, imageDate: Date?,
+                       maxBytes: Int = ImportFileLimits.maxSyncImageDownloadBytes) async throws {
         // `filename` is server-controlled; percent-encode it and guard the URL so a malformed name
         // surfaces as a recoverable error instead of crashing the sync.
-        guard let encodedFilename = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+        guard let encodedFilename = Self.encodedImagePathComponent(filename),
               let url = URL(string: "\(serverUrl)/api/recipes/images/\(encodedFilename)") else {
             throw SyncError.downloadFailed("Invalid image URL for filename: \(filename)")
         }
@@ -1391,6 +1406,10 @@ class SaltySyncService {
 
         guard httpResponse.statusCode == 200 else {
             throw SyncError.downloadFailed("Image download failed for '\(filename)': \(SyncError.httpMessage(status: httpResponse.statusCode, body: data))")
+        }
+
+        guard data.count <= maxBytes else {
+            throw SyncError.downloadFailed("Image '\(filename)' is \(data.count) bytes, over the \(maxBytes)-byte sync limit; skipping")
         }
 
         logger.debug("Downloaded image '\(filename)': \(data.count) bytes")
