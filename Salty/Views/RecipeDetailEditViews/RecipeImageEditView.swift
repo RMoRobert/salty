@@ -9,9 +9,28 @@ import SwiftUI
 import OSLog
 #if os(iOS)
 import PhotosUI
+import UIKit
 #elseif os(macOS)
 import AVFoundation
+import AppKit
 #endif
+
+/// Reads image data from the system clipboard/pasteboard, if any is present.
+/// Returns PNG-encoded data suitable for `Recipe.setImage(_:)`, or `nil` if the
+/// clipboard does not contain an image.
+@MainActor
+private func imageDataFromClipboard() -> Data? {
+    #if os(iOS)
+    let pasteboard = UIPasteboard.general
+    guard pasteboard.hasImages, let image = pasteboard.image else { return nil }
+    return image.pngData()
+    #elseif os(macOS)
+    guard let image = NSImage(pasteboard: NSPasteboard.general),
+          let tiff = image.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+    return bitmap.representation(using: .png, properties: [:])
+    #endif
+}
 
 private struct DeleteImageButton: View {
     @Binding var recipe: Recipe
@@ -28,6 +47,30 @@ private struct SelectImageFileButton: View {
         Button("Select a File") {
             showingImageFilePicker = true
         }
+    }
+}
+
+private struct PasteImageButton: View {
+    @Binding var recipe: Recipe
+    /// On macOS, always shown for discoverability but disabled when the clipboard holds no image.
+    /// On iOS, `.confirmationDialog` hides disabled buttons, so we only render it when an image is
+    /// available (matching the platform convention of omitting unavailable actions).
+    @ViewBuilder var body: some View {
+        let clipboardImageData = imageDataFromClipboard()
+        #if os(iOS)
+        if let clipboardImageData {
+            Button("Paste from Clipboard") {
+                recipe.setImage(clipboardImageData)
+            }
+        }
+        #else
+        Button("Paste from Clipboard") {
+            if let clipboardImageData {
+                recipe.setImage(clipboardImageData)
+            }
+        }
+        .disabled(clipboardImageData == nil)
+        #endif
     }
 }
 
@@ -82,11 +125,13 @@ struct RecipeImageEditView: View {
                 .contextMenu {
                     DeleteImageButton(recipe: $recipe)
                     SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    PasteImageButton(recipe: $recipe)
                     TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .confirmationDialog("Image Options", isPresented: $showingImageMenu) {
                     DeleteImageButton(recipe: $recipe)
                     SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    PasteImageButton(recipe: $recipe)
                     TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
@@ -113,14 +158,16 @@ struct RecipeImageEditView: View {
                             Button("Delete", role: .destructive) {
                                 recipe.removeImage()
                             }
-                            
+
                             Button("Select a File") {
                                 showingImageFilePicker = true
                             }
-                            
+
                             Button("Select a Photo") {
                                 showingPhotoPicker = true
                             }
+
+                            PasteImageButton(recipe: $recipe)
                         }
                         .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                             providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
@@ -152,10 +199,12 @@ struct RecipeImageEditView: View {
                 .buttonStyle(.plain)
                 .contextMenu {
                     SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    PasteImageButton(recipe: $recipe)
                     TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .confirmationDialog("Add Image", isPresented: $showingImageMenu) {
                     SelectImageFileButton(showingImageFilePicker: $showingImageFilePicker)
+                    PasteImageButton(recipe: $recipe)
                     TakePhotoButton(showingCamera: $showingCamera)
                 }
                 .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
@@ -187,10 +236,12 @@ struct RecipeImageEditView: View {
                         Button("Select a File") {
                             showingImageFilePicker = true
                         }
-                        
+
                         Button("Select a Photo") {
                             showingPhotoPicker = true
                         }
+
+                        PasteImageButton(recipe: $recipe)
                     }
                     .onDrop(of: ["public.image"], isTargeted: $dragOver) { providers -> Bool in
                         providers.first?.loadDataRepresentation(forTypeIdentifier: "public.image", completionHandler: { (data, error) in
