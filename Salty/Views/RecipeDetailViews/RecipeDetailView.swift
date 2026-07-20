@@ -176,7 +176,7 @@ private struct PrepTimeAndFavoriteEtcSection: View {
                     }
                     if (recipe.wantToMake) {
                         HStack {
-                            Image(systemName: "checkmark.diamond")
+                            Image(systemName: "bookmark")
                                 .foregroundStyle(Color.green.opacity(0.8))
                                 .modifier(IconShadowModifier())
                             Text("Want to Make")

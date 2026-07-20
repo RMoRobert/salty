@@ -49,7 +49,7 @@ private struct CategoryDropTargetView: View {
 
     var body: some View {
         Label(category.name, systemImage: "rectangle.stack")
-            .tag("cat_\(category.id)")
+            .tag(SidebarItem.category(category.id))
             .dropDestination(for: String.self) { recipeIds, location in
                 for recipeId in recipeIds {
                     Task { await viewModel.addRecipeToCategory(recipeId: recipeId, categoryId: category.id) }
@@ -69,7 +69,7 @@ private struct TagDropTargetView: View {
 
     var body: some View {
         Label(tag.name, systemImage: "tag")
-            .tag("tag_\(tag.id)")
+            .tag(SidebarItem.tag(tag.id))
             .dropDestination(for: String.self) { recipeIds, location in
                 for recipeId in recipeIds {
                     Task { await viewModel.addRecipeToTag(recipeId: recipeId, tagId: tag.id) }
@@ -93,6 +93,8 @@ struct RecipeNavigationSplitView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var searchOptionsTracker = SearchOptionsTracker()
     
+    @AppStorage("sidebarShowFavorites") private var showFavorites = true
+    @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
     @AppStorage("sidebarShowTags") private var showTags = true
@@ -177,16 +179,24 @@ struct RecipeNavigationSplitView: View {
         let searchOptionsKey = RecipeListSearchOptions.allCases
             .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
             .joined(separator: "")
-        return "\(viewModel.searchString)||\(viewModel.selectedSidebarItemId ?? "")||\(viewModel.isFavoritesFilterActive)||\(viewModel.recipeListSortOrder.rawValue)||\(viewModel.recipeListSortDirection.rawValue)||\(searchOptionsKey)||\(searchOptionsTracker.changeId.uuidString)"
+        return "\(viewModel.searchString)||\(viewModel.selectedSidebarItem?.queryKey ?? "")||\(viewModel.isFavoritesFilterActive)||\(viewModel.recipeListSortOrder.rawValue)||\(viewModel.recipeListSortDirection.rawValue)||\(searchOptionsKey)||\(searchOptionsTracker.changeId.uuidString)"
     }
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(selection: $viewModel.selectedSidebarItemId) {
+            List(selection: $viewModel.selectedSidebarItem) {
                 // Library:
                 Section {
                     Label("All Recipes", systemImage: "book")
-                        .tag(viewModel.allRecipesID) // figure out better way to tag all...
+                        .tag(SidebarItem.allRecipes)
+                    if showFavorites {
+                        Label("Favorites", systemImage: "heart")
+                            .tag(SidebarItem.favorites)
+                    }
+                    if showWantToMake {
+                        Label("Want to Make", systemImage: "bookmark")
+                            .tag(SidebarItem.wantToMake)
+                    }
                 } header: {
                     Text("Library")
                 }
@@ -210,7 +220,7 @@ struct RecipeNavigationSplitView: View {
                     Section(isExpanded: $expandCourses) {
                         ForEach(viewModel.courses) { course in
                             Label(course.name, systemImage: "fork.knife")
-                                .tag("course_\(course.id)")
+                                .tag(SidebarItem.course(course.id))
                         }
                     } header: {
                         Text("Courses")
@@ -241,18 +251,23 @@ struct RecipeNavigationSplitView: View {
             #if os(macOS)
             .onAppear() {
                 // On macOS, set default selection to "All Recipes" if no selection exists
-                if viewModel.selectedSidebarItemId == nil {
-                    viewModel.selectedSidebarItemId = viewModel.allRecipesID
-                } else if let selectedId = viewModel.selectedSidebarItemId,
-                          selectedId != viewModel.allRecipesID,
-                          !selectedId.hasPrefix("cat_"),
-                          !selectedId.hasPrefix("course_"),
-                          !selectedId.hasPrefix("tag_") {
-                    // Migrate legacy category ID (without prefix) to new format
-                    viewModel.selectedSidebarItemId = "cat_\(selectedId)"
+                if viewModel.selectedSidebarItem == nil {
+                    viewModel.selectedSidebarItem = .allRecipes
                 }
             }
             #endif
+            // If the user hides a smart list that's currently selected, fall back to All Recipes so the
+            // selection never points at a row that's no longer in the sidebar.
+            .onChange(of: showFavorites) { _, isShown in
+                if !isShown, viewModel.selectedSidebarItem == .favorites {
+                    viewModel.selectedSidebarItem = .allRecipes
+                }
+            }
+            .onChange(of: showWantToMake) { _, isShown in
+                if !isShown, viewModel.selectedSidebarItem == .wantToMake {
+                    viewModel.selectedSidebarItem = .allRecipes
+                }
+            }
 
         } content: {
             List(selection: $viewModel.selectedRecipeIDs) {

@@ -34,6 +34,7 @@ enum RecipeListQueryBuilder {
         searchPattern: String?,
         options: Set<RecipeListSearchOptions>,
         includeFavorites: Bool,
+        includeWantToMake: Bool = false,
         sortOrder: RecipeListSortOrderSetting,
         sortDirection: RecipeListSortDirection
     ) -> SQLQueryExpression<RecipeListItem> {
@@ -43,6 +44,7 @@ enum RecipeListQueryBuilder {
                 searchPattern: searchPattern,
                 options: options,
                 includeFavorites: includeFavorites,
+                includeWantToMake: includeWantToMake,
                 sortOrder: sortOrder,
                 sortDirection: sortDirection
             ),
@@ -56,6 +58,7 @@ enum RecipeListQueryBuilder {
         searchPattern: String?,
         options: Set<RecipeListSearchOptions>,
         includeFavorites: Bool,
+        includeWantToMake: Bool = false,
         sortOrder: RecipeListSortOrderSetting,
         sortDirection: RecipeListSortDirection
     ) -> QueryFragment {
@@ -69,6 +72,9 @@ enum RecipeListQueryBuilder {
         }
         if includeFavorites {
             conditions.append("\(Recipe.isFavorite) = \(bind: true)")
+        }
+        if includeWantToMake {
+            conditions.append("\(Recipe.wantToMake) = \(bind: true)")
         }
 
         // Lightweight projection. The column order here MUST match RecipeListItem's stored-property

@@ -89,15 +89,11 @@ class RecipeNavigationSplitViewModel {
     /// Call this method after the database is loaded to set up the initial state
     func setupInitialState() {
         // Set default selection to "All Recipes" if currently nothing selected
-        if selectedSidebarItemId == nil {
-            selectedSidebarItemId = allRecipesID
+        if selectedSidebarItem == nil {
+            selectedSidebarItem = .allRecipes
         }
     }
     // MARK: - Constants
-    let allRecipesID: String = "0"
-    private let categoryPrefix = "cat_"
-    private let coursePrefix = "course_"
-    private let tagPrefix = "tag_"
     private let logger = Logger(subsystem: "Salty", category: "Database")
     
     // MARK: - Dependencies
@@ -113,7 +109,8 @@ class RecipeNavigationSplitViewModel {
     @FetchAll(
         RecipeListQueryBuilder.statement(
             scope: .all, searchPattern: nil, options: [],
-            includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+            includeFavorites: false, includeWantToMake: false,
+            sortOrder: .byName, sortDirection: .ascending
         )
     )
     var recipes: [RecipeListItem]
@@ -132,7 +129,7 @@ class RecipeNavigationSplitViewModel {
             
     // MARK: - State
     var searchString = ""
-    var selectedSidebarItemId: String?
+    var selectedSidebarItem: SidebarItem?
     var selectedRecipeIDs = Set<String>()
     var isFavoritesFilterActive = false
     
@@ -189,32 +186,20 @@ class RecipeNavigationSplitViewModel {
     // would cut that — see the RecipeSummary stub in Schema.swift.
 
     var navigationTitle: String {
-        if selectedSidebarItemId == allRecipesID {
+        switch selectedSidebarItem {
+        case .none, .allRecipes:
             return "Recipes"
-        } else if let selectedId = selectedSidebarItemId {
-            if selectedId.hasPrefix(categoryPrefix) {
-                let categoryId = String(selectedId.dropFirst(categoryPrefix.count))
-                if let category = categories.first(where: { $0.id == categoryId }) {
-                    return category.name
-                }
-            } else if selectedId.hasPrefix(coursePrefix) {
-                let courseId = String(selectedId.dropFirst(coursePrefix.count))
-                if let course = courses.first(where: { $0.id == courseId }) {
-                    return course.name
-                }
-            } else if selectedId.hasPrefix(tagPrefix) {
-                let tagId = String(selectedId.dropFirst(tagPrefix.count))
-                if let tag = tags.first(where: { $0.id == tagId }) {
-                    return tag.name
-                }
-            } else {
-                // Legacy: treat as category ID without prefix (for backward compatibility)
-                if let category = categories.first(where: { $0.id == selectedId }) {
-                    return category.name
-                }
-            }
+        case .favorites:
+            return "Favorites"
+        case .wantToMake:
+            return "Want to Make"
+        case .category(let id):
+            return categories.first(where: { $0.id == id })?.name ?? "Recipes"
+        case .course(let id):
+            return courses.first(where: { $0.id == id })?.name ?? "Recipes"
+        case .tag(let id):
+            return tags.first(where: { $0.id == id })?.name ?? "Recipes"
         }
-        return "Recipes"
     }
     
     // Helper to get selected search options from UserDefaults
@@ -238,13 +223,18 @@ class RecipeNavigationSplitViewModel {
         let options = getSelectedSearchOptions()
         let trimmed = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
         let pattern: String? = trimmed.isEmpty ? nil : "%\(trimmed)%"
+        // The "Favorites" smart list forces the favorites filter; the toolbar toggle composes with any
+        // scope (e.g. favorites within a category), so either source turns it on.
+        let includeFavorites = isFavoritesFilterActive || (selectedSidebarItem?.forcesFavorites ?? false)
+        let includeWantToMake = selectedSidebarItem?.forcesWantToMake ?? false
         do {
             try await $recipes.load(
                 RecipeListQueryBuilder.statement(
                     scope: currentScope,
                     searchPattern: pattern,
                     options: options,
-                    includeFavorites: isFavoritesFilterActive,
+                    includeFavorites: includeFavorites,
+                    includeWantToMake: includeWantToMake,
                     sortOrder: recipeListSortOrder,
                     sortDirection: recipeListSortDirection
                 )
@@ -254,19 +244,9 @@ class RecipeNavigationSplitViewModel {
         }
     }
 
-    /// Maps the selected sidebar item id to a query scope.
+    /// Maps the selected sidebar item to a query scope (nil selection == all recipes).
     private var currentScope: RecipeListScope {
-        guard let selectedId = selectedSidebarItemId, selectedId != allRecipesID else { return .all }
-        if selectedId.hasPrefix(categoryPrefix) {
-            return .category(String(selectedId.dropFirst(categoryPrefix.count)))
-        } else if selectedId.hasPrefix(coursePrefix) {
-            return .course(String(selectedId.dropFirst(coursePrefix.count)))
-        } else if selectedId.hasPrefix(tagPrefix) {
-            return .tag(String(selectedId.dropFirst(tagPrefix.count)))
-        } else {
-            // Legacy: bare category id without prefix (backward compatibility).
-            return .category(selectedId)
-        }
+        selectedSidebarItem?.scope ?? .all
     }
     
     // MARK: - Public Methods
@@ -388,7 +368,7 @@ class RecipeNavigationSplitViewModel {
     
     func handleNewRecipeSaved(recipeId: String) {
         // Switch to "All Recipes" view so the new recipe will be visible
-        selectedSidebarItemId = allRecipesID
+        selectedSidebarItem = .allRecipes
 
         // Select the newly saved recipe and scroll to it
         selectedRecipeIDs = [recipeId]

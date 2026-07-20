@@ -21,6 +21,7 @@ struct RecipeListQueryBuilderTests {
         pattern: String? = nil,
         options: Set<RecipeListSearchOptions> = [],
         includeFavorites: Bool = false,
+        includeWantToMake: Bool = false,
         sortOrder: RecipeListSortOrderSetting = .byName,
         sortDirection: RecipeListSortDirection = .ascending
     ) -> String {
@@ -29,6 +30,7 @@ struct RecipeListQueryBuilderTests {
             searchPattern: pattern,
             options: options,
             includeFavorites: includeFavorites,
+            includeWantToMake: includeWantToMake,
             sortOrder: sortOrder,
             sortDirection: sortDirection
         ).prepare { _ in "?" }.sql
@@ -133,6 +135,19 @@ struct RecipeListQueryBuilderTests {
         let s = sql(scope: .all, includeFavorites: true)
         #expect(s.contains("isFavorite"))
         #expect(s.contains("WHERE"))
+    }
+
+    @Test func wantToMakeFilterAddsWantToMake() {
+        let s = sql(scope: .all, includeWantToMake: true)
+        #expect(s.contains("wantToMake"))
+        #expect(s.contains("WHERE"))
+    }
+
+    @Test func favoritesAndWantToMakeCombineWithAnd() {
+        let s = sql(scope: .all, includeFavorites: true, includeWantToMake: true)
+        #expect(s.contains("isFavorite"))
+        #expect(s.contains("wantToMake"))
+        #expect(s.contains(" AND "))
     }
 
     @Test func scopeSearchAndFavoritesAllCombine() {

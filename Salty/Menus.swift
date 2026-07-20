@@ -248,6 +248,24 @@ struct Menus: Commands {
             Divider()
             #endif
             Menu("Sidebar Items") {
+                Toggle("Show Favorites", isOn: Binding(
+                    get: {
+                        if UserDefaults.standard.object(forKey: "sidebarShowFavorites") == nil {
+                            return true // Default to true if not set
+                        }
+                        return UserDefaults.standard.bool(forKey: "sidebarShowFavorites")
+                    },
+                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowFavorites") }
+                ))
+                Toggle("Show Want to Make", isOn: Binding(
+                    get: {
+                        if UserDefaults.standard.object(forKey: "sidebarShowWantToMake") == nil {
+                            return true // Default to true if not set
+                        }
+                        return UserDefaults.standard.bool(forKey: "sidebarShowWantToMake")
+                    },
+                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowWantToMake") }
+                ))
                 Toggle("Show Categories", isOn: Binding(
                     get: {
                         if UserDefaults.standard.object(forKey: "sidebarShowCategories") == nil {

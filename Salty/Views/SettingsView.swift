@@ -458,6 +458,8 @@ struct ServerSettingsView: View {
 struct GeneralSettingsView: View {
     @AppStorage("mobileEditViews") private var useMobileEditViews = false
     @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
+    @AppStorage("sidebarShowFavorites") private var showFavorites = true
+    @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
     @AppStorage("sidebarShowTags") private var showTags = true
@@ -528,6 +530,8 @@ struct GeneralSettingsView: View {
                 Text("Recipe List View Style")
             }
             Section {
+                Toggle("Show Favorites", isOn: $showFavorites)
+                Toggle("Show Want to Make", isOn: $showWantToMake)
                 Toggle("Show Categories", isOn: showCategoriesBinding)
                 Toggle("Show Courses", isOn: showCoursesBinding)
                 Toggle("Show Tags", isOn: showTagsBinding)
@@ -537,7 +541,7 @@ struct GeneralSettingsView: View {
                     .padding(.top)
                     #endif
             } footer: {
-                Text("At least one sidebar item must be enabled.")
+                Text("At least one of Categories, Courses, or Tags must be enabled.")
                     .font(.caption)
             }
         }
@@ -585,6 +589,8 @@ struct AdvancedSettingsView: View {
     @State private var isCreatingBackup = false
     @State private var backupMessage = ""
     @State private var showingDeleteConfirmation = false
+    @State private var isRegeneratingThumbnails = false
+    @State private var thumbnailMessage = ""
     
     var body: some View {
         Form {
@@ -635,6 +641,24 @@ struct AdvancedSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Button(isRegeneratingThumbnails ? "Regenerating…" : "Regenerate Preview Thumbnails") {
+                        regenerateThumbnails()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isRegeneratingThumbnails)
+                    Text("Rebuilds the small preview images shown in the recipe list from your full-size photos. Useful if older previews look stretched or squashed. Your photos are not modified.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !thumbnailMessage.isEmpty {
+                        Text(thumbnailMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             } header: {
                 Text("Image Cleanup")
             }
@@ -649,6 +673,25 @@ struct AdvancedSettingsView: View {
         }
     }
     
+    private func regenerateThumbnails() {
+        isRegeneratingThumbnails = true
+        thumbnailMessage = ""
+
+        Task {
+            let result = await RecipeImageManager.shared.regenerateAllThumbnails()
+            isRegeneratingThumbnails = false
+            if result.updated == 0 && result.failed == 0 {
+                thumbnailMessage = "No recipe images found to regenerate."
+            } else {
+                var message = "Regenerated \(result.updated) preview\(result.updated == 1 ? "" : "s")."
+                if result.failed > 0 {
+                    message += " \(result.failed) could not be read and were skipped."
+                }
+                thumbnailMessage = message
+            }
+        }
+    }
+
     private func createBackupNow() {
         isCreatingBackup = true
         backupMessage = "Creating backup..."
