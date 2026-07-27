@@ -463,7 +463,8 @@ struct GeneralSettingsView: View {
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
     @AppStorage("sidebarShowTags") private var showTags = true
-    
+    @AppStorage("sidebarShowShoppingLists") private var showShoppingLists = true
+
     // Computed properties for bindings that ensure at least one is always checked
     private var showCategoriesBinding: Binding<Bool> {
         Binding(
@@ -535,6 +536,7 @@ struct GeneralSettingsView: View {
                 Toggle("Show Categories", isOn: showCategoriesBinding)
                 Toggle("Show Courses", isOn: showCoursesBinding)
                 Toggle("Show Tags", isOn: showTagsBinding)
+                Toggle("Show Shopping Lists", isOn: $showShoppingLists)
             } header: {
                 Text("Sidebar Items")
                     #if os(macOS)

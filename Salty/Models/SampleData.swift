@@ -169,6 +169,13 @@ struct SampleData {
     ]
     
     static let sampleShoppingLists = [
-        ShoppingList(id: "shopping-list-1-id", name: "Shopping List 1", isFreeform: true, contentsForFreeform: "#My List\n\n* Example item")
+        ShoppingList(id: "shopping-list-1-id", name: "Freeform List", isFreeform: true, contentsForFreeform: "# My List\n\n## Produce\n* Apples\n* Spinach"),
+        ShoppingList(id: "shopping-list-2-id", name: "Weekly Groceries", isFreeform: false, contentsForList: [
+            ShoppingListListContents(id: "sample-item-h1", isHeading: true, text: "Produce"),
+            ShoppingListListContents(id: "sample-item-1", text: "Bananas"),
+            ShoppingListListContents(id: "sample-item-2", isCompleted: true, text: "Carrots"),
+            ShoppingListListContents(id: "sample-item-h2", isHeading: true, text: "Dairy"),
+            ShoppingListListContents(id: "sample-item-3", isImportant: true, text: "Whole milk"),
+        ])
     ]
 }

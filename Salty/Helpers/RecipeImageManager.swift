@@ -23,7 +23,7 @@ import AppKit
 // database) and file operations use only local state.
 //
 // ⚠️ `@unchecked` means the compiler does NOT verify this. If you add mutable stored state, the
-// race will compile silently — guard it with a lock/actor, isolate to an actor or @MainActor, or
+// race will compile silently. Guard it with a lock/actor, isolate to an actor or @MainActor, or
 // re-justify this annotation.
 final class RecipeImageManager: @unchecked Sendable {
     static let shared = RecipeImageManager()
@@ -98,7 +98,7 @@ final class RecipeImageManager: @unchecked Sendable {
     /// Builds before the aspect-fill fix generated iOS thumbnails by stretching the photo to a square,
     /// so libraries created on (or synced from) those versions still hold distorted bitmaps. The
     /// full-resolution images are retained, so regenerating is just re-running `generateThumbnail`.
-    /// Bumps `lastModifiedImageDate` — not `lastModifiedDate` — so the corrected thumbnail propagates
+    /// Bumps `lastModifiedImageDate` -- not `lastModifiedDate` -- so the corrected thumbnail propagates
     /// on the next sync without looking like a recipe content edit.
     ///
     /// Intended as a temporary one-shot repair tool exposed in Advanced settings; remove once

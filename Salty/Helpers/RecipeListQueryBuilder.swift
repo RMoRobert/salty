@@ -6,7 +6,7 @@
 //  sidebar scope, enabled search fields, the favorites filter, and sort order/direction.
 //
 //  This replaces the previous ~1,700 lines in RecipeNavigationSplitViewModel that hand-enumerated
-//  individual field combinations as separate literal `#sql` queries — an approach that also had a
+//  individual field combinations as separate literal `#sql` queries -- an approach that also had a
 //  correctness bug: unhandled combinations (e.g. category + course + tag together) silently fell
 //  back to name-only search. Here every enabled field contributes one OR'd condition, uniformly.
 //
@@ -78,7 +78,7 @@ enum RecipeListQueryBuilder {
         }
 
         // Lightweight projection. The column order here MUST match RecipeListItem's stored-property
-        // order — the raw-SQL decoder reads columns positionally.
+        // order -- the raw-SQL decoder reads columns positionally.
         var sql: QueryFragment = "SELECT \(Recipe.id), \(Recipe.name), \(Recipe.source), \(Recipe.sourceDetails), \(Recipe.introduction), \(Recipe.createdDate), \(Recipe.lastModifiedDate), \(Recipe.rating), \(Recipe.isFavorite), \(Recipe.imageThumbnailData) FROM \(Recipe.self)"
         if !conditions.isEmpty {
             sql = "\(sql) WHERE \(conditions.joined(separator: " AND "))"

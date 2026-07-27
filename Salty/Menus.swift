@@ -174,8 +174,15 @@ struct Menus: Commands {
     var body: some Commands {
        ToolbarCommands()
        SidebarCommands()
-       CommandGroup(after: .newItem) {
-           Button("Create from Web…") {
+       // Replaces the stock "New Window" item so ⌘N can belong to New Recipe;
+       // New Window is re-added below on ⇧⌘N.
+       CommandGroup(replacing: .newItem) {
+           Button("New Recipe") {
+               NotificationCenter.default.post(name: .createNewRecipe, object: nil)
+           }
+           .disabled(sheetTracker.isAnySheetShown)
+           .keyboardShortcut("n", modifiers: [.command])
+           Button("New Recipe from Web…") {
                #if os(iOS)
                NotificationCenter.default.post(name: .showCreateFromWebSheet, object: nil)
                #else
@@ -183,9 +190,27 @@ struct Menus: Commands {
                #endif
            }
            .disabled(sheetTracker.isAnySheetShown)
-           Button("Create from Image…") {
+           .keyboardShortcut("n", modifiers: [.command, .option])
+           Button("New Recipe from Image…") {
                openWindow(id: "create-recipe-from-image-window")
            }
+           #if os(macOS)
+           Button("New Window") {
+               openWindow(id: "main-window")
+           }
+           .keyboardShortcut("n", modifiers: [.command, .shift])
+           #endif
+           Divider()
+           Button(selectionTracker.selectedRecipeCount <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
+               NotificationCenter.default.post(name: .openSelectedRecipesInNewWindows, object: nil)
+           }
+           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .keyboardShortcut(.return)
+           Button("Get Info") {
+               NotificationCenter.default.post(name: .showRecipeInfoInspector, object: nil)
+           }
+           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .keyboardShortcut("i", modifiers: [.command])
            Divider()
            Button("Import from File…") {
                NotificationCenter.default.post(name: .showImportFromFileSheet, object: nil)
@@ -199,15 +224,6 @@ struct Menus: Commands {
                )
            }
            .disabled(sheetTracker.isAnySheetShown)
-           #if os(macOS)
-           Divider()
-           Button(selectionTracker.selectedRecipeCount <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
-               NotificationCenter.default.post(name: .openSelectedRecipesInNewWindows, object: nil)
-           }
-           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
-           .keyboardShortcut(.return)
-           #endif
-           Divider()
            Button("Print…") {
                NotificationCenter.default.post(name: .printSelectedRecipes, object: nil)
            }
@@ -215,12 +231,32 @@ struct Menus: Commands {
            #if os(macOS)
            .keyboardShortcut("p", modifiers: [.command])
            #endif
+           #if os(macOS)
            Divider()
-           Button("Get Info") {
-               NotificationCenter.default.post(name: .showRecipeInfoInspector, object: nil)
+           Menu("Library") {
+               Button("Show Duplicate Recipes…") {
+                   #if os(macOS)
+                   openWindow(id: "duplicate-recipes-window")
+                   #else
+                   NotificationCenter.default.post(name: .showDuplicateRecipes, object: nil)
+                   #endif
+               }
+               #if !os(macOS)
+               .disabled(sheetTracker.isAnySheetShown)
+               #endif
+               Button("Consolidate Duplicate Categories, Courses, and Tags…") {
+                   #if os(macOS)
+                   openWindow(id: "consolidate-duplicates-window")
+                   #else
+                   NotificationCenter.default.post(name: .showConsolidateDuplicates, object: nil)
+                   #endif
+               }
+               #if !os(macOS)
+               .disabled(sheetTracker.isAnySheetShown)
+               #endif
            }
-           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
-           .keyboardShortcut("i", modifiers: [.command])
+           #endif
+           Divider()
        }
         CommandGroup(before: .sidebar) {
             Menu("Sort By") {

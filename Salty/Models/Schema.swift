@@ -293,39 +293,12 @@ struct Category: Hashable, Identifiable, Codable, Equatable {
     var lastModifiedDate: Date?
 }
 
-//extension Category: FetchableRecord, PersistableRecord  {
-//    enum Columns {
-//        static let id = Column(CodingKeys.id)
-//        static let name = Column(CodingKeys.name)
-//        
-//        static let recipes = hasMany(Recipe.self)
-//    }
-//    
-//    static var databaseSelection: [any SQLSelectable] {
-//        [Columns.id, Columns.name]
-//    }
-//}
-
 @Table("tag")
 struct Tag: Hashable, Identifiable, Codable, Equatable, TableRecord {
     var id: String
     var name: String
     var lastModifiedDate: Date?
 }
-
-//extension Tag: FetchableRecord, PersistableRecord  {
-//    enum Columns {
-//        static let id = Column(CodingKeys.id)
-//        static let name = Column(CodingKeys.name)
-//        
-//        static let recipes = hasMany(Recipe.self)
-//    }
-//    
-//    static var databaseSelection: [any SQLSelectable] {
-//        [Columns.id, Columns.name]
-//    }
-//}
-//
 
 enum Difficulty: Int, Codable, CaseIterable, QueryBindable {
     case notSet = 0,  easy, somewhatEasy, medium, slightlyDifficult, difficult
@@ -448,29 +421,18 @@ struct ShoppingList: Hashable, Identifiable, Codable, Equatable {
     var name: String
     var isFreeform: Bool
     var contentsForFreeform: String?
-    // Only using freeform for now, but putting schema now for future use:
     @Column(as: [ShoppingListListContents].JSONRepresentation.self)
     var contentsForList: [ShoppingListListContents] = []
-}
-
-extension ShoppingList: FetchableRecord, PersistableRecord  {
-    enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-        static let isFreeform = Column(CodingKeys.isFreeform)
-        static let contentsForList = JSONColumn(CodingKeys.contentsForList)
-        static let contentsForFreeform = Column(CodingKeys.contentsForFreeform)
-    }
-    
-    static var databaseSelection: [any SQLSelectable] {
-        [Columns.id, Columns.name, Columns.isFreeform, Columns.contentsForList, Columns.contentsForFreeform]
-    }
+    // Appended at the end of the table (shared migration) so other writers' positional SELECT * keeps working.
+    var lastModifiedDate: Date?
 }
 
 struct ShoppingListListContents: Codable, Hashable, Equatable, Identifiable  {
     var id: String
     var isCompleted: Bool? = false
     var isImportant: Bool? = false
+    // Optional so rows written before headings existed still decode (nil == non-heading).
+    var isHeading: Bool? = false
     var text: String
 }
 
@@ -525,6 +487,9 @@ func appDatabase() throws -> any DatabaseWriter {
     // `recipe` columns NULL. GRDB would then fail to decode the row (JSON columns and Dates can't be
     // nil), making the recipe unopenable. Runs every launch and only touches offending rows.
     coalesceNullRecipeColumns(database)
+    // Same for `shoppingList` — plus it backfills the nullable `lastModifiedDate`, which a future
+    // sync would otherwise read as `distantPast` and delete the list instead of uploading it.
+    coalesceNullShoppingListColumns(database)
 
 #if DEBUG
     if context == .preview {
@@ -537,7 +502,7 @@ func appDatabase() throws -> any DatabaseWriter {
     return database
 }
 
-/// Builds the GRDB migrator for the base tables (0001–0004), extracted from `appDatabase()` so the
+/// Builds the GRDB migrator for the base tables (0001-0004), extracted from `appDatabase()` so the
 /// migrations can be applied to a test database in isolation. SaltyKMP mirrors these identifiers (see the
 /// note in `appDatabase()`); keep new base migrations idempotent so a KMP-seeded DB that already has a
 /// column can re-run them safely.
@@ -613,9 +578,14 @@ func saltyMigrator() -> DatabaseMigrator {
         }
     }
     
+    // NOTE: the identifier still says "and shopping lists" but no longer seeds one — the app now starts
+    // with no lists and offers to create one. The identifier itself must NOT be edited: it's recorded in
+    // `grdb_migrations` (renaming would re-run this on every existing DB and duplicate the categories and
+    // courses) and mirrored in SaltyKMP's `GRDB_MIGRATIONS`. Databases created before this change keep
+    // the default list they were seeded with, which is intentional — this is not a data migration.
     migrator.registerMigration("0002: Populate default categories, courses, and shopping lists") { db in
-        logger.info("Running 'Populate default categories, courses, and shopping lists' migration")
-        
+        logger.info("Running 'Populate default categories and courses' migration")
+
         // Add default category names to database
         let defaultCategories = [
             "Breads", "Breakfast", "Soups", "Pasta", "Holiday"
@@ -635,10 +605,6 @@ func saltyMigrator() -> DatabaseMigrator {
             let course = Course(id: UUIDV7().uuidString, name: courseName)
             try Course.insert { course }.execute(db)
         }
-        
-        // Add one shopping list (freeform with example format) to database
-        let shoppingList = ShoppingList(id: UUIDV7().uuidString, name: "Shopping List", isFreeform: true, contentsForFreeform: "# Shopping List\n\n##Store Name\n* Item Name")
-        try ShoppingList.insert { shoppingList }.execute(db)
     }
     
     migrator.registerMigration("0003: Add 'variations' column to 'recipe' table") { db in
@@ -729,6 +695,42 @@ func coalesceNullRecipeColumns(_ writer: any DatabaseWriter) {
     }
 }
 
+/// The `shoppingList` counterpart to `coalesceNullRecipeColumns`, repairing NULLs that either break
+/// decoding or, once shopping lists join sync, silently destroy a list. Same contract: best-effort,
+/// idempotent (each `UPDATE` matches only offending rows), runs on every open.
+///
+/// Two distinct hazards are covered:
+///
+/// 1. **Decodability.** `name`, `isFreeform`, and `contentsForList` are non-optional on the Swift
+///    model but nullable in SQL (migration 0001, and SaltyKMP's `Schema.sq` likewise), so a row
+///    written by KMP or raw SQL can fail to decode — taking the whole list-of-lists fetch with it,
+///    not just that row.
+/// 2. **Sync safety.** `lastModifiedDate` is nullable and only arrived in `SHARED-V0002`, so rows
+///    predating it — and anything KMP writes until it mirrors that migration — are NULL. The sync
+///    reconciler maps a missing timestamp to `Date.distantPast`, which is ALWAYS `<= lastSyncDate`,
+///    so such a row takes the `toDeleteLocally` branch: **deleted instead of uploaded** on its first
+///    sync. Coalescing to "now" biases the other way (treated as recently modified → uploaded),
+///    which is the non-destructive direction. This must stay in place before `shoppingList` is added
+///    to the sync set — see FEATURE_PLANS.md.
+func coalesceNullShoppingListColumns(_ writer: any DatabaseWriter) {
+    do {
+        try writer.write { db in
+            try db.execute(sql: #"UPDATE "shoppingList" SET "name" = '' WHERE "name" IS NULL"#)
+            try db.execute(sql: #"UPDATE "shoppingList" SET "contentsForList" = '[]' WHERE "contentsForList" IS NULL"#)
+            // Derive rather than defaulting to 0: a row carrying freeform text but a NULL flag would
+            // otherwise open as an empty checklist, hiding content the user actually wrote.
+            try db.execute(sql: #"""
+                UPDATE "shoppingList"
+                SET "isFreeform" = (CASE WHEN "contentsForFreeform" IS NOT NULL AND "contentsForFreeform" <> '' THEN 1 ELSE 0 END)
+                WHERE "isFreeform" IS NULL
+                """#)
+            try db.execute(sql: #"UPDATE "shoppingList" SET "lastModifiedDate" = CURRENT_TIMESTAMP WHERE "lastModifiedDate" IS NULL"#)
+        }
+    } catch {
+        logger.error("Shopping list NULL-coalescing pass failed: \(error.localizedDescription)")
+    }
+}
+
 /// Flush the WAL into the main `.sqlite` so another app (SaltyKMP, syncing the linked folder) sees the
 /// latest data in the *main* file — and leaves an empty WAL so the handoff is a single clean file.
 /// Best-effort: if a reader still holds the WAL we fall back to a passive checkpoint, which never blocks.
@@ -761,15 +763,24 @@ struct SaltySharedMigration: Sendable {
     let apply: @Sendable (GRDB.Database) throws -> Void
 }
 
-/// The shared migration list — EMPTY today, matching SaltyKMP. Append future cross-app changes here AND
-/// in SaltyKMP's `SHARED_MIGRATIONS` with the identical `id`. Example:
+/// The shared migration list. Append future cross-app changes here AND in SaltyKMP's
+/// `SHARED_MIGRATIONS` with the identical `id`. Example:
 ///
-///     SaltySharedMigration(id: "2026-07-recipe-add-prepNotes") { db in
+///     SaltySharedMigration(id: "SHARED-V0003") { db in
 ///         try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "prepNotes" TEXT"#)
 ///     }
 ///
+/// **Identifier convention:** `SHARED-V####`, numbered in the order entries are added.
+///   - An `id` is IMMUTABLE once it has shipped. It's the primary key of the `saltyMigration` ledger,
+///     and that ledger is the only record of what has already run. Renaming a shipped id makes the
+///     migration look unapplied — so the other app (or an older build of either app) re-runs it.
+///   - The FIRST entry below predates this convention and keeps its date-style id, which is why
+///     numbering starts at V0002. Don't "fix" it: see the point above.
+///   - Execution order is this array's order, NOT the identifier. The numbers are a naming
+///     convention for humans, nothing sorts by them.
+///
 /// Do NOT coordinate a shared-table change by adding a new GRDB `migrator.registerMigration("0005…")` —
-/// that path only coordinates the BASE tables (0001–0004), and KMP wouldn't apply it. Shared changes go
+/// that path only coordinates the BASE tables (0001-0004), and KMP wouldn't apply it. Shared changes go
 /// through this ledger on BOTH apps.
 let saltySharedMigrations: [SaltySharedMigration] = [
     // Decouples image transfer from recipe-body sync. Guard on column existence so this is safe whether the
@@ -782,6 +793,21 @@ let saltySharedMigrations: [SaltySharedMigration] = [
         ) ?? 0 > 0
         if !exists {
             try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "lastModifiedImageDate" DATETIME"#)
+        }
+    },
+    // Sync-readiness for shopping lists (see FEATURE_PLANS.md cross-cutting notes): every mutable table
+    // gets a lastModifiedDate. Mirror: SaltyKMP DB's SHARED_MIGRATIONS with same id ("SHARED-V0002").
+    // This is the ONLY place the column is added — deliberately not also in migration 0001. `shoppingList`
+    // is a shared table, so a GRDB-only migration would never run on a KMP-created database, and editing
+    // 0001 wouldn't reach databases that already recorded it. The ledger covers all three cases (fresh,
+    // pre-existing, KMP-created) through one code path, with no chance of the two definitions drifting.
+    SaltySharedMigration(id: "SHARED-V0002") { db in
+        let exists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('shoppingList') WHERE name = 'lastModifiedDate'"
+        ) ?? 0 > 0
+        if !exists {
+            try db.execute(sql: #"ALTER TABLE "shoppingList" ADD COLUMN "lastModifiedDate" DATETIME"#)
         }
     }
 ]
@@ -840,6 +866,9 @@ extension Database {
             }
             for recipe in SampleData.sampleRecipes {
                 recipe
+            }
+            for shoppingList in SampleData.sampleShoppingLists {
+                shoppingList
             }
         }
     }

@@ -36,7 +36,7 @@ final class AutoSyncCoordinator {
     /// Consecutive auto-sync failures before the user-facing banner appears.
     private let failureThreshold = 3
 
-    /// Bound by `MainView` — shown after repeated auto-sync failures; user-dismissable.
+    /// Bound by `MainView`. Shown after repeated auto-sync failures; user-dismissable.
     var showFailureBanner = false
 
     /// When auto-sync is paused until (persisted), or nil if not paused. Manual sync is never paused.
@@ -147,7 +147,7 @@ final class AutoSyncCoordinator {
 
     private func localDataDidChange() {
         guard isEnabled, !isPaused else { return }
-        // Ignore the writes sync itself makes while applying server changes — otherwise it could loop.
+        // Ignore the writes sync itself makes while applying server changes -- otherwise it could loop.
         guard !syncService.isSyncing else { return }
         hasPendingLocalChanges = true
         scheduleDebouncedSync()

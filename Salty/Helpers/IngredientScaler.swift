@@ -181,9 +181,9 @@ enum IngredientScaler {
     private static let fractionDenominators = [2, 3, 4, 6, 8]
 
     /// Renders a value as a "1 1/3"-style mixed fraction when it matches a common cooking fraction
-    /// EXACTLY — the tolerance (1e-6) only absorbs Double round-off from parsing/scaling, which is
-    /// ~1e-15 (1/3 × 4 = 1.333…). A genuinely inexact amount — even a close decimal approximation
-    /// like 0.667 (off from 2/3 by 3e-4) — returns nil and keeps its decimal form.
+    /// *exactly* -- the tolerance (1e-6) only absorbs Double round-off from parsing/scaling, which is
+    /// ~1e-15 (1/3 × 4 = 1.333…). A genuinely inexact amount, even a close decimal approximation
+    /// like 0.667 (off from 2/3 by 3e-4), returns nil and keeps its decimal form.
     private static func mixedFractionString(_ value: Double) -> String? {
         guard value > 0 else { return nil }
         let whole = Int(value)

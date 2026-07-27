@@ -98,6 +98,7 @@ struct RecipeNavigationSplitView: View {
     @AppStorage("sidebarShowCategories") private var showCategories = true
     @AppStorage("sidebarShowCourses") private var showCourses = true
     @AppStorage("sidebarShowTags") private var showTags = true
+    @AppStorage("sidebarShowShoppingLists") private var showShoppingLists = true
     @AppStorage("sidebarExpandCategories") private var expandCategories = true
     @AppStorage("sidebarExpandCourses") private var expandCourses = true
     @AppStorage("sidebarExpandTags") private var expandTags = true
@@ -114,6 +115,8 @@ struct RecipeNavigationSplitView: View {
     @State private var showingCreateFromWebSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var showingSettingsSheet = false
+    @State private var showingDuplicateRecipesSheet = false
+    @State private var showingConsolidateDuplicatesSheet = false
     @State private var showingFirstLaunchAlert = false
     @State private var recipeIDForInspector: String? = nil
     @State private var recipeListScrollPosition = ScrollPosition()
@@ -125,7 +128,9 @@ struct RecipeNavigationSplitView: View {
         showingImportFromFileSheet ||
         showingCreateFromImageSheet ||
         showingCreateFromWebSheet ||
-        showingSettingsSheet
+        showingSettingsSheet ||
+        showingDuplicateRecipesSheet ||
+        showingConsolidateDuplicatesSheet
     }
     
     private func notifySheetStateChanged() {
@@ -240,6 +245,15 @@ struct RecipeNavigationSplitView: View {
                         Text("Tags")
                     }
                 }
+                // Shopping Lists:
+                if showShoppingLists {
+                    Section {
+                        Label("All Lists", systemImage: "cart")
+                            .tag(SidebarItem.allShoppingLists)
+                    } header: {
+                        Text("Shopping Lists")
+                    }
+                }
 //                // Smart Lists:
 //                Section {
 //                    Text("Coming Soon")
@@ -268,328 +282,379 @@ struct RecipeNavigationSplitView: View {
                     viewModel.selectedSidebarItem = .allRecipes
                 }
             }
+            .onChange(of: showShoppingLists) { _, isShown in
+                if !isShown, viewModel.selectedSidebarItem?.isShoppingLists == true {
+                    viewModel.selectedSidebarItem = .allRecipes
+                }
+            }
 
         } content: {
-            List(selection: $viewModel.selectedRecipeIDs) {
-                ForEach(viewModel.recipes) { recipe in
-                    RecipeRowView(recipe: recipe)
-                        .popover(isPresented: Binding(
-                            get: { recipeIDForInspector == recipe.id },
-                            set: { if !$0 { recipeIDForInspector = nil } }
-                        )) {
-                            RecipeInfoInspectorView(recipe: recipe)
-                                .frame(minWidth: 280)
-                        }
-                        .id(recipe.id)
-                        .tag(recipe.id)
-                        .draggable(recipe.id)
-                        #if !os(macOS)
-                        .contextMenu {
-                            recipeContextMenu(for: recipe)
-                        }
-                        #endif
-                }
-                #if !os(macOS)
-                .onDelete { indexSet in
-                    withAnimation {
-                        let recipesToDelete = indexSet.compactMap { index in
-                            viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
-                        }
-                        for recipe in recipesToDelete {
-                            Task { await viewModel.deleteRecipe(id: recipe.id) }
-                        }
+            if viewModel.selectedSidebarItem?.isShoppingLists == true {
+                ShoppingListsListView(viewModel: viewModel)
+            } else {
+                List(selection: $viewModel.selectedRecipeIDs) {
+                    ForEach(viewModel.recipes) { recipe in
+                        RecipeRowView(recipe: recipe)
+                            .popover(isPresented: Binding(
+                                get: { recipeIDForInspector == recipe.id },
+                                set: { if !$0 { recipeIDForInspector = nil } }
+                            )) {
+                                RecipeInfoInspectorView(recipe: recipe)
+                                    .frame(minWidth: 280)
+                            }
+                            .id(recipe.id)
+                            .tag(recipe.id)
+                            .draggable(recipe.id)
+                            #if !os(macOS)
+                            .contextMenu {
+                                recipeContextMenu(for: recipe)
+                            }
+                            #endif
                     }
-                }
-                #endif
-                if (viewModel.recipes.isEmpty) {
-                    HStack {
-                        Spacer()
-                        Text("No recipes")
-                            .foregroundStyle(.tertiary)
-                        Spacer()
-                    }
-                    .listRowSeparator(.hidden)
-                }
-            }
-            .scrollPosition($recipeListScrollPosition)
-            #if os(macOS)
-            .contextMenu(forSelectionType: String.self) { selectedIDs in
-                contextMenuForSelection(selectedIDs)
-            } primaryAction: { selectedIDs in
-                openSelectedRecipesInNewWindows(recipeIds: selectedIDs)
-            }
-            #endif
-            .task(id: recipeQueryId) {
-                await viewModel.updateRecipesQuery()
-            }
-            #if !os(macOS)
-            .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
-            .onChange(of: isEditMode) { _, newValue in
-                if !newValue {
-                    // Clear selection when exiting edit mode
-                    viewModel.selectedRecipeIDs.removeAll()
-                }
-            }
-            #endif
-            .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
-                if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
-                    // Wait a bit for the recipe to appear in the list before scrolling
-                    Task {
-                        try? await Task.sleep(for: .seconds(0.5))
-                        if viewModel.recipes.contains(where: { $0.id == newId }) {
-                            withAnimation {
-                                recipeListScrollPosition.scrollTo(id: newId)
+                    #if !os(macOS)
+                    .onDelete { indexSet in
+                        withAnimation {
+                            let recipesToDelete = indexSet.compactMap { index in
+                                viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
+                            }
+                            for recipe in recipesToDelete {
+                                Task { await viewModel.deleteRecipe(id: recipe.id) }
                             }
                         }
                     }
-                    // Reset the flag after attempting to scroll
-                    viewModel.shouldScrollToNewRecipe = false
+                    #endif
                 }
-            }
-            .navigationTitle(viewModel.navigationTitle)
-            .toolbar {
+                .overlay {
+                    // As an overlay rather than a list row, so it centers in the column instead of
+                    // sitting at the top like a cell.
+                    if viewModel.recipes.isEmpty && viewModel.selectedSidebarItem != .allRecipes {
+                        if viewModel.searchString.isEmpty {
+                            ContentUnavailableView("No Recipes", systemImage: "list.bullet.rectangle",
+                                                   description: Text("Recipes matching the selected criteria will appear here."))
+                        } else {
+                            ContentUnavailableView.search(text: viewModel.searchString)
+                        }
+                    }
+                    else if viewModel.recipes.isEmpty {
+                        if viewModel.searchString.isEmpty {
+                            ContentUnavailableView("No Recipes", systemImage: "list.bullet.rectangle",
+                                                   description: Text("Recipes you add to your recipe library will appear here."))
+                        } else {
+                            ContentUnavailableView.search(text: viewModel.searchString)
+                        }
+                    }
+                }
+                .scrollPosition($recipeListScrollPosition)
+                #if os(macOS)
+                .contextMenu(forSelectionType: String.self) { selectedIDs in
+                    contextMenuForSelection(selectedIDs)
+                } primaryAction: { selectedIDs in
+                    openSelectedRecipesInNewWindows(recipeIds: selectedIDs)
+                }
+                #endif
+                .task(id: recipeQueryId) {
+                    await viewModel.updateRecipesQuery()
+                }
                 #if !os(macOS)
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    if isEditMode {
-                        Button(action: {
-                            viewModel.exportSelectedRecipes()
-                        }) {
-                            Label("Export", systemImage: "square.and.arrow.up")
+                .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
+                .onChange(of: isEditMode) { _, newValue in
+                    if !newValue {
+                        // Clear selection when exiting edit mode
+                        viewModel.selectedRecipeIDs.removeAll()
+                    }
+                }
+                #endif
+                .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
+                    if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
+                        // Wait a bit for the recipe to appear in the list before scrolling
+                        Task {
+                            try? await Task.sleep(for: .seconds(0.5))
+                            if viewModel.recipes.contains(where: { $0.id == newId }) {
+                                withAnimation {
+                                    recipeListScrollPosition.scrollTo(id: newId)
+                                }
+                            }
+                        }
+                        // Reset the flag after attempting to scroll
+                        viewModel.shouldScrollToNewRecipe = false
+                    }
+                }
+                .navigationTitle(viewModel.navigationTitle)
+                .toolbar {
+                    #if !os(macOS)
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        if isEditMode {
+                            Button(action: {
+                                viewModel.exportSelectedRecipes()
+                            }) {
+                                Label("Export", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                            
+                            Button(role: .destructive, action: {
+                                showingDeleteConfirmation = true
+                            }) {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                        }
+                        
+                        Menu {
+                            Button(action: {
+                                viewModel.addNewRecipe()
+                            }) {
+                                Label("New Recipe", systemImage: "plus")
+                            }
+                            Divider()
+                            Button("Create from Image…") {
+                                showingCreateFromImageSheet = true
+                            }
+                            Button("Import from File…") {
+                                showingImportFromFileSheet = true
+                            }
+                            Button("Create from Web…") {
+                                showingCreateFromWebSheet = true
+                            }
+                        } label: {
+                            Label("New Recipe", systemImage: "plus")
+                        } primaryAction: {
+                            viewModel.addNewRecipe()
+                        }
+                        .disabled(isEditMode)
+                        
+                        Menu(content: {
+                            Button(action: {
+                                isEditMode.toggle()
+                            }) {
+                                Label(isEditMode ? "Done" : "Edit", systemImage: isEditMode ? "checkmark" : "pencil")
+                            }
+                            Toggle(isOn: $viewModel.isFavoritesFilterActive) {
+                                Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
+                            }
+                            #if !os(macOS)
+                            Divider()
+                            Menu("Sort By", systemImage: "arrow.up.arrow.down") {
+                                Picker("Sort Options", selection: Binding(
+                                    get: { viewModel.recipeListSortOrder },
+                                    set: { viewModel.recipeListSortOrder = $0 }
+                                )) {
+                                    ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
+                                        Text(option.displayName).tag(option)
+                                    }
+                                }
+                                Picker("Sort Direction", selection: Binding(
+                                    get: { viewModel.recipeListSortDirection },
+                                    set: { viewModel.recipeListSortDirection = $0 }
+                                )) {
+                                    ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
+                                        Text(direction.displayName).tag(direction)
+                                    }
+                                }
+                            }
+                            Menu("Search Options") {
+                                Section("Search In…") {
+                                    ForEach(RecipeListSearchOptions.allCases, id: \.self) { option in
+                                        Toggle(option.displayName, isOn: binding(for: option))
+                                    }
+                                }
+                            }
+                            #endif
+                            Divider()
+                            Button("Category Editor") {
+                                showingEditLibCategoriesSheet = true
+                            }
+                            Button("Tag Editor") {
+                                showingEditLibTagsSheet = true
+                            }
+                            Button("Course Editor") {
+                                showingEditLibCoursesSheet = true
+                            }
+                            Divider()
+                            Button("Show Duplicate Recipes…") {
+                                showingDuplicateRecipesSheet = true
+                            }
+                            Button("Consolidate Duplicate Categories, Courses, and Tags…") {
+                                showingConsolidateDuplicatesSheet = true
+                            }
+
+                            #if !os(macOS)
+                            Divider()
+                            Button("Settings…", systemImage: "gear") {
+                                showingSettingsSheet = true
+                            }
+                            #endif
+                        }, label: {
+                            Label("More", systemImage: isLiquidGlassAvailable() ? "ellipsis" : "ellipsis.circle")
+                        })
+                    }
+                    #else
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        Menu {
+                            if let recipeId = viewModel.selectedRecipeIDs.first,
+                               let recipe = viewModel.fullRecipe(id: recipeId),
+                               let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
+                                // Would like this to work with plain text fallback, but can't get to...
+                                // ShareLink(item: shareableRecipe,
+                                //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                                //           message: Text(shareableRecipe.plainTextRepresentation),
+                                //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                                // )
+                                ShareLink(item: shareableRecipe,
+                                          subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
+                                          message: Text(shareableRecipe.plainTextRepresentation),
+                                          preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
+                                )
+                                .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                            }
+                            Divider()
+                            Button(action: {
+                                viewModel.exportSelectedRecipes()
+                            }) {
+                                Label("Export as Recipe File…", systemImage: "document")
+                            }
+                            Button(action: {
+                                viewModel.showHTMLExportSettings()
+                            }) {
+                                Label("Export as HTML…", systemImage: "text.page")
+                            }
+                            Button(action: {
+                                viewModel.exportSelectedRecipesAsJSONLD()
+                            }) {
+                                Label("Export as Schema.org JSON-LD…", systemImage: "curlybraces")
+                            }
+                            
+                        } label: {
+                            Label("Share or Export", systemImage: "square.and.arrow.up")
                         }
                         .disabled(viewModel.selectedRecipeIDs.isEmpty)
+                        
+                        
+                        Toggle(isOn: $viewModel.isFavoritesFilterActive) {
+                            let imageName: String = isLiquidGlassAvailable() ?
+                            "line.3.horizontal.decrease" :
+                            (viewModel.isFavoritesFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                            Label("Filter (Favorites Only)", systemImage: imageName)
+                            // Needed to make look correcton macOS 15; removing is fine for macOS 26, but simulating same behavior for now as long as supporting both:
+                               .foregroundStyle(viewModel.isFavoritesFilterActive
+                                                ? AnyShapeStyle(isLiquidGlassAvailable() ? Color.white : Color.accentColor)
+                                                : AnyShapeStyle(.foreground))
+                        }
                         
                         Button(role: .destructive, action: {
                             showingDeleteConfirmation = true
                         }) {
-                            Label("Delete", systemImage: "trash")
+                            Label("Delete Recipe", systemImage: "trash")
                         }
                         .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                    }
-                    
-                    Menu {
-                        Button(action: {
-                            viewModel.addNewRecipe()
-                        }) {
+                        
+                        Menu {
+                            Button(action: {
+                                viewModel.addNewRecipe()
+                            }) {
+                                Label("New Recipe", systemImage: "plus")
+                            }
+                            Divider()
+                            Button("Create from Web…") {
+                                openWindow(id: "create-recipe-from-web-window")
+                            }
+                            .disabled(isAnySheetShown)
+                            Button("Create from Image…") {
+                                openWindow(id: "create-recipe-from-image-window")
+                            }
+                            Button("Import from File…") {
+                                showingImportFromFileSheet = true
+                            }
+                            .disabled(isAnySheetShown)
+                        } label: {
                             Label("New Recipe", systemImage: "plus")
                         }
-                        Divider()
-                        Button("Create from Image…") {
-                            showingCreateFromImageSheet = true
-                        }
-                        Button("Import from File…") {
-                            showingImportFromFileSheet = true
-                        }
-                        Button("Create from Web…") {
-                            showingCreateFromWebSheet = true
-                        }
-                    } label: {
-                        Label("New Recipe", systemImage: "plus")
-                    } primaryAction: {
-                        viewModel.addNewRecipe()
-                    }
-                    .disabled(isEditMode)
-                    
-                    Menu(content: {
-                        Button(action: {
-                            isEditMode.toggle()
-                        }) {
-                            Label(isEditMode ? "Done" : "Edit", systemImage: isEditMode ? "checkmark" : "pencil")
-                        }
-                        Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                            Label("Filter (Favorites Only)", systemImage: isLiquidGlassAvailable() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle")
-                        }
-                        #if !os(macOS)
-                        Divider()
-                        Menu("Sort By", systemImage: "arrow.up.arrow.down") {
-                            Picker("Sort Options", selection: Binding(
-                                get: { viewModel.recipeListSortOrder },
-                                set: { viewModel.recipeListSortOrder = $0 }
-                            )) {
-                                ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
-                                    Text(option.displayName).tag(option)
-                                }
-                            }
-                            Picker("Sort Direction", selection: Binding(
-                                get: { viewModel.recipeListSortDirection },
-                                set: { viewModel.recipeListSortDirection = $0 }
-                            )) {
-                                ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
-                                    Text(direction.displayName).tag(direction)
-                                }
-                            }
-                        }
-                        Menu("Search Options") {
-                            Section("Search In…") {
-                                ForEach(RecipeListSearchOptions.allCases, id: \.self) { option in
-                                    Toggle(option.displayName, isOn: binding(for: option))
-                                }
-                            }
-                        }
-                        #endif
-                        Divider()
-                        Button("Category Editor") {
-                            showingEditLibCategoriesSheet = true
-                        }
-                        Button("Tag Editor") {
-                            showingEditLibTagsSheet = true
-                        }
-                        Button("Course Editor") {
-                            showingEditLibCoursesSheet = true
-                        }
-
-                        #if !os(macOS)
-                        Divider()
-                        Button("Settings…", systemImage: "gear") {
-                            showingSettingsSheet = true
-                        }
-                        #endif
-                    }, label: {
-                        Label("More", systemImage: isLiquidGlassAvailable() ? "ellipsis" : "ellipsis.circle")
-                    })
-                }
-                #else
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Menu {
-                        if let recipeId = viewModel.selectedRecipeIDs.first,
-                           let recipe = viewModel.fullRecipe(id: recipeId),
-                           let shareableRecipe = viewModel.shareableRecipe(for: recipe) {
-                            // Would like this to work with plain text fallback, but can't get to...
-                            // ShareLink(item: shareableRecipe,
-                            //           subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                            //           message: Text(shareableRecipe.plainTextRepresentation),
-                            //           preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                            // )
-                            ShareLink(item: shareableRecipe,
-                                      subject: Text("Shared with you from Salty Recipe Manager: \(recipe.name)"),
-                                      message: Text(shareableRecipe.plainTextRepresentation),
-                                      preview: SharePreview(recipe.name, image: createXPImage(recipe.imageThumbnailData ?? Data()))
-                            )
-                            .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                        }
-                        Divider()
-                        Button(action: {
-                            viewModel.exportSelectedRecipes()
-                        }) {
-                            Label("Export as Recipe File…", systemImage: "document")
-                        }
-                        Button(action: {
-                            viewModel.showHTMLExportSettings()
-                        }) {
-                            Label("Export as HTML…", systemImage: "text.page")
-                        }
-                        Button(action: {
-                            viewModel.exportSelectedRecipesAsJSONLD()
-                        }) {
-                            Label("Export as Schema.org JSON-LD…", systemImage: "curlybraces")
+                        primaryAction: {
+                            viewModel.addNewRecipe()
                         }
                         
-                    } label: {
-                        Label("Share or Export", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                    
-                    
-                    Toggle(isOn: $viewModel.isFavoritesFilterActive) {
-                        let imageName: String = isLiquidGlassAvailable() ?
-                        "line.3.horizontal.decrease" :
-                        (viewModel.isFavoritesFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                        Label("Filter (Favorites Only)", systemImage: imageName)
-                        // Needed to make look correcton macOS 15; removing is fine for macOS 26, but simulating same behavior for now as long as supporting both:
-                           .foregroundStyle(viewModel.isFavoritesFilterActive
-                                            ? AnyShapeStyle(isLiquidGlassAvailable() ? Color.white : Color.accentColor)
-                                            : AnyShapeStyle(.foreground))
-                    }
-                    
-                    Button(role: .destructive, action: {
-                        showingDeleteConfirmation = true
-                    }) {
-                        Label("Delete Recipe", systemImage: "trash")
-                    }
-                    .disabled(viewModel.selectedRecipeIDs.isEmpty)
-                    
-                    Menu {
-                        Button(action: {
-                            viewModel.addNewRecipe()
-                        }) {
-                            Label("New Recipe", systemImage: "plus")
-                        }
-                        Divider()
-                        Button("Create from Web…") {
-                            openWindow(id: "create-recipe-from-web-window")
-                        }
-                        .disabled(isAnySheetShown)
-                        Button("Create from Image…") {
-                            openWindow(id: "create-recipe-from-image-window")
-                        }
-                        Button("Import from File…") {
-                            showingImportFromFileSheet = true
-                        }
-                        .disabled(isAnySheetShown)
-                    } label: {
-                        Label("New Recipe", systemImage: "plus")
-                    }
-                    primaryAction: {
-                        viewModel.addNewRecipe()
-                    }
-                    
-                }
-                #endif
-            }
-            .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    Task { await viewModel.deleteSelectedRecipes() }
-                    #if !os(macOS)
-                    // Delay exiting edit mode to let deletion animation complete
-                    Task {
-                        try? await Task.sleep(for: .seconds(0.4))
-                        isEditMode = false
                     }
                     #endif
                 }
-            } message: {
-                Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
-            }
-            .fileExporter(
-                isPresented: $viewModel.showingExportSheet,
-                document: ExportDocument(data: viewModel.exportData ?? Data(), suggestedName: viewModel.exportFileName, contentType: viewModel.exportContentType),
-                contentType: viewModel.exportContentType,
-                defaultFilename: viewModel.exportFileName
-            ) { result in
-                switch result {
-                case .success(_):
-                    // Export successful
-                    break
-                case .failure(let error):
-                    viewModel.exportErrorMessage = "Export failed: \(error.localizedDescription)"
-                    viewModel.showingExportErrorAlert = true
+                .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
+                    Button("Cancel", role: .cancel) { }
+                    Button("Delete", role: .destructive) {
+                        Task { await viewModel.deleteSelectedRecipes() }
+                        #if !os(macOS)
+                        // Delay exiting edit mode to let deletion animation complete
+                        Task {
+                            try? await Task.sleep(for: .seconds(0.4))
+                            isEditMode = false
+                        }
+                        #endif
+                    }
+                } message: {
+                    Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
                 }
-            }
-            .alert("Export Failed", isPresented: $viewModel.showingExportErrorAlert) {
-                Button("OK") { }
-            } message: {
-                Text(viewModel.exportErrorMessage)
-            }
-            .alert("Welcome to Salty!", isPresented: $showingFirstLaunchAlert) {
-                Button("Import Sample Recipes") {
-                    importSampleRecipes()
+                .fileExporter(
+                    isPresented: $viewModel.showingExportSheet,
+                    document: ExportDocument(data: viewModel.exportData ?? Data(), suggestedName: viewModel.exportFileName, contentType: viewModel.exportContentType),
+                    contentType: viewModel.exportContentType,
+                    defaultFilename: viewModel.exportFileName
+                ) { result in
+                    switch result {
+                    case .success(_):
+                        // Export successful
+                        break
+                    case .failure(let error):
+                        viewModel.exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                        viewModel.showingExportErrorAlert = true
+                    }
                 }
-                Button("Skip", role: .cancel) {
-                    offeredSampleImport = true
+                .alert("Export Failed", isPresented: $viewModel.showingExportErrorAlert) {
+                    Button("OK") { }
+                } message: {
+                    Text(viewModel.exportErrorMessage)
                 }
-            } message: {
-                Text("Would you like to import some sample recipes to get started? (Skip to start with empty recipe library.)")
-            }
-            #if os(macOS)
-            .onDeleteCommand {
-                if !viewModel.selectedRecipeIDs.isEmpty {
-                    showingDeleteConfirmation = true
+                .alert("Welcome to Salty!", isPresented: $showingFirstLaunchAlert) {
+                    Button("Import Sample Recipes") {
+                        importSampleRecipes()
+                    }
+                    Button("Skip", role: .cancel) {
+                        offeredSampleImport = true
+                    }
+                } message: {
+                    Text("Would you like to import some sample recipes to get started? (Skip to start with empty recipe library.)")
                 }
+                #if os(macOS)
+                .onDeleteCommand {
+                    if !viewModel.selectedRecipeIDs.isEmpty {
+                        showingDeleteConfirmation = true
+                    }
+                }
+                #endif
+                .searchable(text: $viewModel.searchString)
             }
-            #endif
-            .searchable(text: $viewModel.searchString)
         } detail: {
-            if let recipeId = viewModel.selectedRecipeIDs.first,
+            if viewModel.selectedSidebarItem?.isShoppingLists == true {
+                // Only a single selection resolves to a list to show — a multi-selection (made for
+                // deleting several at once) has no one list to preview.
+                if viewModel.selectedShoppingListIDs.count == 1,
+                   let listId = viewModel.selectedShoppingListIDs.first,
+                   let list = viewModel.shoppingLists.first(where: { $0.id == listId }) {
+                    // The list's own `isFreeform` flag picks the editor; folding it into the view id
+                    // means a structured→freeform conversion tears down the checklist and builds the
+                    // freeform editor fresh rather than reusing stale state.
+                    Group {
+                        if list.isFreeform {
+                            ShoppingListFreeformView(listId: listId)
+                        } else {
+                            ShoppingListDetailView(listId: listId)
+                        }
+                    }
+                    .id("\(listId)-\(list.isFreeform)")
+                    .navigationTitle(list.name)
+                    #if os(macOS)
+                    .navigationSubtitle(list.isFreeform ? "Freeform List" : "Checklist")
+                    #endif
+                } else {
+                    ContentUnavailableView("No List Selected", systemImage: "checklist")
+                }
+            } else if let recipeId = viewModel.selectedRecipeIDs.first,
                 let recipe = viewModel.fullRecipe(id: recipeId) {
                 Group {
                     if useWebRecipeDetailView {
@@ -611,9 +676,7 @@ struct RecipeNavigationSplitView: View {
                     }
                 }
             } else {
-                Text("No recipe selected")
-                    .foregroundStyle(.tertiary)
-                    .font(.title)
+                ContentUnavailableView("No Recipe Selected", systemImage: "list.bullet.rectangle")
             }
         }
         .navigationTitle("Recipes")
@@ -688,6 +751,26 @@ struct RecipeNavigationSplitView: View {
             NavigationStack {
                 SettingsView()
             }
+        }
+        // Library maintenance (File ▸ Library on macOS, where both open in their own windows instead).
+        .sheet(isPresented: $showingDuplicateRecipesSheet) {
+            NavigationStack {
+                DuplicateRecipesView()
+            }
+        }
+        .sheet(isPresented: $showingConsolidateDuplicatesSheet) {
+            NavigationStack {
+                ConsolidateDuplicatesView()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .createNewRecipe)) { _ in
+            viewModel.addNewRecipe()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showDuplicateRecipes)) { _ in
+            showingDuplicateRecipesSheet = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showConsolidateDuplicates)) { _ in
+            showingConsolidateDuplicatesSheet = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipes)) { _ in
             viewModel.exportSelectedRecipes()

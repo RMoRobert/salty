@@ -161,14 +161,8 @@ struct RecipeFullImageView: View {
                         }
                     }
                 } else {
-                    VStack {
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text("No image available")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ContentUnavailableView("No Image", systemImage: "photo")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             Button(action: {

@@ -25,6 +25,7 @@ import ObjectiveC
 // MARK: - Notification Names
 
 extension Notification.Name {
+    static let createNewRecipe = Notification.Name("createNewRecipe")
     static let exportSelectedRecipes = Notification.Name("exportSelectedRecipes")
     static let showImportFromFileSheet = Notification.Name("showImportFromFileSheet")
     static let showCreateFromWebSheet = Notification.Name("showCreateFromWebSheet")
@@ -35,6 +36,8 @@ extension Notification.Name {
     static let exportSelectedRecipesAsJSONLD = Notification.Name("exportSelectedRecipesAsJSONLD")
     static let printSelectedRecipes = Notification.Name("printSelectedRecipes")
     static let openSelectedRecipesInNewWindows = Notification.Name("openSelectedRecipesInNewWindows")
+    static let showDuplicateRecipes = Notification.Name("showDuplicateRecipes")
+    static let showConsolidateDuplicates = Notification.Name("showConsolidateDuplicates")
 }
 
 @Observable
@@ -126,11 +129,19 @@ class RecipeNavigationSplitViewModel {
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var tags: [Tag]
+
+    @ObservationIgnored
+    @FetchAll(#sql("SELECT \(ShoppingList.columns) FROM \(ShoppingList.self) ORDER BY \(ShoppingList.name) COLLATE NOCASE"))
+    var shoppingLists: [ShoppingList]
             
     // MARK: - State
     var searchString = ""
     var selectedSidebarItem: SidebarItem?
     var selectedRecipeIDs = Set<String>()
+    /// Selection within the shopping-lists content column. Multi-select (like the recipe list) so
+    /// several lists can be deleted at once; the detail column only renders when exactly one is
+    /// selected, since a multi-selection has no single list to show.
+    var selectedShoppingListIDs = Set<String>()
     var isFavoritesFilterActive = false
     
     var recipeListSortOrder: RecipeListSortOrderSetting = .byName {
@@ -199,6 +210,8 @@ class RecipeNavigationSplitViewModel {
             return courses.first(where: { $0.id == id })?.name ?? "Recipes"
         case .tag(let id):
             return tags.first(where: { $0.id == id })?.name ?? "Recipes"
+        case .allShoppingLists:
+            return "Shopping Lists"
         }
     }
     
@@ -639,7 +652,7 @@ class RecipeNavigationSplitViewModel {
                     <html>
                     <head>
                         <meta charset="UTF-8">
-                        <title>Exported Recipes</title>
+                        <title>Salty Recipes Export</title>
                     </head>
                     <body>
                         \(htmlParts.joined(separator: "<hr style='margin: 2em 0; border: none; border-top: 2px solid #ccc;'>"))
@@ -1013,6 +1026,70 @@ class RecipeNavigationSplitViewModel {
         }
     }
 
+    // MARK: - Shopping List Management
+
+    /// Creates a new shopping list of the requested kind (checklist or freeform, fixed at creation),
+    /// selects it, and returns it so the view can immediately offer a rename.
+    @discardableResult
+    func createShoppingList(isFreeform: Bool) async -> ShoppingList? {
+        let newList = ShoppingList(
+            id: UUIDV7().uuidString,
+            name: "New List",
+            isFreeform: isFreeform,
+            contentsForFreeform: isFreeform ? "" : nil,
+            lastModifiedDate: Date()
+        )
+        do {
+            try await database.write { db in
+                try ShoppingList.insert { newList }.execute(db)
+            }
+            selectedSidebarItem = .allShoppingLists
+            selectedShoppingListIDs = [newList.id]
+            return newList
+        } catch {
+            logger.error("Error creating shopping list: \(error)")
+            return nil
+        }
+    }
+
+    func renameShoppingList(id: String, to name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await database.write { db in
+                if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
+                    list.name = trimmed
+                    list.lastModifiedDate = Date()
+                    try ShoppingList.update(list).execute(db)
+                }
+            }
+        } catch {
+            logger.error("Error renaming shopping list \(id): \(error)")
+        }
+    }
+
+    func deleteShoppingList(id: String) async {
+        await deleteShoppingLists(ids: [id])
+    }
+
+    /// Deletes the given lists in one write and drops them from the selection.
+    func deleteShoppingLists(ids: Set<String>) async {
+        guard !ids.isEmpty else { return }
+        do {
+            try await database.write { db in
+                try ShoppingList.where { $0.id.in(ids) }.delete().execute(db)
+            }
+            selectedShoppingListIDs.subtract(ids)
+        } catch {
+            logger.error("Error deleting shopping lists: \(error)")
+        }
+    }
+
+    /// Deletes everything currently selected in the shopping-lists column.
+    func deleteSelectedShoppingLists() async {
+        await deleteShoppingLists(ids: selectedShoppingListIDs)
+    }
+
     /// Adds a recipe to a tag if it's not already associated
     func addRecipeToTag(recipeId: String, tagId: String) async {
         let log = logger // Sendable copy for the off-actor closure
@@ -1060,6 +1137,7 @@ class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
     override var categories: [Category] { previewCategories }
     override var courses: [Course] { previewCourses }
     override var tags: [Tag] { previewTags }
+    override var shoppingLists: [ShoppingList] { SampleData.sampleShoppingLists }
     
     // MARK: - Initialization
     init(previewData: (recipes: [Recipe], categories: [Category], courses: [Course], tags: [Tag])) {

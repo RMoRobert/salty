@@ -27,7 +27,7 @@ enum ImportFileLimits {
 
 extension Data {
     /// Reads `url` only when the file is within `maxBytes`, returning nil (and logging) if it's too large
-    /// or unreadable — so callers bail gracefully instead of loading a huge file entirely into memory.
+    /// or unreadable, so callers bail gracefully instead of loading a huge file entirely into memory.
     static func contents(of url: URL, maxBytes: Int) -> Data? {
         if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > maxBytes {
             fileLogger.error("Refusing to read oversized import file: \(size) bytes exceeds \(maxBytes)-byte limit")
@@ -276,9 +276,8 @@ extension FileManager {
         return resolveCustomParentLocation() != nil
     }
 
-    /// Validates that the active database location is accessible (directory readable /
-    /// creatable). A missing database file is NOT a failure — it just means this location
-    /// hasn't been initialized yet.
+    /// Validates that the active database location is accessible (directory readable/creatable). A
+    /// missing database file is *not* a failure -- it just means this location hasn't been initialized yet.
     static func validateDatabaseAccess() -> Bool {
         if UserDefaults.standard.data(forKey: userDefaultsDatabaseParentLocationKey) != nil {
             guard resolveCustomParentLocation() != nil, isHoldingAccess else {
@@ -354,7 +353,7 @@ extension FileManager {
         if (d["customParentResolved"] as? Bool) != true {
             parts.append("The saved location could not be resolved. Re-select the folder with “Select Custom Database Location…”, or reset to the default location.")
         } else if (d["holdingSecurityScopedAccess"] as? Bool) != true {
-            parts.append("The location resolved but the app could not obtain access to it. This usually means a missing sandbox entitlement or a stale bookmark — try re-selecting the folder.")
+            parts.append("The location resolved but the app could not obtain access to it. This usually means a missing sandbox entitlement or a stale bookmark. Try re-selecting the folder.")
         }
 
         if (d["databaseExists"] as? Bool) != true {

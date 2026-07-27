@@ -69,7 +69,8 @@ struct SaltyApp: App {
     }
     
     var body: some Scene {
-        WindowGroup {
+        // Main window; the id lets File ▸ New Window open another one (see Menus.swift)
+        WindowGroup(id: "main-window") {
             MainView()
                 .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
         }
@@ -108,6 +109,20 @@ struct SaltyApp: App {
             LibraryCoursesEditView()
                 .frame(idealWidth: 250)
                 .navigationTitle("Courses Editor")
+        }
+        // "Show Duplicate Recipes" window (File ▸ Library; a sheet on iOS)
+        WindowGroup(id: "duplicate-recipes-window") {
+            NavigationStack {
+                DuplicateRecipesView()
+            }
+            .frame(minWidth: 420, idealWidth: 640, minHeight: 400, idealHeight: 600)
+        }
+        // "Consolidate Duplicate Categories, Courses, and Tags" window (File ▸ Library; a sheet on iOS)
+        WindowGroup(id: "consolidate-duplicates-window") {
+            NavigationStack {
+                ConsolidateDuplicatesView()
+            }
+            .frame(minWidth: 420, idealWidth: 620, minHeight: 360, idealHeight: 520)
         }
         // "Open Database" window
         WindowGroup(id: "open-database-window") {

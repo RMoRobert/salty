@@ -153,7 +153,7 @@ class RecipeOCRService {
         logger.info("Extracted text from \(pages.count)-page PDF")
     }
 
-    /// Per-page text for a PDF — used when splitting one multi-page file into several recipes. Same
+    /// Per-page text for a PDF -- used when splitting one multi-page file into several recipes. Same
     /// digital-text-or-OCR decision as `extractText(fromPDFData:)`, kept one entry per page. Returns []
     /// (and sets `error`) when the PDF can't be opened.
     func extractPageTexts(fromPDFData data: Data) async -> [String] {
@@ -173,14 +173,14 @@ class RecipeOCRService {
         }
         let pageCount = document.pageCount
 
-        // Digital PDF — use the embedded text layer directly.
+        // Digital PDF: use the embedded text layer directly.
         let embedded = (0..<pageCount).map { document.page(at: $0)?.string ?? "" }
         if Self.hasMeaningfulText(embedded) {
             logger.info("Read embedded text from \(pageCount)-page PDF")
             return embedded
         }
 
-        // Scanned PDF — render and OCR each page (blank/unreadable pages become "").
+        // Scanned PDF: render and OCR each page (blank/unreadable pages become "").
         var pages: [String] = []
         for i in 0..<pageCount {
             if let page = document.page(at: i), let image = Self.render(page, scale: 2.0) {

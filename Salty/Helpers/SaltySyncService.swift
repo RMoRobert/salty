@@ -249,6 +249,12 @@ class SaltySyncService {
             try await syncTagsWithDeletions(deviceInfo: deviceInfo)
             logger.info("Tags synced successfully")
             
+            // Step 4b: Sync shopping lists (with deletion detection)
+            logger.info("Step 4b: Syncing shopping lists...")
+            syncProgress.currentStep = "Syncing shopping lists..."
+            try await syncShoppingListsWithDeletions(deviceInfo: deviceInfo)
+            logger.info("Shopping lists synced successfully")
+
             // Step 5: Sync recipes (with deletion detection)
             logger.info("Step 5: Syncing recipes...")
             syncProgress.currentStep = "Syncing recipes..."
@@ -260,7 +266,11 @@ class SaltySyncService {
             syncProgress.currentStep = "Syncing images..."
             try await syncImages()
             logger.info("Images synced successfully")
-            
+
+            // Step 6b: fold any same-named courses/categories/tags into one row
+            syncProgress.currentStep = "Tidying categories, courses, and tags..."
+            await consolidateDuplicateLibraryItems()
+
             // Step 7: Mark sync complete on server
             logger.info("Step 7: Completing sync...")
             syncProgress.currentStep = "Completing sync..."
@@ -278,8 +288,8 @@ class SaltySyncService {
         }
     }
     
-    /// Force a full re-sync: delete ALL local recipes/courses/categories/tags and re-download
-    /// everything from the server. One-way (server → local) — performs no uploads and no server
+    /// Force a full re-sync: delete *all* local recipes/courses/categories/tags and re-download
+    /// everything from the server. One-way (server -> local); performs no uploads and no server
     /// deletions, so it's a safe recovery path (e.g. after local corruption or stale test data).
     func forceFullResyncFromServer() async throws {
         guard serverEnabled, !serverUrl.isEmpty else { throw SyncError.serverNotConfigured }
@@ -304,6 +314,7 @@ class SaltySyncService {
             let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
             let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
             let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
+            let serverShoppingLists = try await fetchListFromServer(ServerShoppingList.self, endpoint: "/api/shoppingLists")
             let serverRecipes = try await fetchRecipeDeltaPaged(modifiedSince: nil) // nil → all recipes
 
             // Wipe the local database + local image files.
@@ -318,12 +329,13 @@ class SaltySyncService {
                 try Course.delete().execute(db)
                 try Category.delete().execute(db)
                 try Tag.delete().execute(db)
+                try ShoppingList.delete().execute(db)
             }
             for filename in oldImageFilenames {
                 RecipeImageManager.shared.deleteImage(filename: filename)
             }
 
-            // Insert vocab first — downloadRecipe only links categories/tags that already exist locally.
+            // Insert courses/categories/tags first -- downloadRecipe only links categories/tags that already exist locally.
             try await database.write { db in
                 for c in serverCourses {
                     try Course.insert { Course(id: c.id, name: c.name ?? "", lastModifiedDate: c.lastModifiedDate ?? Date()) }.execute(db)
@@ -334,8 +346,11 @@ class SaltySyncService {
                 for t in serverTags {
                     try Tag.insert { Tag(id: t.id, name: t.name ?? "", lastModifiedDate: t.lastModifiedDate ?? Date()) }.execute(db)
                 }
+                for l in serverShoppingLists {
+                    try ShoppingList.insert { l.asShoppingList }.execute(db)
+                }
             }
-            syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count
+            syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count + serverShoppingLists.count
 
             // Download recipes (marking them downloaded so syncImages pulls their images).
             syncProgress.currentStep = "Downloading recipes..."
@@ -348,6 +363,11 @@ class SaltySyncService {
             // Images: local files were wiped, so this only downloads (nothing to upload).
             syncProgress.currentStep = "Downloading images..."
             try await syncImages()
+
+            // The server's own vocabulary can contain same-named rows; don't rebuild the local
+            // library with them. The next ordinary sync propagates the resulting deletions.
+            syncProgress.currentStep = "Tidying categories, courses, and tags..."
+            await consolidateDuplicateLibraryItems()
 
             try await completeSyncOnServer()
             lastSyncDate = Date()
@@ -363,7 +383,7 @@ class SaltySyncService {
     /// Force a full re-sync in the opposite direction: make the server an exact mirror of this
     /// device. Every local recipe/course/category/tag is pushed (overwriting the server copy), and
     /// anything present on the server but absent locally is deleted from the server. One-way
-    /// (local → server) — the local database is the source of truth and is never modified, so it's a
+    /// (local -> server); the local database is the source of truth and is never modified, so it's a
     /// safe recovery path when the server holds stale or corrupt data. A failure partway leaves the
     /// server partially updated, but local data is untouched and a retry resolves it.
     func forceFullResyncToServer() async throws {
@@ -389,19 +409,22 @@ class SaltySyncService {
             let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
             let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
             let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
+            let serverShoppingLists = try await fetchListFromServer(ServerShoppingList.self, endpoint: "/api/shoppingLists")
             let serverRecipeIds = try await fetchManifest().map { $0.id }
 
-            // Read the full local state — the source of truth, never modified here.
+            // Read the full local state -- the source of truth, never modified here.
             let localCourses = try await database.read { db in try Course.fetchAll(db) }
             let localCategories = try await database.read { db in try Category.fetchAll(db) }
             let localTags = try await database.read { db in try Tag.fetchAll(db) }
+            let localShoppingLists = try await database.read { db in try ShoppingList.fetchAll(db) }
             let localRecipes = try await database.read { db in try Recipe.fetchAll(db) }
 
             let serverCourseIds = Set(serverCourses.map { $0.id })
             let serverCategoryIds = Set(serverCategories.map { $0.id })
             let serverTagIds = Set(serverTags.map { $0.id })
+            let serverShoppingListIds = Set(serverShoppingLists.map { $0.id })
 
-            // Push vocab first — recipes link courses/categories/tags by id, which must already exist
+            // Push courses/categories/tags first. Recipes link them by id, which must already exist
             // server-side. Update items the server already has, create the rest.
             syncProgress.currentStep = "Uploading to server..."
             for c in localCourses {
@@ -425,7 +448,15 @@ class SaltySyncService {
                     try await postToServer(t, endpoint: "/api/tags")
                 }
             }
-            syncProgress.itemsUploaded += localCourses.count + localCategories.count + localTags.count
+            for l in localShoppingLists {
+                let payload = ServerShoppingList(list: l)
+                if serverShoppingListIds.contains(l.id) {
+                    try await putToServer(payload, endpoint: "/api/shoppingLists/\(l.id)")
+                } else {
+                    try await postToServer(payload, endpoint: "/api/shoppingLists")
+                }
+            }
+            syncProgress.itemsUploaded += localCourses.count + localCategories.count + localTags.count + localShoppingLists.count
 
             // Push recipes (uploadRecipe overwrites existing or creates new as needed).
             syncProgress.currentStep = "Uploading recipes..."
@@ -455,9 +486,13 @@ class SaltySyncService {
             for t in serverTags where !localTagIds.contains(t.id) {
                 try await deleteOnServer(endpoint: "/api/tags/\(t.id)")
             }
+            let localShoppingListIds = Set(localShoppingLists.map { $0.id })
+            for l in serverShoppingLists where !localShoppingListIds.contains(l.id) {
+                try await deleteOnServer(endpoint: "/api/shoppingLists/\(l.id)")
+            }
 
             // Images: reconciled by timestamp. Because every recipe was just pushed with this device's
-            // image metadata, the server never wins here — local images upload to fill any gaps.
+            // image metadata, the server never wins here; local images upload to fill any gaps.
             syncProgress.currentStep = "Uploading images..."
             try await syncImages()
 
@@ -472,10 +507,10 @@ class SaltySyncService {
         }
     }
 
-    /// Guards bulk LOCAL deletions against a truncated/empty server response. The deletion
-    /// heuristic ("present locally, absent from server, unchanged since last sync ⇒ deleted on
+    /// Guards bulk local deletions against a truncated/empty server response. The deletion
+    /// heuristic ("present locally, absent from server, unchanged since last sync = deleted on
     /// the server") is dangerous if the server ever returns an empty list due to a transient
-    /// failure rather than real deletions — it would wipe local data. So if the server returned
+    /// failure rather than real deletions -- it would wipe local data. So if the server returned
     /// nothing while items are queued for local deletion, skip them (a later good sync resolves it).
     /// NOTE: this only catches a fully-empty response; detecting a *partial* response would require
     /// the server to also report its expected total count.
@@ -489,6 +524,85 @@ class SaltySyncService {
 
     // MARK: - Course Sync
     
+    /// Shopping lists: reconciled through `RecipeSyncReconciler` rather than repeating the
+    /// hand-rolled diff the course/category/tag paths each carry a copy of. The reconciler is only
+    /// *named* for recipes; it operates on `(id, lastModified)` and is the one unit-tested copy of
+    /// these rules (`RecipeSyncReconcilerTests`).
+    ///
+    /// Whole-row last-writer-wins: `contentsForList` moves as one blob, so a concurrent edit on
+    /// another device overwrites this one's items wholesale. Deliberate -- see FEATURE_PLANS.md.
+    private func syncShoppingListsWithDeletions(deviceInfo: DeviceInfo) async throws {
+        let serverLists = try await fetchListFromServer(ServerShoppingList.self, endpoint: "/api/shoppingLists")
+        let localLists = try await database.read { db in
+            try ShoppingList.fetchAll(db)
+        }
+
+        // uniquingKeysWith (not uniqueKeysWithValues) so a duplicate id from the server can't trap.
+        let serverById = Dictionary(serverLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+        let localById = Dictionary(localLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+
+        // Compare at the wire's resolution; see the note in syncRecipesWithDeletions for why a raw
+        // Date comparison re-syncs every row forever.
+        let plan = RecipeSyncReconciler.plan(
+            local: localLists.map {
+                RecipeSyncReconciler.Entry(
+                    id: $0.id,
+                    lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                )
+            },
+            server: serverLists.map {
+                RecipeSyncReconciler.Entry(
+                    id: $0.id,
+                    lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                )
+            },
+            isFirstSync: deviceInfo.isFirstSync,
+            lastSyncDate: deviceInfo.lastSyncDate
+        )
+
+        logger.info("Shopping list sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server")
+
+        for id in plan.toUpload {
+            guard let local = localById[id] else { continue }
+            let payload = ServerShoppingList(list: local)
+            // POST creates, PUT updates: mirrors the vocab paths, where a POST of an existing id is
+            // not guaranteed to upsert on every server build.
+            if serverById[id] != nil {
+                try await putToServer(payload, endpoint: "/api/shoppingLists/\(id)")
+            } else {
+                try await postToServer(payload, endpoint: "/api/shoppingLists")
+            }
+            syncProgress.itemsUploaded += 1
+        }
+
+        for id in plan.toDownload {
+            guard let remote = serverById[id] else { continue }
+            let list = remote.asShoppingList
+            try await database.write { db in
+                try ShoppingList.upsert { list }.execute(db)
+            }
+            syncProgress.itemsDownloaded += 1
+        }
+
+        // Guarded against an empty/incomplete server response being read as "everything was deleted".
+        let toDeleteLocally = plan.toDeleteLocally
+        if serverResponseAllowsLocalDeletions(serverItemCount: serverLists.count, pendingLocalDeletions: toDeleteLocally.count, entity: "shopping list") {
+            try await database.write { db in
+                for id in toDeleteLocally {
+                    try ShoppingList.where { $0.id.eq(id) }.delete().execute(db)
+                }
+            }
+            if !toDeleteLocally.isEmpty {
+                logger.info("Deleted \(toDeleteLocally.count) shopping list(s) locally (were deleted on server)")
+            }
+        }
+
+        for id in plan.toDeleteOnServer {
+            try await deleteOnServer(endpoint: "/api/shoppingLists/\(id)")
+            logger.info("Deleted shopping list \(id) on server (was deleted locally)")
+        }
+    }
+
     private func syncCoursesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
         let localCourses = try await database.read { db in
@@ -590,8 +704,51 @@ class SaltySyncService {
         }
     }
     
+    // MARK: - Duplicate library items
+
+    /// Folds same-named courses/categories/tags into a single row at the end of a sync.
+    ///
+    /// Vocabulary rows are reconciled by **id**, never by name (see `syncCoursesWithDeletions` and
+    /// its siblings), so two devices that each create "Vegan" -- or two installs that each ran the
+    /// migration-0002 seed and got their own ids for "Breads", "Main", … -- end up with two rows
+    /// that sync then replicates faithfully, forever. Nothing upstream can notice: to the server
+    /// they are simply two different rows that happen to share a name.
+    ///
+    /// The merge itself re-points every recipe before deleting the duplicate, so no recipe loses a
+    /// classification, and the survivor is chosen by **id** rather than by recipe count: counts
+    /// differ from device to device, and only an id-based rule makes every device pick the same
+    /// winner. Once they agree, the loser's deletion propagates on the following sync (its server
+    /// timestamp is by then older than the watermark) and the library converges.
+    ///
+    /// Deliberately runs *after* the downloads: a recipe arriving in this same sync still sees both
+    /// ids and keeps its membership, and the merge then re-points it and bumps its
+    /// `lastModifiedDate` so the correction uploads. The remaining gap is a recipe created on
+    /// another device that references the loser id and arrives *after* this device deleted it --
+    /// `downloadRecipe` skips ids it doesn't know, so that one membership is dropped locally. That
+    /// window is one sync cycle wide (the other device runs the same pass and re-points its own
+    /// recipes), and it never touches a recipe this device already has.
+    ///
+    /// Best-effort: a failure here must not fail an otherwise-good sync.
+    private func consolidateDuplicateLibraryItems() async {
+        do {
+            let summary = try await database.write { db in
+                try LibraryDuplicateMerger.consolidateDuplicates(in: db)
+            }
+            if !summary.isEmpty {
+                logger.info("""
+                    Consolidated \(summary.removedItems) duplicate library item(s) across \
+                    \(summary.mergedGroups) name(s); \(summary.touchedRecipes) recipe(s) re-pointed
+                    """)
+            }
+        } catch {
+            // Logged, not thrown: the sync itself succeeded, and the manual Consolidate Duplicates
+            // command remains available.
+            logger.error("Post-sync duplicate consolidation failed: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Category Sync
-    
+
     private func syncCategoriesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
         let localCategories = try await database.read { db in
@@ -2138,4 +2295,97 @@ struct ServerTag: Codable {
     var id: String
     var name: String?
     var lastModifiedDate: Date?
+}
+
+/// Wire shape for a shopping list. Mirrors SaltyKMP's `ServerShoppingList` and the server's
+/// `shopping_list` table. Everything past `id` is optional so a client predating a field still
+/// round-trips — there is no protocol version field to negotiate with.
+struct ServerShoppingList: Codable {
+    var id: String
+    var name: String?
+    var isFreeform: Bool?
+    var contentsForList: [ShoppingListListContents]?
+    var contentsForFreeform: String?
+    var lastModifiedDate: Date?
+}
+
+/// Decodes a value, yielding nil instead of throwing. Wrapping array *elements* in this is what makes
+/// an array decode item-by-item: decoding the element type directly and catching would leave the
+/// container's index unadvanced, so the loop couldn't make progress.
+private struct FailableDecodable<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: any Decoder) throws {
+        value = try? T(from: decoder)
+    }
+}
+
+extension ServerShoppingList {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, isFreeform, contentsForList, contentsForFreeform, lastModifiedDate
+    }
+
+    /// Hand-written purely so `contentsForList` decodes item-by-item: one malformed item would
+    /// otherwise throw out of `fetchListFromServer` and abort the ENTIRE sync — recipes included —
+    /// on every attempt, with no way for the user to clear it.
+    ///
+    /// The leniency deliberately stops at the item level, in two directions:
+    ///
+    /// - The array of *lists* stays strict (this is per-list decoding). Silently dropping an
+    ///   undecodable list would read as "the server no longer has it", and the reconciler infers
+    ///   deletions from absence — so it would delete that list locally, or push a deletion for it.
+    /// - A `contentsForList` that isn't an array at all still throws. Coercing it to empty would
+    ///   quietly blank a list, and the next upload would make that permanent.
+    ///
+    /// Both of those are cases where failing loudly loses less than recovering quietly.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let listId = try container.decode(String.self, forKey: .id)
+        id = listId
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        isFreeform = try container.decodeIfPresent(Bool.self, forKey: .isFreeform)
+        contentsForFreeform = try container.decodeIfPresent(String.self, forKey: .contentsForFreeform)
+        lastModifiedDate = try container.decodeIfPresent(Date.self, forKey: .lastModifiedDate)
+
+        if let wrapped = try container.decodeIfPresent([FailableDecodable<ShoppingListListContents>].self, forKey: .contentsForList) {
+            let items = wrapped.compactMap(\.value)
+            if items.count != wrapped.count {
+                let skipped = wrapped.count - items.count
+                Logger(subsystem: "Salty", category: "Sync").error(
+                    "Shopping list \(listId): skipped \(skipped) unreadable item(s) from the server payload"
+                )
+            }
+            contentsForList = items
+        } else {
+            contentsForList = nil
+        }
+    }
+}
+
+// Conversions live in an extension so the memberwise init survives — a hand-written `init` in the
+// body would suppress it, and constructing a sparse payload directly is exactly how an older peer's
+// response is represented.
+extension ServerShoppingList {
+    init(list: ShoppingList) {
+        self.id = list.id
+        self.name = list.name
+        self.isFreeform = list.isFreeform
+        self.contentsForList = list.contentsForList
+        self.contentsForFreeform = list.contentsForFreeform
+        self.lastModifiedDate = list.lastModifiedDate
+    }
+
+    /// The local row this payload represents. `lastModifiedDate` falls back to "now" rather than
+    /// `distantPast`: a nil would compare as older than the sync watermark forever, so the list would
+    /// be re-deleted on the next sync instead of kept (same hazard `coalesceNullShoppingListColumns`
+    /// guards against locally).
+    var asShoppingList: ShoppingList {
+        ShoppingList(
+            id: id,
+            name: name ?? "",
+            isFreeform: isFreeform ?? false,
+            contentsForFreeform: contentsForFreeform,
+            contentsForList: contentsForList ?? [],
+            lastModifiedDate: lastModifiedDate ?? Date()
+        )
+    }
 }

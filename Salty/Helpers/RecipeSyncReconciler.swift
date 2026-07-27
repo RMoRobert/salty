@@ -4,7 +4,7 @@
 //
 //  Pure, I/O-free recipe sync diff. Given the local recipes and the server's full manifest
 //  (id + lastModifiedDate for EVERY server recipe), it decides what to upload, download, and delete
-//  on each side. Kept free of networking/DB so it can be unit-tested exhaustively — this is the
+//  on each side. Kept free of networking/DB so it can be unit-tested exhaustively. This is the
 //  data-loss-critical logic, so it must be correct (see RecipeSyncReconcilerTests).
 //
 //  IMPORTANT: `server` must be the COMPLETE manifest, not a `modifiedSince` delta. Deletions are

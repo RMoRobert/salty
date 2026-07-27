@@ -36,9 +36,7 @@ struct RecipeDetailWindowView: View {
                         }
                     }
             } else {
-                Text("No recipe selected")
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView("No Recipe Selected", systemImage: "list.bullet.rectangle")
             }
         }
         .task(id: recipeId) {

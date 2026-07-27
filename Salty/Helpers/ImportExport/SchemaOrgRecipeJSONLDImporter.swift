@@ -562,7 +562,7 @@ extension SchemaOrgRecipeJSONLDImporter {
     /// - Parameter url: URL to fetch and parse
     /// - Returns: Array of Recipe objects found at the URL
     func parseRecipes(from url: URL) async -> [Recipe] {
-        // Only fetch real web URLs — reject file://, custom schemes, and anything that could coax the app
+        // Only fetch real web URLs: reject file://, custom schemes, and anything that could coax the app
         // into reading local resources (SSRF-style abuse of an importer that takes an arbitrary URL).
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             logger.error("Refusing to fetch non-http(s) URL: \(url)")

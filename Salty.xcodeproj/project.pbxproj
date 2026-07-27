@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D402E0692E7F253600B020D5 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = D402E0682E7F253600B020D5 /* SQLiteData */; };
 		D402E06B2E7F253600B020D5 /* SQLiteDataTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D402E06A2E7F253600B020D5 /* SQLiteDataTestSupport */; };
+		D41A93DA30153AA8009C5643 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D41A93D930153AA8009C5643 /* Markdown */; };
 		D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78962DFF646A0067A88D /* SwiftHtml */; };
 		D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */ = {isa = PBXBuildFile; productRef = D45D789B2DFF7B8A0067A88D /* Flow */; };
 		D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78A02DFF7E950067A88D /* WebViewKit */; };
@@ -83,6 +84,7 @@
 				D48AB7422F20966800184122 /* UUIDV7 in Frameworks */,
 				D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */,
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
+				D41A93DA30153AA8009C5643 /* Markdown in Frameworks */,
 				D402E0692E7F253600B020D5 /* SQLiteData in Frameworks */,
 				D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */,
 				D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */,
@@ -172,6 +174,7 @@
 				D47AF4B62E25D3E30001E4D4 /* SwiftSoup */,
 				D402E0682E7F253600B020D5 /* SQLiteData */,
 				D48AB7412F20966800184122 /* UUIDV7 */,
+				D41A93D930153AA8009C5643 /* Markdown */,
 			);
 			productName = Salty;
 			productReference = D47F8FDF2DF35EB300A64304 /* Salty.app */;
@@ -263,6 +266,7 @@
 				D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 				D48AB7402F20966800184122 /* XCRemoteSwiftPackageReference "swift-uuidv7" */,
+				D41A93D830153AA8009C5643 /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D47F8FE02DF35EB300A64304 /* Products */;
@@ -469,7 +473,7 @@
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 45;
+				CURRENT_PROJECT_VERSION = 48;
 				CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS = "";
 				"CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS[sdk=iphoneos*]" = NO;
 				DEAD_CODE_STRIPPING = YES;
@@ -509,7 +513,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.inuvro.salty-dev";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -534,7 +538,7 @@
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 45;
+				CURRENT_PROJECT_VERSION = 48;
 				CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS = "";
 				"CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS[sdk=iphoneos*]" = NO;
 				DEAD_CODE_STRIPPING = YES;
@@ -574,7 +578,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inuvro.salty;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -736,6 +740,15 @@
 			traits = (
 			);
 		};
+		D41A93D830153AA8009C5643 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown";
+			requirement = {
+				kind = versionRange;
+				maximumVersion = 2.0.0;
+				minimumVersion = 0.8.0;
+			};
+		};
 		D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/BinaryBirds/swift-html";
@@ -790,6 +803,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */;
 			productName = SQLiteDataTestSupport;
+		};
+		D41A93D930153AA8009C5643 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D41A93D830153AA8009C5643 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
 		};
 		D45D78962DFF646A0067A88D /* SwiftHtml */ = {
 			isa = XCSwiftPackageProductDependency;

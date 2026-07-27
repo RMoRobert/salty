@@ -51,8 +51,85 @@ struct DatabaseIntegrationTests {
 
             #expect(categoryCount >= 5)
             #expect(courseCount >= 10)
-            #expect(shoppingListCount == 1)
+            // No list is seeded any more — the app starts empty and offers to create one.
+            #expect(shoppingListCount == 0)
         }
+
+        @Test func shoppingListTableHasLastModifiedDateOnAFreshDatabase() async throws {
+            // The column comes solely from the shared migration ledger (migration 0001 deliberately
+            // doesn't declare it), so this asserts the ledger runs as part of opening a database.
+            let db = try makeTestDatabase()
+            let hasColumn = try await db.read {
+                try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM pragma_table_info('shoppingList') WHERE name = 'lastModifiedDate'") ?? 0
+            }
+            #expect(hasColumn == 1)
+        }
+
+        /// Rows written by SaltyKMP or raw SQL can leave every `shoppingList` column NULL. Three of
+        /// them are non-optional on the Swift model (decode failure), and a NULL `lastModifiedDate`
+        /// would make sync delete the list rather than upload it. Assertions use raw SQL rather than
+        /// the ORM — see the note below on `ShoppingList` generics in this test target.
+        @Test func coalescingRepairsNullShoppingListColumns() async throws {
+            let db = try makeTestDatabase()
+            try await db.write {
+                try $0.execute(sql: #"INSERT INTO "shoppingList" ("id") VALUES ('bare')"#)
+            }
+
+            coalesceNullShoppingListColumns(db)
+
+            let row = try await db.read { database -> (String?, Int?, String?, String?) in
+                try Row.fetchOne(database, sql: #"SELECT "name", "isFreeform", "contentsForList", "lastModifiedDate" FROM "shoppingList" WHERE "id" = 'bare'"#)
+                    .map { ($0["name"], $0["isFreeform"], $0["contentsForList"], $0["lastModifiedDate"]) } ?? (nil, nil, nil, nil)
+            }
+            #expect(row.0 == "")
+            #expect(row.1 == 0)      // no freeform text → checklist
+            #expect(row.2 == "[]")
+            #expect(row.3 != nil)    // must not stay NULL, or sync would delete this list
+        }
+
+        @Test func coalescingInfersFreeformFromExistingText() async throws {
+            // A row carrying freeform text but a NULL flag must open as freeform — defaulting to a
+            // checklist would hide content the user actually wrote.
+            let db = try makeTestDatabase()
+            try await db.write {
+                try $0.execute(sql: #"INSERT INTO "shoppingList" ("id", "contentsForFreeform") VALUES ('ff', '# My List')"#)
+            }
+
+            coalesceNullShoppingListColumns(db)
+
+            let isFreeform = try await db.read {
+                try Int.fetchOne($0, sql: #"SELECT "isFreeform" FROM "shoppingList" WHERE "id" = 'ff'"#)
+            }
+            #expect(isFreeform == 1)
+        }
+
+        @Test func coalescingLeavesGoodRowsAloneAndIsIdempotent() async throws {
+            let db = try makeTestDatabase()
+            try await db.write {
+                try $0.execute(sql: #"""
+                    INSERT INTO "shoppingList" ("id", "name", "isFreeform", "contentsForList", "lastModifiedDate")
+                    VALUES ('ok', 'Groceries', 0, '[]', '2026-01-01 00:00:00.000')
+                    """#)
+            }
+
+            coalesceNullShoppingListColumns(db)
+            coalesceNullShoppingListColumns(db)   // re-running must be a no-op
+
+            let row = try await db.read { database -> (String?, String?) in
+                try Row.fetchOne(database, sql: #"SELECT "name", "lastModifiedDate" FROM "shoppingList" WHERE "id" = 'ok'"#)
+                    .map { ($0["name"], $0["lastModifiedDate"]) } ?? (nil, nil)
+            }
+            #expect(row.0 == "Groceries")
+            #expect(row.1 == "2026-01-01 00:00:00.000")   // untouched
+        }
+
+        // NOTE: there is deliberately no `ShoppingList.insert` round-trip test here. Calling it from
+        // this test target hard-crashes the test host — SIGSEGV inside the Swift runtime instantiating
+        // the witness table for `Insert<ShoppingList, ()>` — which takes the whole bundle down and
+        // reports every other test as failed. It is NOT an app bug: creating a list through the real
+        // UI (which runs the identical `ShoppingList.insert`) was verified working on the simulator.
+        // It appears to be a runtime/metadata issue specific to the `@testable` host. If you re-add
+        // such a test and the suite starts dying wholesale, this is why.
 
         @Test func migrationsCreateExpectedColumns() async throws {
             let db = try makeTestDatabase()
@@ -596,6 +673,274 @@ struct DatabaseIntegrationTests {
             #expect((row["isFavorite"] as Int) == 1)
             #expect((row["difficulty"] as Int) == 3)
             #expect((row["directions"] as String) == directionsJSON)
+        }
+    }
+
+    // MARK: - Consolidating duplicate categories / courses / tags
+
+    /// `LibraryDuplicateMerger` re-points recipes before deleting the rows it merges away, so these
+    /// run against a real schema with foreign keys on: the `recipe.courseId → course` FK is
+    /// ON DELETE SET NULL, which would silently strip courses if the order were ever wrong.
+    ///
+    /// Note the seeded defaults from migration 0002 (5 categories, 11 courses) are present in every
+    /// database here, hence the deliberately distinctive names below.
+    @Suite struct DuplicateMerging {
+
+        private func merge(_ db: any DatabaseWriter) async throws -> LibraryDuplicateMerger.Summary {
+            try await db.write { database in
+                let groups = try LibraryDuplicateMerger.duplicateGroups(in: database)
+                return try LibraryDuplicateMerger.merge(groups, in: database)
+            }
+        }
+
+        @Test func mergesCategoriesAndKeepsEveryRecipeClassified() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO category (id, name) VALUES ('cat-keep', 'Zzz Breads')")
+                try db.execute(sql: "INSERT INTO category (id, name) VALUES ('cat-dupe', 'zzz breads')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'Sourdough')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r2', 'Focaccia')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r3', 'Rye')")
+                // Two recipes in the survivor, one only in the duplicate — so the row with the most
+                // recipes is the one that remains.
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc1', 'r1', 'cat-keep')")
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc3', 'r3', 'cat-keep')")
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc2', 'r2', 'cat-dupe')")
+            }
+
+            let summary = try await merge(db)
+
+            #expect(summary.removedItems == 1)
+            #expect(summary.touchedRecipes == 1)   // only r2 changed category
+
+            let remaining = try await db.read {
+                try String.fetchAll($0, sql: "SELECT id FROM category WHERE name LIKE 'zzz breads' COLLATE NOCASE")
+            }
+            #expect(remaining == ["cat-keep"])
+            // Every recipe is still classified, now under the surviving row.
+            let recipeIds = try await db.read {
+                try String.fetchAll($0, sql: "SELECT recipeId FROM recipeCategory WHERE categoryId = 'cat-keep' ORDER BY recipeId")
+            }
+            #expect(recipeIds == ["r1", "r2", "r3"])
+        }
+
+        @Test func doesNotCreateDuplicateJunctionRowsForRecipesInBoth() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('tag-keep', 'Zzz Vegan')")
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('tag-dupe', 'zzz vegan')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'Dal')")
+                // The same recipe carries BOTH tags — the case an unguarded UPDATE would double up.
+                try db.execute(sql: "INSERT INTO recipeTag (id, recipeId, tagId) VALUES ('rt1', 'r1', 'tag-keep')")
+                try db.execute(sql: "INSERT INTO recipeTag (id, recipeId, tagId) VALUES ('rt2', 'r1', 'tag-dupe')")
+            }
+
+            _ = try await merge(db)
+
+            let links = try await db.read {
+                try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM recipeTag WHERE recipeId = 'r1'") ?? 0
+            }
+            #expect(links == 1)
+            let tagCount = try await db.read {
+                try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM tag WHERE name LIKE 'zzz vegan' COLLATE NOCASE") ?? 0
+            }
+            #expect(tagCount == 1)
+        }
+
+        @Test func mergesCoursesWithoutClearingTheRecipesCourse() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO course (id, name) VALUES ('co-keep', 'Zzz Main')")
+                try db.execute(sql: "INSERT INTO course (id, name) VALUES ('co-dupe', 'zzz  main')")
+                try db.execute(sql: "INSERT INTO recipe (id, name, courseId) VALUES ('r1', 'Stew', 'co-keep')")
+                try db.execute(sql: "INSERT INTO recipe (id, name, courseId) VALUES ('r2', 'Roast', 'co-keep')")
+                try db.execute(sql: "INSERT INTO recipe (id, name, courseId) VALUES ('r3', 'Pie', 'co-dupe')")
+            }
+
+            _ = try await merge(db)
+
+            // The FK is ON DELETE SET NULL: if the delete ran before the re-point, r3 would be NULL here.
+            let courseIds = try await db.read {
+                try String.fetchAll($0, sql: "SELECT IFNULL(courseId, '') FROM recipe ORDER BY id")
+            }
+            #expect(courseIds == ["co-keep", "co-keep", "co-keep"])
+            let courseCount = try await db.read {
+                try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM course WHERE name LIKE 'zzz%main' COLLATE NOCASE") ?? 0
+            }
+            #expect(courseCount == 1)
+        }
+
+        @Test func bumpsLastModifiedDateOnlyForRecipesThatChanged() async throws {
+            // Junction rows ride along on the recipe payload when syncing, so a re-pointed recipe that
+            // doesn't move its timestamp would never reach other devices.
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO category (id, name) VALUES ('cat-keep', 'Zzz Soups')")
+                try db.execute(sql: "INSERT INTO category (id, name) VALUES ('cat-dupe', 'ZZZ SOUPS')")
+                for id in ["r-moved", "r-stay", "r-unclassified"] {
+                    try db.execute(
+                        sql: "INSERT INTO recipe (id, name, lastModifiedDate) VALUES (?, ?, '2020-01-01 00:00:00.000')",
+                        arguments: [id, id]
+                    )
+                }
+                // Two recipes keep the survivor ahead on count; only r-moved has to be re-pointed.
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc1', 'r-stay', 'cat-keep')")
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc2', 'r-unclassified', 'cat-keep')")
+                try db.execute(sql: "INSERT INTO recipeCategory (id, recipeId, categoryId) VALUES ('rc3', 'r-moved', 'cat-dupe')")
+            }
+
+            let summary = try await merge(db)
+            #expect(summary.touchedRecipes == 1)
+
+            func lastModified(_ id: String) async throws -> String? {
+                try await db.read {
+                    try String.fetchOne($0, sql: "SELECT lastModifiedDate FROM recipe WHERE id = ?", arguments: [id])
+                }
+            }
+            #expect(try await lastModified("r-moved") != "2020-01-01 00:00:00.000")
+            // Recipes already on the surviving row didn't change, so their timestamps must not move —
+            // a blanket touch would push pointless re-uploads of every recipe in the category.
+            #expect(try await lastModified("r-stay") == "2020-01-01 00:00:00.000")
+            #expect(try await lastModified("r-unclassified") == "2020-01-01 00:00:00.000")
+        }
+
+        @Test func leavesDistinctNamesAlone() async throws {
+            let db = try makeTestDatabase()
+            let categoriesBefore = try await db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM category") ?? 0 }
+            let coursesBefore = try await db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM course") ?? 0 }
+
+            let summary = try await merge(db)
+
+            // A freshly-seeded library has no duplicates, so a merge run over it must be a no-op.
+            #expect(summary.isEmpty)
+            #expect(summary.removedItems == 0)
+            let categoriesAfter = try await db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM category") ?? 0 }
+            let coursesAfter = try await db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM course") ?? 0 }
+            #expect(categoriesAfter == categoriesBefore)
+            #expect(coursesAfter == coursesBefore)
+        }
+
+        /// The rule the automatic post-sync pass uses. It must depend only on the id: recipe counts
+        /// differ from device to device, so a count-based winner lets two devices disagree about
+        /// which row to keep and re-create each other's "duplicate" forever.
+        @Test func oldestIdRuleIgnoresRecipeCounts() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('a-older', 'Zzz Vegan')")
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('b-newer', 'zzz vegan')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'Dal')")
+                // Every recipe is on the NEWER row, which the recipe-count rule would keep.
+                try db.execute(sql: "INSERT INTO recipeTag (id, recipeId, tagId) VALUES ('rt1', 'r1', 'b-newer')")
+            }
+
+            let summary = try await db.write { database in
+                try LibraryDuplicateMerger.consolidateDuplicates(in: database)
+            }
+
+            #expect(summary.removedItems == 1)
+            let remaining = try await db.read {
+                try String.fetchAll($0, sql: "SELECT id FROM tag WHERE name LIKE 'zzz vegan' COLLATE NOCASE")
+            }
+            #expect(remaining == ["a-older"])
+            // …and the recipe followed the merge rather than losing its tag.
+            let taggedWith = try await db.read {
+                try String.fetchAll($0, sql: "SELECT tagId FROM recipeTag WHERE recipeId = 'r1'")
+            }
+            #expect(taggedWith == ["a-older"])
+        }
+
+        @Test func scanReportsRecipeCountsPerRow() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('tag-a', 'Zzz Quick')")
+                try db.execute(sql: "INSERT INTO tag (id, name) VALUES ('tag-b', 'zzz quick')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r1', 'A')")
+                try db.execute(sql: "INSERT INTO recipe (id, name) VALUES ('r2', 'B')")
+                try db.execute(sql: "INSERT INTO recipeTag (id, recipeId, tagId) VALUES ('rt1', 'r1', 'tag-b')")
+                try db.execute(sql: "INSERT INTO recipeTag (id, recipeId, tagId) VALUES ('rt2', 'r2', 'tag-b')")
+            }
+
+            let groups = try await db.read { try LibraryDuplicateMerger.duplicateGroups(in: $0) }
+            let quick = try #require(groups.first { $0.kind == .tag })
+
+            // tag-b holds both recipes, so it wins despite being the newer row.
+            #expect(quick.survivor.id == "tag-b")
+            #expect(quick.survivor.recipeCount == 2)
+            #expect(quick.duplicates.map(\.recipeCount) == [0])
+        }
+    }
+
+    // MARK: - Resolving library items by name (the import path)
+
+    /// `LibraryItemResolver` is what keeps an import from creating the duplicates the Consolidate
+    /// command would then have to clean up: it matches names the way the editors do rather than
+    /// with the exact, case-sensitive comparison the importers used to make inline.
+    @Suite struct LibraryItemResolution {
+
+        @Test func reusesAnExistingRowWhoseNameDiffersOnlyInCaseOrSpacing() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                try db.execute(sql: "INSERT INTO category (id, name) VALUES ('cat-1', 'Zzz Slow Cooker')")
+            }
+
+            let resolved = try await db.write { database in
+                try [
+                    LibraryItemResolver.resolveId(kind: .category, name: "zzz slow cooker", in: database),
+                    LibraryItemResolver.resolveId(kind: .category, name: "  Zzz Slow Cooker  ", in: database),
+                    LibraryItemResolver.resolveId(kind: .category, name: "Zzz  Slow  Cooker", in: database),
+                ]
+            }
+
+            #expect(resolved == ["cat-1", "cat-1", "cat-1"])
+            let count = try await db.read {
+                try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM category WHERE name LIKE 'zzz%cooker' COLLATE NOCASE") ?? 0
+            }
+            #expect(count == 1)
+        }
+
+        @Test func createsOneRowForANewNameAndReusesItAfterwards() async throws {
+            let db = try makeTestDatabase()
+
+            let first = try await db.write { try LibraryItemResolver.resolveId(kind: .tag, name: " Weeknight ", in: $0) }
+            let second = try await db.write { try LibraryItemResolver.resolveId(kind: .tag, name: "WEEKNIGHT", in: $0) }
+
+            #expect(first != nil)
+            #expect(first == second)
+            // The row stores the trimmed name as given, capitalization intact.
+            let name = try await db.read {
+                try String.fetchOne($0, sql: "SELECT name FROM tag WHERE id = ?", arguments: [first])
+            }
+            #expect(name == "Weeknight")
+        }
+
+        @Test func blankNamesCreateNothing() async throws {
+            let db = try makeTestDatabase()
+            let before = try await db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM course") ?? 0 }
+
+            let resolved = try await db.write { database in
+                try [
+                    LibraryItemResolver.resolveId(kind: .course, name: "", in: database),
+                    LibraryItemResolver.resolveId(kind: .course, name: "   \n", in: database),
+                ]
+            }
+
+            #expect(resolved == [nil, nil])
+            let after = try await db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM course") ?? 0 }
+            #expect(after == before)
+        }
+
+        /// An import must never produce a library the de-duplication command immediately wants to
+        /// merge — the two use the same normalization, and this pins them together.
+        @Test func resolvedNamesLeaveNothingForTheMergerToDo() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { database in
+                for name in ["Zzz Grill", "zzz grill", " ZZZ  GRILL "] {
+                    _ = try LibraryItemResolver.resolveId(kind: .category, name: name, in: database)
+                }
+            }
+
+            let groups = try await db.read { try LibraryDuplicateMerger.duplicateGroups(in: $0) }
+            #expect(groups.isEmpty)
         }
     }
 }

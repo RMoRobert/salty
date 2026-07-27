@@ -15,7 +15,7 @@ import OSLog
 // `Task {}` triggers below) and use only local state, so there is no concurrent mutable state.
 //
 // ⚠️ `@unchecked` means the compiler does NOT verify this. If you add mutable stored state, the
-// race will compile silently — guard it with a lock/actor, isolate to an actor or @MainActor, or
+// race will compile silently. Guard with a lock/actor, isolate to an actor or @MainActor, or
 // re-justify this annotation.
 public final class DatabaseBackupManager: @unchecked Sendable {
     @Dependency(\.defaultDatabase) private var database
@@ -189,7 +189,7 @@ public final class DatabaseBackupManager: @unchecked Sendable {
     /// Writes a consistent, self-contained snapshot of the live database to `destinationURL`
     /// using SQLite's online backup API. The destination is a fresh `DatabaseQueue`
     /// (rollback-journal mode), so the result is a single `.sqlite` file with no `-wal`/`-shm`
-    /// sidecars — safe to copy, zip, or open directly.
+    /// sidecars -- safe to copy, zip, or open directly.
     func writeConsistentDatabaseSnapshot(to destinationURL: URL) throws {
         // Remove any pre-existing file so the backup target starts empty.
         try? FileManager.default.removeItem(at: destinationURL)

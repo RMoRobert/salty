@@ -2,21 +2,21 @@
 //  SchemaOrgRecipeJSONLDExporter.swift
 //  Salty
 //
-//  Serializes a `Recipe` to schema.org/Recipe JSON-LD — the inverse of SchemaOrgRecipeJSONLDImporter,
+//  Serializes a `Recipe` to schema.org/Recipe JSON-LD, the inverse of SchemaOrgRecipeJSONLDImporter,
 //  with the field mapping kept symmetric so exported files re-import cleanly.
 //
-//  This produces standards-shaped output for sharing / archiving / interop with other recipe tools.
+//  This produces standards-shaped output for sharing/archiving/interop with other recipe tools.
 //  For a lossless Salty-to-Salty round-trip, use the native `.saltyRecipe` export instead: schema.org
-//  has no representation for some Salty concepts, so the following are intentionally NOT emitted:
-//  section headings (ingredient & direction), the ingredient `isMain` flag, difficulty, the user's
-//  rating, locally-stored image bytes, and added-sugar.
+//  has no representation for some Salty concepts, so the following are intentionally NOT exported:
+//  section headings (ingredient & direction), the ingredient `isMain` flag, difficulty,
+//  rating, locally-stored image bytes, and added sugars (from nutrition).
 //
 
 import Foundation
 
 struct SchemaOrgRecipeJSONLDExporter {
 
-    /// Library metadata resolved from the database by the caller — the exporter itself stays DB-free so
+    /// Library metadata resolved from the database by the caller; the exporter itself stays DB-free so
     /// it can be unit-tested in isolation.
     struct LibraryMetadata {
         var courseName: String?

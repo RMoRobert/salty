@@ -18,6 +18,9 @@ enum SidebarItem: Hashable {
     case category(String)
     case course(String)
     case tag(String)
+    // Shopping lists -- swaps the content column from the recipe list to the list-of-lists, whose
+    // selection (`selectedShoppingListIDs`) drives the detail column. Mirrors the All Recipes flow.
+    case allShoppingLists
 }
 
 extension SidebarItem {
@@ -29,8 +32,13 @@ extension SidebarItem {
         case .category(let id): return .category(id)
         case .course(let id): return .course(id)
         case .tag(let id): return .tag(id)
+        // Shopping lists don't scope the recipe list at all (the content column shows the lists).
+        case .allShoppingLists: return .all
         }
     }
+
+    /// Whether this selection is the shopping-lists column (its own list/detail flow, not recipes).
+    var isShoppingLists: Bool { self == .allShoppingLists }
 
     /// Whether this selection forces the favorites-only filter regardless of the toolbar toggle.
     var forcesFavorites: Bool { self == .favorites }
@@ -47,6 +55,7 @@ extension SidebarItem {
         case .category(let id): return "cat_\(id)"
         case .course(let id):   return "course_\(id)"
         case .tag(let id):      return "tag_\(id)"
+        case .allShoppingLists: return "allShoppingLists"
         }
     }
 }

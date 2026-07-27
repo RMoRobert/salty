@@ -50,23 +50,20 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                             let uniqueCategories = Set(categories)
                             
                             for categoryName in uniqueCategories {
-                                // Find existing category or create new one
-                                let category: Category
-                                if let existing = try Category.where { $0.name.eq(categoryName) }.fetchOne(db) {
-                                    category = existing
-                                } else {
-                                    category = Category(id: UUID().uuidString, name: categoryName, lastModifiedDate: Date())
-                                    try Category.insert { category }.execute(db)
+                                // Reuses an existing category whose name differs only in case or
+                                // spacing, rather than creating a near-duplicate row.
+                                guard let categoryId = try LibraryItemResolver.resolveId(kind: .category, name: categoryName, in: db) else {
+                                    continue
                                 }
 
                                 // Check if relationship already exists before creating it
                                 let existingRelationship = try RecipeCategory
-                                    .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(category.id) }
+                                    .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(categoryId) }
                                     .fetchOne(db)
-                                
+
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
-                                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: category.id)
+                                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
                                     try RecipeCategory.insert {
                                         recipeCategory
                                     }.execute(db)
@@ -76,17 +73,11 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                         
                         // Set course if present
                         if let courseName = mgRecipe.courseName, !courseName.isEmpty, courseName != "--" {
-                            // Check for existing course or create new one
-                            let course: Course
-                            if let existing = try Course.where { $0.name.eq(courseName) }.fetchOne(db) {
-                                course = existing
-                            } else {
-                                course = Course(id: UUID().uuidString, name: courseName, lastModifiedDate: Date())
-                                try Course.insert { course }.execute(db)
+                            if let courseId = try LibraryItemResolver.resolveId(kind: .course, name: courseName, in: db) {
+                                // Set the recipe's courseId
+                                recipe.courseId = courseId
+                                try Recipe.update(recipe).execute(db)
                             }
-                            // Set the recipe's courseId
-                            recipe.courseId = course.id
-                            try Recipe.update(recipe).execute(db)
                         }
                     }
                     successCount += 1
