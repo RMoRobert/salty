@@ -39,17 +39,32 @@ class ShoppingListDetailViewModel {
     /// Loads the checklist items. This view model only ever backs a structured list (the content
     /// column routes freeform lists to `ShoppingListFreeformView` instead), so there's no conversion
     /// here. List type is fixed at creation.
+    /// See the matching note in `ShoppingListFreeformViewModel.load()`: a `.task` cancelled during a
+    /// navigation push used to leave `isLoaded` false forever, since nothing re-runs `.task`. Here that
+    /// showed as a checklist stuck on neither its rows nor its empty state. Retry when our own task is
+    /// still alive, and never finish in a state that waits indefinitely.
     func load() async {
         guard !isLoaded else { return }
-        do {
-            let list = try await database.read { [listId] db in
-                try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
+        for _ in 0..<3 {
+            do {
+                let list = try await database.read { [listId] db in
+                    try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
+                }
+                // Re-check after the suspension — two overlapping loads (double onAppear) both pass
+                // the top guard, and the second to land would overwrite edits made since the first.
+                guard !isLoaded else { return }
+                // A missing row is a legitimately empty checklist.
+                items = list?.contentsForList ?? []
+                isLoaded = true
+                return
+            } catch is CancellationError {
+                if Task.isCancelled { return }
+                continue
+            } catch {
+                logger.error("Error loading shopping list \(self.listId): \(error)")
+                isLoaded = true
+                return
             }
-            guard let list else { return }
-            items = list.contentsForList
-            isLoaded = true
-        } catch {
-            logger.error("Error loading shopping list \(self.listId): \(error)")
         }
     }
 

@@ -155,9 +155,16 @@ struct Menus: Commands {
     @State private var sheetTracker = SheetStateTracker()
     @State private var selectionTracker = SelectionStateTracker()
     @State private var searchOptionsTracker = SearchOptionsTracker()
+    @State private var syncService = SaltySyncService.shared
+    @AppStorage("serverUse") private var serverUse = false
     
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
     @AppStorage("recipeListSortDirection") private var recipeListSortDirection: RecipeListSortDirection = .ascending
+
+    // Sidebar Items menu: the two fixed Library rows, plus the order the reorderable sections are listed in.
+    @AppStorage("sidebarShowFavorites") private var showFavorites = true
+    @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
+    @AppStorage(SidebarSectionOrder.storageKey) private var sidebarSectionOrderRaw = ""
     
     // Helper to create a binding for a search option with validation
     private func binding(for option: RecipeListSearchOptions) -> Binding<Bool> {
@@ -257,6 +264,15 @@ struct Menus: Commands {
            }
            #endif
            Divider()
+           // Lands in the macOS and iPadOS menu bars alike (and ⇧⌘R works from a hardware keyboard
+           // anywhere). Unlike Settings' Sync Now this respects the recently-synced guard, so
+           // mashing the shortcut can't hammer the server.
+           Button("Sync Now") {
+               Task { await ManualSyncRunner.shared.sync() }
+           }
+           .keyboardShortcut("r", modifiers: [.command, .shift])
+           .disabled(!serverUse || syncService.isSyncing)
+           Divider()
        }
         CommandGroup(before: .sidebar) {
             Menu("Sort By") {
@@ -284,51 +300,13 @@ struct Menus: Commands {
             Divider()
             #endif
             Menu("Sidebar Items") {
-                Toggle("Show Favorites", isOn: Binding(
-                    get: {
-                        if UserDefaults.standard.object(forKey: "sidebarShowFavorites") == nil {
-                            return true // Default to true if not set
-                        }
-                        return UserDefaults.standard.bool(forKey: "sidebarShowFavorites")
-                    },
-                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowFavorites") }
-                ))
-                Toggle("Show Want to Make", isOn: Binding(
-                    get: {
-                        if UserDefaults.standard.object(forKey: "sidebarShowWantToMake") == nil {
-                            return true // Default to true if not set
-                        }
-                        return UserDefaults.standard.bool(forKey: "sidebarShowWantToMake")
-                    },
-                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowWantToMake") }
-                ))
-                Toggle("Show Categories", isOn: Binding(
-                    get: {
-                        if UserDefaults.standard.object(forKey: "sidebarShowCategories") == nil {
-                            return true // Default to true if not set
-                        }
-                        return UserDefaults.standard.bool(forKey: "sidebarShowCategories")
-                    },
-                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowCategories") }
-                ))
-                Toggle("Show Courses", isOn: Binding(
-                    get: {
-                        if UserDefaults.standard.object(forKey: "sidebarShowCourses") == nil {
-                            return true // Default to true if not set
-                        }
-                        return UserDefaults.standard.bool(forKey: "sidebarShowCourses")
-                    },
-                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowCourses") }
-                ))
-                Toggle("Show Tags", isOn: Binding(
-                    get: {
-                        if UserDefaults.standard.object(forKey: "sidebarShowTags") == nil {
-                            return true // Default to true if not set
-                        }
-                        return UserDefaults.standard.bool(forKey: "sidebarShowTags")
-                    },
-                    set: { UserDefaults.standard.set($0, forKey: "sidebarShowTags") }
-                ))
+                Toggle("Show Favorites", isOn: $showFavorites)
+                Toggle("Show Want to Make", isOn: $showWantToMake)
+                Divider()
+                // Listed in the sidebar's own order; reordering itself lives in General settings.
+                ForEach(SidebarSectionOrder.decode(sidebarSectionOrderRaw)) { section in
+                    SidebarSectionVisibilityToggle(section: section)
+                }
             }
             //Divider()
         }

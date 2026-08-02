@@ -25,7 +25,16 @@ struct ShoppingListFreeformView: View {
     var body: some View {
         Group {
             if showsPreview {
-                MarkdownPreviewView(text: viewModel.text)
+                // Wait for the load before building the web view. Rendering it immediately would
+                // create a WKWebView loading an EMPTY document, then throw it away a moment later
+                // when `load()` lands and the content id changes — and a web view that's asked to
+                // load and is then discarded mid-layout intermittently paints nothing, which is why
+                // the preview sometimes stayed blank until the Edit/Preview picker was toggled.
+                if viewModel.isLoaded {
+                    MarkdownPreviewView(text: viewModel.text)
+                } else {
+                    ProgressView()
+                }
             } else {
                 TextEditor(text: $viewModel.text)
                     .font(monospacedFont ? .body.monospaced() : .body)
@@ -41,8 +50,13 @@ struct ShoppingListFreeformView: View {
                     .padding()
             }
         }
-        .task {
-            await viewModel.load()
+        // NOT `.task { }`: SwiftUI cancels that when the view's identity churns, and during a push it
+        // can cancel a load for a view that then stays on screen — leaving `isLoaded` false forever,
+        // since nothing re-runs it. That was the "preview is blank until I toggle Edit/Preview" bug.
+        // An unstructured Task isn't tied to the view lifecycle. `load()` is idempotent and guards on
+        // `isLoaded`, so re-appearing is cheap and finishing after a dismissal is harmless.
+        .onAppear {
+            Task { await viewModel.load() }
         }
         .onChange(of: viewModel.text) { _, _ in
             viewModel.scheduleSave()

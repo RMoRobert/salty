@@ -35,10 +35,29 @@ class SaltySyncService {
     @Dependency(\.defaultDatabase) private var database
     
     var isSyncing = false
-    var lastSyncDate: Date?
+
+    /// When the last sync finished successfully. Persisted (see `lastSyncDateKey`) so the Settings screen
+    /// can still show it after a relaunch; `nil` only until the first successful sync on this device.
+    var lastSyncDate: Date? {
+        didSet { UserDefaults.standard.set(lastSyncDate, forKey: Self.lastSyncDateKey) }
+    }
+    private static let lastSyncDateKey = "lastSuccessfulSyncDate"
+
     var lastSyncError: String?
     var syncProgress: SyncProgress = SyncProgress()
-    
+
+    /// The in-flight cancellable sync, if any. Only `syncNow()` registers here: the force re-sync paths
+    /// deliberately stay non-cancellable because they wipe one side before repopulating it, so stopping
+    /// partway would leave a half-populated library with no way back but re-running.
+    @ObservationIgnored
+    private var currentSyncTask: Task<Void, Error>?
+
+    /// True between the user asking to cancel and the sync unwinding. Drives the "Cancelling…" button state.
+    private(set) var isCancelling = false
+
+    /// Whether the sync currently running can be cancelled. False when idle, and false during a force re-sync.
+    var isCancellable: Bool { currentSyncTask != nil }
+
     private var serverUrl: String {
         UserDefaults.standard.string(forKey: "serverUrl") ?? ""
     }
@@ -113,6 +132,9 @@ class SaltySyncService {
     /// `session` defaults to `.shared` for the app singleton; tests inject a stubbed session.
     init(session: URLSession = .shared) {
         self.session = session
+        // Restore the last sync time from a previous run. Assignment in `init` doesn't fire `didSet`, so
+        // this doesn't write the value straight back.
+        lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncDateKey) as? Date
     }
     
     // MARK: - Authentication Methods
@@ -191,33 +213,93 @@ class SaltySyncService {
     
     // MARK: - Public Sync Methods
     
-    /// Performs a full bidirectional sync with the server
-    func syncNow() async throws {
+    /// Performs a full bidirectional sync with the server.
+    ///
+    /// How soon after a successful sync another may start. Short enough that a deliberate re-sync never
+    /// feels blocked (and Settings' Sync Now bypasses it entirely), long enough that a pull-to-refresh
+    /// landing on top of an automatic sync, or an accidental double-trigger, costs the server nothing.
+    nonisolated static let minimumSyncInterval: TimeInterval = 30
+
+    /// Whether a new sync should be skipped because one finished moments ago. Pure and injectable (`now`)
+    /// so the boundaries are unit-testable. A negative elapsed time means the clock moved backwards
+    /// (time zone change, manual clock edit); sync rather than refuse based on a nonsense interval.
+    nonisolated static func shouldThrottleSync(lastSuccessfulSync: Date?, now: Date = Date(), force: Bool) -> Bool {
+        guard !force, let lastSuccessfulSync else { return false }
+        let elapsed = now.timeIntervalSince(lastSuccessfulSync)
+        return elapsed >= 0 && elapsed < minimumSyncInterval
+    }
+
+    /// The steps run in their own task, registered as `currentSyncTask`, so `cancelSync()` can stop a sync
+    /// no matter which caller started it (Settings' "Sync Now", auto-sync, or the failure banner's Retry).
+    /// Cancelling is safe at any point: each transfer is individually atomic (one request per recipe/image,
+    /// one transaction per local write) and the server only advances this device's last-sync timestamp in
+    /// the final `completeSyncOnServer()`, so a cancelled sync just leaves the rest for the next run --
+    /// exactly what already happens when the connection drops partway through.
+    /// `force` skips the recently-synced guard (Settings' own Sync Now uses it); every other trigger --
+    /// auto-sync, pull-to-refresh, the sync footer, the menu command -- accepts a `.throttled` skip when a
+    /// sync finished within the last `minimumSyncInterval`, so stacked triggers can't hammer the server.
+    func syncNow(force: Bool = false) async throws {
         guard serverEnabled else {
             throw SyncError.serverNotConfigured
         }
-        
+
         guard !serverUrl.isEmpty else {
             throw SyncError.serverNotConfigured
         }
-        
+
         guard hasCredentials else {
             throw SyncError.credentialsNotConfigured
         }
-        
+
         guard !isSyncing else {
             logger.warning("Sync already in progress, skipping")
             return
         }
-        
+
+        if Self.shouldThrottleSync(lastSuccessfulSync: lastSyncDate, force: force) {
+            logger.info("Sync skipped: a sync finished within the last \(Int(Self.minimumSyncInterval))s")
+            throw SyncError.throttled
+        }
+
+        // Claim the slot synchronously -- we're on the main actor and haven't suspended yet, so no second
+        // caller can slip past the guard above before the task below starts running.
         isSyncing = true
+        isCancelling = false
         lastSyncError = nil
         syncProgress = SyncProgress()
-        
+
+        let task = Task { @MainActor in
+            try await self.performFullSync()
+        }
+        currentSyncTask = task
+
         defer {
+            currentSyncTask = nil
+            isCancelling = false
             isSyncing = false
         }
-        
+
+        // `Task {}` is unstructured, so cancelling *our* caller wouldn't reach it on its own; forward it.
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    /// Stops the sync in progress, if it's one of the cancellable ones (`syncNow()`; never a force re-sync).
+    /// Cancellation lands at the next suspension point, which in practice is the current network request.
+    func cancelSync() {
+        guard let currentSyncTask else { return }
+        guard !isCancelling else { return }
+        logger.info("Sync cancellation requested during '\(self.syncProgress.currentStep)'")
+        isCancelling = true
+        syncProgress.currentStep = "Cancelling..."
+        currentSyncTask.cancel()
+    }
+
+    /// The sync steps themselves. `syncNow()` owns the `isSyncing`/cancellation bookkeeping around this.
+    private func performFullSync() async throws {
         do {
             // Step 0: Authenticate with server
             logger.info("Step 0: Authenticating...")
@@ -271,17 +353,25 @@ class SaltySyncService {
             syncProgress.currentStep = "Tidying categories, courses, and tags..."
             await consolidateDuplicateLibraryItems()
 
-            // Step 7: Mark sync complete on server
+            // Step 7: Mark sync complete on server. Explicitly checked first: completing marks this device
+            // caught up, so it must never run after a cancel that skipped work (step 6b doesn't throw).
+            try Task.checkCancellation()
             logger.info("Step 7: Completing sync...")
             syncProgress.currentStep = "Completing sync..."
             try await completeSyncOnServer()
             logger.info("Sync marked complete on server")
-            
+
             lastSyncDate = Date()
             syncProgress.currentStep = "Sync complete!"
             logger.info("Sync completed successfully")
-            
+
         } catch {
+            if SyncError.isCancellation(error) {
+                logger.info("Sync cancelled at step '\(self.syncProgress.currentStep)'")
+                syncProgress.currentStep = "Sync cancelled"
+                lastSyncError = nil  // a cancel is a user action, not a failure to report
+                throw SyncError.cancelled
+            }
             lastSyncError = friendlySyncMessage(error)
             logger.error("Sync failed at step '\(self.syncProgress.currentStep)': \(error)")
             throw error
@@ -1056,8 +1146,9 @@ class SaltySyncService {
 
         logger.info("Sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server (manifest \(manifest.count), delta \(deltaRecipes.count))")
 
-        // 5. Uploads.
+        // 5. Uploads. Each is a single request, so a cancel between them just leaves the rest for next time.
         for recipeId in plan.toUpload {
+            try Task.checkCancellation()
             guard let localRecipe = localRecipesById[recipeId] else { continue }
             try await uploadRecipe(localRecipe)
             syncProgress.itemsUploaded += 1
@@ -1067,6 +1158,7 @@ class SaltySyncService {
         // 6. Downloads — use the delta body when present, otherwise fetch that single recipe (covers the
         //    rare case where the server copy is newer than local but predates lastSync).
         for recipeId in plan.toDownload {
+            try Task.checkCancellation()
             let serverRecipe: ServerRecipe
             if let body = deltaById[recipeId] {
                 serverRecipe = body
@@ -1284,6 +1376,7 @@ class SaltySyncService {
         logger.info("Image sync starting (\(manifest.count) server, \(localRecipes.count) local)")
 
         for id in Set(serverById.keys).union(localById.keys) {
+            try Task.checkCancellation()
             let server = serverById[id]
             let local = localById[id]
             let serverDate = (server?.lastModifiedImageDate ?? .distantPast).roundedToWireMillis
@@ -1327,6 +1420,9 @@ class SaltySyncService {
                     }
                 }
             } catch {
+                // A cancel must abort the whole loop; otherwise every remaining recipe "fails" instantly
+                // and the tally below reports a bogus image-sync failure.
+                if SyncError.isCancellation(error) { throw error }
                 logger.error("Image sync failed for recipe \(id): \(error.localizedDescription)")
                 imageErrors.append(id)
             }
@@ -1931,9 +2027,20 @@ enum SyncError: LocalizedError {
     case uploadFailed(String)
     case downloadFailed(String)
     case parseError(String)
-    
+    /// The user stopped the sync. Normalized from `CancellationError`/`URLError.cancelled` by
+    /// `performFullSync()` so callers can tell "you cancelled" apart from "something went wrong".
+    case cancelled
+    /// A sync finished within `minimumSyncInterval`, so this one was skipped. Benign: every caller
+    /// treats it as "already up to date", never as a failure (and it must not clear auto-sync's
+    /// pending-changes state the way a real success does).
+    case throttled
+
     var errorDescription: String? {
         switch self {
+        case .cancelled:
+            return "Sync was cancelled."
+        case .throttled:
+            return "Sync skipped: already synced a moment ago."
         case .serverNotConfigured:
             return "Server URL is not configured. Please set it in Settings."
         case .credentialsNotConfigured:
@@ -1953,6 +2060,17 @@ enum SyncError: LocalizedError {
 }
 
 extension SyncError {
+    /// True when `error` means "this sync was cancelled" in any of the forms it can arrive in: a Swift task
+    /// cancellation, the `URLError` URLSession raises for the request it aborted, or our own normalized
+    /// `.cancelled`. Used to keep a deliberate cancel out of the error paths (no red banner in Settings, no
+    /// auto-sync failure count).
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let syncError = error as? SyncError, case .cancelled = syncError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
+    }
+
     /// User-facing message for a non-2xx HTTP response that never surfaces the raw response body, which
     /// could be HTML error page (proxy 502, captive portal, wrong address) that shouldn't be shown as raw text.
     /// If the body is small JSON carrying an `error`/`message`/`detail` field, that text is preferred.
@@ -2004,6 +2122,11 @@ extension SyncError {
 /// `SyncError` (already friendly), connectivity failures (`URLError`), and unreadable responses
 /// (`DecodingError`, e.g. an HTML page where JSON was expected).
 func friendlySyncMessage(_ error: Error) -> String {
+    // Checked first: a cancelled request is a `URLError` whose default wording ("Couldn't reach the
+    // server") would blame the network for something the user chose to do.
+    if SyncError.isCancellation(error) {
+        return "Sync was cancelled. Anything already transferred was kept — sync again to finish the rest."
+    }
     switch error {
     case let urlError as URLError:
         switch urlError.code {

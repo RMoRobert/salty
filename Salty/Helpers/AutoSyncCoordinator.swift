@@ -174,10 +174,19 @@ final class AutoSyncCoordinator {
             hasPendingLocalChanges = false
             showFailureBanner = false
             logger.info("Auto-sync succeeded (\(reason))")
+        } catch let error where SyncError.isCancellation(error) {
+            // The user stopped this sync from Settings. Their choice, not a connectivity problem, so don't
+            // count it toward the failure banner.
+            logger.info("Auto-sync cancelled by user (\(reason))")
         } catch SyncError.serverNotConfigured, SyncError.credentialsNotConfigured {
             // Server/credentials not set up (e.g. password not saved to Keychain) → auto-sync is simply
             // not applicable here. Not a connectivity failure, so don't count it or alarm the user.
             logger.info("Auto-sync skipped (\(reason)): server/credentials not configured")
+        } catch SyncError.throttled {
+            // A sync finished moments ago, so this attempt was redundant. Crucially not the success path:
+            // `hasPendingLocalChanges` stays set, so an edit that arrived since still goes out on the
+            // next trigger rather than being silently dropped here.
+            logger.info("Auto-sync skipped (\(reason)): synced moments ago")
         } catch {
             consecutiveFailures += 1
             logger.warning("Auto-sync failed (\(reason)) [\(self.consecutiveFailures)x]: \(error)")

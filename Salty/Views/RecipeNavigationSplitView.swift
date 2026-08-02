@@ -92,6 +92,7 @@ struct RecipeNavigationSplitView: View {
     //@State private var offeredSampleImport = false
     @Environment(\.openWindow) private var openWindow
     @State private var searchOptionsTracker = SearchOptionsTracker()
+    @State private var manualSync = ManualSyncRunner.shared
     
     @AppStorage("sidebarShowFavorites") private var showFavorites = true
     @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
@@ -99,6 +100,8 @@ struct RecipeNavigationSplitView: View {
     @AppStorage("sidebarShowCourses") private var showCourses = true
     @AppStorage("sidebarShowTags") private var showTags = true
     @AppStorage("sidebarShowShoppingLists") private var showShoppingLists = true
+    // Order of the sections below Library, set in General settings.
+    @AppStorage(SidebarSectionOrder.storageKey) private var sectionOrderRaw = ""
     @AppStorage("sidebarExpandCategories") private var expandCategories = true
     @AppStorage("sidebarExpandCourses") private var expandCourses = true
     @AppStorage("sidebarExpandTags") private var expandTags = true
@@ -178,6 +181,99 @@ struct RecipeNavigationSplitView: View {
         }
     }
     
+    /// Library maintenance submenu shared by the sidebar and recipe-list "More" menus on iOS.
+    /// (macOS offers the same items from the menu bar instead.)
+    @ViewBuilder
+    private var libraryMenu: some View {
+        Menu("Library", systemImage: "books.vertical") {
+            Button("Category Editor") {
+                showingEditLibCategoriesSheet = true
+            }
+            Button("Tag Editor") {
+                showingEditLibTagsSheet = true
+            }
+            Button("Course Editor") {
+                showingEditLibCoursesSheet = true
+            }
+            Divider()
+            Button("Show Duplicate Recipes…") {
+                showingDuplicateRecipesSheet = true
+            }
+            Button("Consolidate Duplicate Categories, Courses, and Tags…") {
+                showingConsolidateDuplicatesSheet = true
+            }
+        }
+    }
+
+    /// Presents the shared sync-failure alert whenever ManualSyncRunner holds an error; dismissing clears it.
+    private var showingSyncErrorAlert: Binding<Bool> {
+        Binding(
+            get: { manualSync.errorMessage != nil },
+            set: { if !$0 { manualSync.errorMessage = nil } }
+        )
+    }
+
+    /// One of the reorderable sidebar sections. Hidden sections build to nothing, so the list simply skips
+    /// them while they keep their place in the stored order.
+    @ViewBuilder
+    private func sidebarSection(_ section: SidebarSection) -> some View {
+        switch section {
+        case .categories:
+            if showCategories {
+                Section(isExpanded: $expandCategories) {
+                    ForEach(viewModel.categories) { category in
+                        CategoryDropTargetView(
+                            category: category,
+                            viewModel: viewModel
+                        )
+                    }
+                } header: {
+                    Text("Categories")
+                }
+            }
+        case .courses:
+            if showCourses {
+                Section(isExpanded: $expandCourses) {
+                    ForEach(viewModel.courses) { course in
+                        Label(course.name, systemImage: "fork.knife")
+                            .tag(SidebarItem.course(course.id))
+                    }
+                } header: {
+                    Text("Courses")
+                }
+            }
+        case .tags:
+            if showTags {
+                Section(isExpanded: $expandTags) {
+                    ForEach(viewModel.tags) { tag in
+                        TagDropTargetView(
+                            tag: tag,
+                            viewModel: viewModel
+                        )
+                    }
+                } header: {
+                    Text("Tags")
+                }
+            }
+        case .shoppingLists:
+            if showShoppingLists {
+                Section {
+                    Label("All Lists", systemImage: "cart")
+                        .tag(SidebarItem.allShoppingLists)
+                } header: {
+                    Text("Shopping Lists")
+                }
+            }
+        }
+    }
+
+    /// Hiding a section while one of its rows is selected would leave the selection pointing at a row
+    /// that's no longer in the sidebar, so fall back to All Recipes.
+    private func restoreSelectionIfHidden(_ section: SidebarSection, isShown: Bool) {
+        guard !isShown, viewModel.selectedSidebarItem?.sidebarSection == section else { return }
+        viewModel.selectedSidebarItem = .allRecipes
+    }
+
     private var recipeQueryId: String {
         // Include search options in the query ID so changes trigger refresh
         // Use the tracker's changeId to force update when search options change
@@ -205,54 +301,10 @@ struct RecipeNavigationSplitView: View {
                 } header: {
                     Text("Library")
                 }
-                
-                // Categories:
-                if showCategories {
-                    Section(isExpanded: $expandCategories) {
-                        ForEach(viewModel.categories) { category in
-                            CategoryDropTargetView(
-                                category: category,
-                                viewModel: viewModel
-                            )
-                        }
-                    } header: {
-                        Text("Categories")
-                    }
-                }
-                
-                // Courses:
-                if showCourses {
-                    Section(isExpanded: $expandCourses) {
-                        ForEach(viewModel.courses) { course in
-                            Label(course.name, systemImage: "fork.knife")
-                                .tag(SidebarItem.course(course.id))
-                        }
-                    } header: {
-                        Text("Courses")
-                    }
-                }
-                
-                // Tags:
-                if showTags {
-                    Section(isExpanded: $expandTags) {
-                        ForEach(viewModel.tags) { tag in
-                            TagDropTargetView(
-                                tag: tag,
-                                viewModel: viewModel
-                            )
-                        }
-                    } header: {
-                        Text("Tags")
-                    }
-                }
-                // Shopping Lists:
-                if showShoppingLists {
-                    Section {
-                        Label("All Lists", systemImage: "cart")
-                            .tag(SidebarItem.allShoppingLists)
-                    } header: {
-                        Text("Shopping Lists")
-                    }
+
+                // Everything below Library, in the order and with the visibility set in General settings.
+                ForEach(SidebarSectionOrder.decode(sectionOrderRaw)) { section in
+                    sidebarSection(section)
                 }
 //                // Smart Lists:
 //                Section {
@@ -260,8 +312,30 @@ struct RecipeNavigationSplitView: View {
 //                } header: {
 //                    Text("Smart Lists")
 //                }
+                #if !os(macOS)
+                // Photos-style status at the end of the sidebar -- visible at the root on iPhone,
+                // where the recipe list's toolbar isn't. Tapping it (or pulling down) syncs now.
+                Section {
+                    SyncStatusFooterView()
+                }
+                #endif
             }
             .listStyle(.sidebar)
+            #if !os(macOS)
+            .refreshable { await ManualSyncRunner.shared.sync() }
+            // Settings from the sidebar root, leading like Mail's sidebar Edit button: the gear is
+            // the only route to the sync UI when the recipe-list column (and its "More" menu) is
+            // off screen. Library maintenance intentionally stays on the recipe-list menu only.
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingSettingsSheet = true
+                    } label: {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
+            }
+            #endif
             #if os(macOS)
             .onAppear() {
                 // On macOS, set default selection to "All Recipes" if no selection exists
@@ -282,10 +356,17 @@ struct RecipeNavigationSplitView: View {
                     viewModel.selectedSidebarItem = .allRecipes
                 }
             }
+            .onChange(of: showCategories) { _, isShown in
+                restoreSelectionIfHidden(.categories, isShown: isShown)
+            }
+            .onChange(of: showCourses) { _, isShown in
+                restoreSelectionIfHidden(.courses, isShown: isShown)
+            }
+            .onChange(of: showTags) { _, isShown in
+                restoreSelectionIfHidden(.tags, isShown: isShown)
+            }
             .onChange(of: showShoppingLists) { _, isShown in
-                if !isShown, viewModel.selectedSidebarItem?.isShoppingLists == true {
-                    viewModel.selectedSidebarItem = .allRecipes
-                }
+                restoreSelectionIfHidden(.shoppingLists, isShown: isShown)
             }
 
         } content: {
@@ -460,22 +541,7 @@ struct RecipeNavigationSplitView: View {
                             }
                             #endif
                             Divider()
-                            Button("Category Editor") {
-                                showingEditLibCategoriesSheet = true
-                            }
-                            Button("Tag Editor") {
-                                showingEditLibTagsSheet = true
-                            }
-                            Button("Course Editor") {
-                                showingEditLibCoursesSheet = true
-                            }
-                            Divider()
-                            Button("Show Duplicate Recipes…") {
-                                showingDuplicateRecipesSheet = true
-                            }
-                            Button("Consolidate Duplicate Categories, Courses, and Tags…") {
-                                showingConsolidateDuplicatesSheet = true
-                            }
+                            libraryMenu
 
                             #if !os(macOS)
                             Divider()
@@ -628,6 +694,9 @@ struct RecipeNavigationSplitView: View {
                 }
                 #endif
                 .searchable(text: $viewModel.searchString)
+                #if !os(macOS)
+                .refreshable { await ManualSyncRunner.shared.sync() }
+                #endif
             }
         } detail: {
             if viewModel.selectedSidebarItem?.isShoppingLists == true {
@@ -636,9 +705,13 @@ struct RecipeNavigationSplitView: View {
                 if viewModel.selectedShoppingListIDs.count == 1,
                    let listId = viewModel.selectedShoppingListIDs.first,
                    let list = viewModel.shoppingLists.first(where: { $0.id == listId }) {
-                    // The list's own `isFreeform` flag picks the editor; folding it into the view id
-                    // means a structured→freeform conversion tears down the checklist and builds the
-                    // freeform editor fresh rather than reusing stale state.
+                    // The list's own `isFreeform` flag picks the editor. The id is the list id ALONE —
+                    // deliberately not `"\(listId)-\(list.isFreeform)"`. `list` comes from a reactive
+                    // @FetchAll, so every re-emit (a debounced save, a sync write) rebuilt that string
+                    // and could churn the child's identity mid-load, cancelling its `.task` and leaving
+                    // the view stuck on its placeholder. Conversion still rebuilds correctly without it:
+                    // flipping the `if` swaps ViewBuilder branches, which already discards one subtree
+                    // and builds the other with fresh state.
                     Group {
                         if list.isFreeform {
                             ShoppingListFreeformView(listId: listId)
@@ -646,7 +719,7 @@ struct RecipeNavigationSplitView: View {
                             ShoppingListDetailView(listId: listId)
                         }
                     }
-                    .id("\(listId)-\(list.isFreeform)")
+                    .id(listId)
                     .navigationTitle(list.name)
                     #if os(macOS)
                     .navigationSubtitle(list.isFreeform ? "Freeform List" : "Checklist")
@@ -762,6 +835,13 @@ struct RecipeNavigationSplitView: View {
             NavigationStack {
                 ConsolidateDuplicatesView()
             }
+        }
+        // One alert serves every lightweight sync trigger (pull-to-refresh, footer rows, menu command);
+        // benign outcomes never set errorMessage, so this only appears for real failures.
+        .alert("Sync Failed", isPresented: showingSyncErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(manualSync.errorMessage ?? "")
         }
         .onReceive(NotificationCenter.default.publisher(for: .createNewRecipe)) { _ in
             viewModel.addNewRecipe()

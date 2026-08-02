@@ -73,8 +73,10 @@ struct ShoppingListDetailView: View {
                 
             }
         }
-        .task {
-            await viewModel.load()
+        // Unstructured Task rather than `.task { }` — see the matching note in ShoppingListFreeformView:
+        // a `.task` cancelled during a push leaves the view stuck on neither its rows nor its empty state.
+        .onAppear {
+            Task { await viewModel.load() }
         }
         .onDisappear {
             viewModel.removeEmptyItems()

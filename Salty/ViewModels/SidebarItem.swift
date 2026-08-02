@@ -40,6 +40,18 @@ extension SidebarItem {
     /// Whether this selection is the shopping-lists column (its own list/detail flow, not recipes).
     var isShoppingLists: Bool { self == .allShoppingLists }
 
+    /// The reorderable sidebar section this selection sits in, or nil for the fixed Library rows. Used to
+    /// drop the selection when the section it came from is hidden.
+    var sidebarSection: SidebarSection? {
+        switch self {
+        case .allRecipes, .favorites, .wantToMake: return nil
+        case .category: return .categories
+        case .course: return .courses
+        case .tag: return .tags
+        case .allShoppingLists: return .shoppingLists
+        }
+    }
+
     /// Whether this selection forces the favorites-only filter regardless of the toolbar toggle.
     var forcesFavorites: Bool { self == .favorites }
 

@@ -16,8 +16,10 @@ struct ShoppingListsListView: View {
     @State private var showingNameAlert = false
     @State private var nameListId: String?
     @State private var listName = ""
-    /// True when the name prompt follows a create (title "Name List") rather than a rename.
-    @State private var isNamingNewList = false
+    /// Set while the name prompt is standing in for a pending create (title "Name List"), and carries
+    /// the kind to create. Nil means the prompt is a rename of `nameListId`. The list itself isn't
+    /// inserted until Save, so Cancel leaves nothing behind.
+    @State private var pendingNewListIsFreeform: Bool?
     @State private var showingDeleteAlert = false
     /// Lists the pending delete applies to — one row for a context-menu delete, or the whole
     /// selection for a toolbar/keyboard delete.
@@ -59,7 +61,17 @@ struct ShoppingListsListView: View {
                         Task { await viewModel.deleteShoppingLists(ids: ids) }
                     }
                     #endif
+                    #if !os(macOS)
+                    // Same Photos-style status row the sidebar carries, so sync stays one tap away
+                    // while working in shopping lists (which replace the recipe list column entirely).
+                    Section {
+                        SyncStatusFooterView()
+                    }
+                    #endif
                 }
+                #if !os(macOS)
+                .refreshable { await ManualSyncRunner.shared.sync() }
+                #endif
                 #if os(macOS)
                 // Selection-aware menu: a right-click on one row acts on that row; on a multi-selection
                 // it offers only the actions that make sense for several lists.
@@ -105,12 +117,14 @@ struct ShoppingListsListView: View {
                 }
             }
         }
-        .alert(isNamingNewList ? "Name List" : "Rename List", isPresented: $showingNameAlert) {
+        .alert(pendingNewListIsFreeform != nil ? "Name List" : "Rename List", isPresented: $showingNameAlert) {
             TextField("Name", text: $listName)
             Button("Cancel", role: .cancel) { }
-            Button(isNamingNewList ? "Save" : "Rename") {
-                if let listId = nameListId {
-                    let newName = listName
+            Button(pendingNewListIsFreeform != nil ? "Save" : "Rename") {
+                let newName = listName
+                if let isFreeform = pendingNewListIsFreeform {
+                    Task { await viewModel.createShoppingList(isFreeform: isFreeform, name: newName) }
+                } else if let listId = nameListId {
                     Task { await viewModel.renameShoppingList(id: listId, to: newName) }
                 }
             }
@@ -142,20 +156,16 @@ struct ShoppingListsListView: View {
     }
 
     private func create(isFreeform: Bool) {
-        Task {
-            if let newList = await viewModel.createShoppingList(isFreeform: isFreeform) {
-                nameListId = newList.id
-                listName = newList.name
-                isNamingNewList = true
-                showingNameAlert = true
-            }
-        }
+        nameListId = nil
+        listName = "New List"
+        pendingNewListIsFreeform = isFreeform
+        showingNameAlert = true
     }
 
     private func beginRename(_ list: ShoppingList) {
         nameListId = list.id
         listName = list.name
-        isNamingNewList = false
+        pendingNewListIsFreeform = nil
         showingNameAlert = true
     }
 

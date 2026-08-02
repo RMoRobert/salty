@@ -1029,12 +1029,14 @@ class RecipeNavigationSplitViewModel {
     // MARK: - Shopping List Management
 
     /// Creates a new shopping list of the requested kind (checklist or freeform, fixed at creation),
-    /// selects it, and returns it so the view can immediately offer a rename.
+    /// selects it, and returns it. The name is collected before this is called, so cancelling the
+    /// name prompt never leaves a list (or a sync record) behind.
     @discardableResult
-    func createShoppingList(isFreeform: Bool) async -> ShoppingList? {
+    func createShoppingList(isFreeform: Bool, name: String = "New List") async -> ShoppingList? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let newList = ShoppingList(
             id: UUIDV7().uuidString,
-            name: "New List",
+            name: trimmed.isEmpty ? "New List" : trimmed,
             isFreeform: isFreeform,
             contentsForFreeform: isFreeform ? "" : nil,
             lastModifiedDate: Date()

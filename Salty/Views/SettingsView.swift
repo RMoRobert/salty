@@ -140,7 +140,7 @@ struct ServerSettingsView: View {
     @State private var autoSync = AutoSyncCoordinator.shared
     @State private var showingSyncAlert = false
     @State private var syncAlertMessage = ""
-    @State private var syncAlertIsError = false
+    @State private var syncAlertTitle = ""
     @State private var password: String = ""
     @State private var hasLoadedPassword = false
     @State private var showingForceResyncConfirm = false
@@ -242,36 +242,56 @@ struct ServerSettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Button {
-                    Task {
-                        // Always use the current UI credentials for sync (token for background tasks only -- not yet implemented)
-                        // Clear any existing token to force re-authentication with current UI values
-                        syncService.logout()
-                        // Set password in sync service (will be used for authentication)
-                        syncService.serverPassword = password
-                        await performSync()
-                        // Clear password from sync service if not saving to Keychain
-                        if !savePasswordInKeychain {
-                            syncService.serverPassword = ""
+                HStack {
+                    Button {
+                        Task {
+                            // Always use the current UI credentials for sync (token for background tasks only -- not yet implemented)
+                            // Clear any existing token to force re-authentication with current UI values
+                            syncService.logout()
+                            // Set password in sync service (will be used for authentication)
+                            syncService.serverPassword = password
+                            await performSync()
+                            // Clear password from sync service if not saving to Keychain
+                            if !savePasswordInKeychain {
+                                syncService.serverPassword = ""
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if syncService.isSyncing {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Syncing...")
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Text("Sync Now")
+                            }
                         }
                     }
-                } label: {
-                    HStack {
-                        if syncService.isSyncing {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Syncing...")
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("Sync Now")
+                    // Two buttons share this row, so on iOS each needs its own hit area rather than the
+                    // whole-row tap a Form gives a lone button.
+                    #if os(iOS)
+                    .buttonStyle(.borderless)
+                    #endif
+                    .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || password.isEmpty || syncService.serverUsername.isEmpty)
+
+                    // Only offered for a regular sync -- a force re-sync empties one side before refilling
+                    // it, so there's no safe point to stop it partway.
+                    if syncService.isCancellable {
+                        Spacer()
+                        Button(syncService.isCancelling ? "Cancelling..." : "Cancel") {
+                            syncService.cancelSync()
                         }
+                        #if os(iOS)
+                        .buttonStyle(.borderless)
+                        #endif
+                        .disabled(syncService.isCancelling)
                     }
                 }
-                .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || password.isEmpty || syncService.serverUsername.isEmpty)
-                
+
                 Button {
                     syncService.logout()
-                    syncAlertIsError = false
+                    syncAlertTitle = "Token Cleared"
                     syncAlertMessage = "Login token cleared. Next sync will re-authenticate with the current credentials."
                     showingSyncAlert = true
                 } label: {
@@ -305,17 +325,8 @@ struct ServerSettingsView: View {
                     }
                 }
                 
-                if let lastSync = syncService.lastSyncDate {
-                    HStack {
-                        Text("Last synced:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(lastSync, style: .relative)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
+                LastSyncedLabel(date: syncService.lastSyncDate)
+
                 if let error = syncService.lastSyncError {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -361,7 +372,7 @@ struct ServerSettingsView: View {
                 Text("How Sync Works")
             }
         }
-        .alert(syncAlertIsError ? "Sync Failed" : "Sync Complete", isPresented: $showingSyncAlert) {
+        .alert(syncAlertTitle, isPresented: $showingSyncAlert) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(syncAlertMessage)
@@ -417,12 +428,14 @@ struct ServerSettingsView: View {
     
     private func performSync() async {
         do {
-            try await syncService.syncNow()
-            syncAlertIsError = false
+            // Settings is the deliberate, watch-it-happen sync, so it bypasses the recently-synced guard.
+            try await syncService.syncNow(force: true)
+            syncAlertTitle = "Sync Complete"
             syncAlertMessage = "Successfully synced with server.\n\(syncService.syncProgress.summary)"
             showingSyncAlert = true
         } catch {
-            syncAlertIsError = true
+            // A cancel is the user's own doing, so it gets a neutral title rather than "Sync Failed".
+            syncAlertTitle = SyncError.isCancellation(error) ? "Sync Cancelled" : "Sync Failed"
             syncAlertMessage = friendlySyncMessage(error)
             showingSyncAlert = true
         }
@@ -431,11 +444,11 @@ struct ServerSettingsView: View {
     private func performForceResync() async {
         do {
             try await syncService.forceFullResyncFromServer()
-            syncAlertIsError = false
+            syncAlertTitle = "Sync Complete"
             syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.summary)"
             showingSyncAlert = true
         } catch {
-            syncAlertIsError = true
+            syncAlertTitle = "Sync Failed"
             syncAlertMessage = friendlySyncMessage(error)
             showingSyncAlert = true
         }
@@ -444,13 +457,45 @@ struct ServerSettingsView: View {
     private func performForcePush() async {
         do {
             try await syncService.forceFullResyncToServer()
-            syncAlertIsError = false
+            syncAlertTitle = "Sync Complete"
             syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.summary)"
             showingSyncAlert = true
         } catch {
-            syncAlertIsError = true
+            syncAlertTitle = "Sync Failed"
             syncAlertMessage = friendlySyncMessage(error)
             showingSyncAlert = true
+        }
+    }
+}
+
+/// "Last synced: …" line in Server settings. Re-renders when the wording is next due to change -- at the
+/// 15-second mark, then on each minute boundary -- rather than polling at a fixed rate. The loop lives and
+/// dies with the view, so nothing ticks while Settings is closed.
+struct LastSyncedLabel: View {
+    let date: Date?
+
+    @State private var now = Date()
+
+    var body: some View {
+        HStack {
+            Text("Last synced:")
+            Text(date.map { LastSyncedDescription.text(for: $0, now: now) } ?? "Never")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .task(id: date) {
+            guard let date else { return }
+            while !Task.isCancelled {
+                now = Date()
+                // Half a second past the boundary, so the wake-up never lands just short of it and
+                // immediately reschedules for a few more milliseconds.
+                let interval = LastSyncedDescription.refreshInterval(for: date, now: now) + 0.5
+                do {
+                    try await Task.sleep(for: .seconds(interval))
+                } catch {
+                    return  // view went away
+                }
+            }
         }
     }
 }
@@ -460,63 +505,30 @@ struct GeneralSettingsView: View {
     @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
     @AppStorage("sidebarShowFavorites") private var showFavorites = true
     @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
-    @AppStorage("sidebarShowCategories") private var showCategories = true
-    @AppStorage("sidebarShowCourses") private var showCourses = true
-    @AppStorage("sidebarShowTags") private var showTags = true
-    @AppStorage("sidebarShowShoppingLists") private var showShoppingLists = true
+    // The reorderable sections' own show/hide state lives in SidebarSectionVisibilityToggle; this holds
+    // only their order.
+    @AppStorage(SidebarSectionOrder.storageKey) private var sectionOrderRaw = ""
 
-    // Computed properties for bindings that ensure at least one is always checked
-    private var showCategoriesBinding: Binding<Bool> {
-        Binding(
-            get: { showCategories },
-            set: { newValue in
-                // Only allow unchecking if at least one other item is checked
-                if !newValue {
-                    let othersChecked = showCourses || showTags
-                    if othersChecked {
-                        showCategories = false
-                    }
-                } else {
-                    showCategories = true
-                }
-            }
-        )
+    private var sectionOrder: [SidebarSection] {
+        SidebarSectionOrder.decode(sectionOrderRaw)
     }
-    
-    private var showCoursesBinding: Binding<Bool> {
-        Binding(
-            get: { showCourses },
-            set: { newValue in
-                // Only allow unchecking if at least one other item is checked
-                if !newValue {
-                    let othersChecked = showCategories || showTags
-                    if othersChecked {
-                        showCourses = false
-                    }
-                } else {
-                    showCourses = true
-                }
-            }
-        )
+
+    private func setOrder(_ order: [SidebarSection]) {
+        sectionOrderRaw = SidebarSectionOrder.encode(order)
     }
-    
-    private var showTagsBinding: Binding<Bool> {
-        Binding(
-            get: { showTags },
-            set: { newValue in
-                // Only allow unchecking if at least one other item is checked
-                if !newValue {
-                    let othersChecked = showCategories || showCourses
-                    if othersChecked {
-                        showTags = false
-                    }
-                } else {
-                    showTags = true
-                }
-            }
-        )
+
+    /// Only iOS gets the drag hint -- a grouped Form on macOS doesn't pick up `onMove`, so there the
+    /// arrows are the only way to reorder.
+    private var sidebarSectionsFooter: String {
+        let intro = "These headings apppear after the Library items, in the order shown here."
+        let rule = "At least one of Categories, Courses, or Tags must be enabled."
+        #if os(macOS)
+        return "\(intro) Use the arrows to reorder. \(rule)"
+        #else
+        return "\(intro) Use the arrows or hold and drag a row to reorder. \(rule)"
+        #endif
     }
-    
+
     var body: some View {
         Form {
             Section {
@@ -533,17 +545,40 @@ struct GeneralSettingsView: View {
             Section {
                 Toggle("Show Favorites", isOn: $showFavorites)
                 Toggle("Show Want to Make", isOn: $showWantToMake)
-                Toggle("Show Categories", isOn: showCategoriesBinding)
-                Toggle("Show Courses", isOn: showCoursesBinding)
-                Toggle("Show Tags", isOn: showTagsBinding)
-                Toggle("Show Shopping Lists", isOn: $showShoppingLists)
             } header: {
-                Text("Sidebar Items")
+                Text("Library Items")
                     #if os(macOS)
                     .padding(.top)
                     #endif
             } footer: {
-                Text("At least one of Categories, Courses, or Tags must be enabled.")
+                Text("These appear under All Recipes at the top of the sidebar.")
+                    .font(.caption)
+            }
+            Section {
+                let order = sectionOrder
+                ForEach(order) { section in
+                    SidebarSectionSettingsRow(
+                        section: section,
+                        canMoveUp: section != order.first,
+                        canMoveDown: section != order.last,
+                        move: { delta in
+                            withAnimation {
+                                setOrder(SidebarSectionOrder.moved(order, section, by: delta))
+                            }
+                        }
+                    )
+                }
+                // Drag reordering, which a Form picks up on iOS but not on macOS.
+                .onMove { fromOffsets, toOffset in
+                    setOrder(SidebarSectionOrder.moved(order, fromOffsets: fromOffsets, toOffset: toOffset))
+                }
+            } header: {
+                Text("Sidebar Sections")
+                    #if os(macOS)
+                    .padding(.top)
+                    #endif
+            } footer: {
+                Text(sidebarSectionsFooter)
                     .font(.caption)
             }
         }
@@ -591,9 +626,7 @@ struct AdvancedSettingsView: View {
     @State private var isCreatingBackup = false
     @State private var backupMessage = ""
     @State private var showingDeleteConfirmation = false
-    @State private var isRegeneratingThumbnails = false
-    @State private var thumbnailMessage = ""
-    
+
     var body: some View {
         Form {
             Section {
@@ -643,24 +676,6 @@ struct AdvancedSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Button(isRegeneratingThumbnails ? "Regenerating…" : "Regenerate Preview Thumbnails") {
-                        regenerateThumbnails()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isRegeneratingThumbnails)
-                    Text("Rebuilds the small preview images shown in the recipe list from your full-size photos. Useful if older previews look stretched or squashed. Your photos are not modified.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if !thumbnailMessage.isEmpty {
-                        Text(thumbnailMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             } header: {
                 Text("Image Cleanup")
             }
@@ -675,25 +690,6 @@ struct AdvancedSettingsView: View {
         }
     }
     
-    private func regenerateThumbnails() {
-        isRegeneratingThumbnails = true
-        thumbnailMessage = ""
-
-        Task {
-            let result = await RecipeImageManager.shared.regenerateAllThumbnails()
-            isRegeneratingThumbnails = false
-            if result.updated == 0 && result.failed == 0 {
-                thumbnailMessage = "No recipe images found to regenerate."
-            } else {
-                var message = "Regenerated \(result.updated) preview\(result.updated == 1 ? "" : "s")."
-                if result.failed > 0 {
-                    message += " \(result.failed) could not be read and were skipped."
-                }
-                thumbnailMessage = message
-            }
-        }
-    }
-
     private func createBackupNow() {
         isCreatingBackup = true
         backupMessage = "Creating backup..."

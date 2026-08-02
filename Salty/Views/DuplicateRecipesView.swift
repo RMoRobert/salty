@@ -26,12 +26,7 @@ struct DuplicateRecipesView: View {
                 ContentUnavailableView {
                     Label("No Duplicate Recipes", systemImage: "checkmark.circle")
                 } description: {
-                    // Only point at the toolbar when there's actually something looser to switch to.
-                    if matchLevel == .titleAndSource {
-                        Text("No two recipes share a title and source.")
-                    } else {
-                        Text("No two recipes matched on \(matchLevel.displayName.lowercased()). Try a looser match from the toolbar.")
-                    }
+                   Text("No duplicate recipes matched based on selected criteria.")
                 }
             } else {
                 duplicatesList

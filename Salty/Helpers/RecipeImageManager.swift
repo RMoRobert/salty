@@ -93,57 +93,6 @@ final class RecipeImageManager: @unchecked Sendable {
         }
     }
     
-    /// Rebuilds the stored preview thumbnail for every recipe whose full image is still on disk.
-    ///
-    /// Builds before the aspect-fill fix generated iOS thumbnails by stretching the photo to a square,
-    /// so libraries created on (or synced from) those versions still hold distorted bitmaps. The
-    /// full-resolution images are retained, so regenerating is just re-running `generateThumbnail`.
-    /// Bumps `lastModifiedImageDate` -- not `lastModifiedDate` -- so the corrected thumbnail propagates
-    /// on the next sync without looking like a recipe content edit.
-    ///
-    /// Intended as a temporary one-shot repair tool exposed in Advanced settings; remove once
-    /// existing libraries have been migrated.
-    /// - Returns: the number of recipes updated, and the number whose image could not be regenerated.
-    @discardableResult
-    func regenerateAllThumbnails() async -> (updated: Int, failed: Int) {
-        var updated = 0
-        var failed = 0
-        do {
-            let recipes: [(id: String, filename: String)] = try await database.read { db in
-                try Row.fetchAll(db, sql: "SELECT id, imageFilename FROM recipe WHERE imageFilename IS NOT NULL")
-                    .compactMap { row in
-                        guard let id: String = row["id"], let filename: String = row["imageFilename"] else { return nil }
-                        return (id, filename)
-                    }
-            }
-
-            for recipe in recipes {
-                guard let imageData = loadImage(filename: recipe.filename),
-                      let thumbnailData = generateThumbnail(from: imageData, size: CGSize(width: 300, height: 300)) else {
-                    failed += 1
-                    logger.error("Could not regenerate thumbnail for recipe \(recipe.id) (image '\(recipe.filename)')")
-                    continue
-                }
-
-                try await database.write { db in
-                    try db.execute(sql: """
-                        UPDATE recipe
-                        SET imageThumbnailData = ?, lastModifiedImageDate = ?
-                        WHERE id = ?
-                        """,
-                        arguments: [thumbnailData, Date(), recipe.id]
-                    )
-                }
-                updated += 1
-            }
-
-            logger.info("Thumbnail regeneration completed: \(updated) updated, \(failed) failed")
-        } catch {
-            logger.error("Error during thumbnail regeneration: \(error)")
-        }
-        return (updated, failed)
-    }
-
     func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
         // Ensure the images directory exists before saving
         do {
