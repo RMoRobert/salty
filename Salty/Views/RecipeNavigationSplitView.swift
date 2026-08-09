@@ -941,6 +941,9 @@ private struct RecipeDetailColumnView: View {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
     @Binding var showRecipeDetailOnly: Bool
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    #if !os(macOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         if viewModel.selectedSidebarItem?.isShoppingLists == true {
@@ -975,14 +978,14 @@ private struct RecipeDetailColumnView: View {
             .id(recipeId) // seems to be needed to force full reload when recipe changes?
             .toolbar {
             #if !os(macOS)
-                // Leading edge, next to the columns this expands/collapses; Edit stays with the
-                // trailing platform-default actions.
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {
-                        showRecipeDetailOnly.toggle()
-                    }) {
-                        Label(showRecipeDetailOnly ? "Show Recipes List" : "Hide Recipes List",
-                              systemImage: showRecipeDetailOnly ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                if horizontalSizeClass == .regular {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: {
+                            showRecipeDetailOnly.toggle()
+                        }) {
+                            Label(showRecipeDetailOnly ? "Show Recipes List" : "Hide Recipes List",
+                                  systemImage: showRecipeDetailOnly ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                        }
                     }
                 }
             #endif
