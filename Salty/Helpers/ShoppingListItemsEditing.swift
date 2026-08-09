@@ -7,6 +7,14 @@
 
 import Foundation
 
+extension ShoppingListListContents {
+    /// True when the row has no visible text — the state of a row created by "New Item" that the
+    /// user never typed into. Blank rows are transient: they only exist while being edited.
+    var isBlank: Bool {
+        text.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+}
+
 /// Pure array operations for checklist items, kept off the view model so they're unit-testable
 /// (see ShoppingListItemsEditingTests). Array order IS the display/persisted order.
 extension Array where Element == ShoppingListListContents {
@@ -42,5 +50,22 @@ extension Array where Element == ShoppingListListContents {
     func insertionIndex(after id: String?) -> Int {
         guard let id, let index = firstIndex(where: { $0.id == id }) else { return endIndex }
         return index + 1
+    }
+
+    /// Removes the given row only if it's still blank — how a never-typed-into row vanishes when
+    /// focus leaves it (the Reminders behavior). Returns true when a row was removed.
+    @discardableResult
+    mutating func removeBlank(id: String) -> Bool {
+        guard let index = firstIndex(where: { $0.id == id }), self[index].isBlank else { return false }
+        remove(at: index)
+        return true
+    }
+
+    /// Removes every blank row (items and headings alike). Returns true when anything was removed.
+    @discardableResult
+    mutating func removeAllBlank() -> Bool {
+        let countBefore = count
+        removeAll(where: \.isBlank)
+        return count != countBefore
     }
 }

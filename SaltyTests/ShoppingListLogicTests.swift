@@ -200,4 +200,33 @@ struct ShoppingListItemsEditingTests {
         #expect(items.insertionIndex(after: nil) == 4)
         #expect(items.insertionIndex(after: "missing") == 4)
     }
+
+    @Test func isBlankTreatsWhitespaceOnlyAsBlank() {
+        #expect(ShoppingListListContents(id: "b", text: "").isBlank)
+        #expect(ShoppingListListContents(id: "b", text: "   ").isBlank)
+        #expect(!ShoppingListListContents(id: "b", text: "milk").isBlank)
+    }
+
+    @Test func removeBlankRemovesAnUntypedRow() {
+        var items = makeItems()
+        items.append(ShoppingListListContents(id: "draft", text: "  "))
+        #expect(items.removeBlank(id: "draft") == true)
+        #expect(items.map(\.id) == ["h1", "i1", "i2", "i3"])
+    }
+
+    @Test func removeBlankLeavesTypedAndUnknownRowsAlone() {
+        var items = makeItems()
+        #expect(items.removeBlank(id: "i1") == false)
+        #expect(items.removeBlank(id: "missing") == false)
+        #expect(items == makeItems())
+    }
+
+    @Test func removeAllBlankClearsBlankItemsAndHeadings() {
+        var items = makeItems()
+        items.insert(ShoppingListListContents(id: "b1", isHeading: true, text: ""), at: 0)
+        items.append(ShoppingListListContents(id: "b2", text: " "))
+        #expect(items.removeAllBlank() == true)
+        #expect(items.map(\.id) == ["h1", "i1", "i2", "i3"])
+        #expect(items.removeAllBlank() == false)
+    }
 }

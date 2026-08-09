@@ -84,11 +84,6 @@ class ShoppingListDetailViewModel {
         schedulePersist()
     }
 
-    func toggleImportant(id: String) {
-        items.toggleImportant(id: id)
-        schedulePersist()
-    }
-
     func updateText(id: String, text: String) {
         items.updateText(id: id, text: text)
         schedulePersist()
@@ -119,11 +114,18 @@ class ShoppingListDetailViewModel {
         schedulePersist()
     }
 
-    /// Drops empty rows (blank items left behind by inline editing). Called when the view goes away.
+    /// Removes the given row if the user never typed into it — called when focus leaves a row, so a
+    /// blank draft disappears instead of lingering as an empty line (the Reminders behavior).
+    func removeIfBlank(id: String) {
+        if items.removeBlank(id: id) {
+            schedulePersist()
+        }
+    }
+
+    /// Drops all blank rows left behind by inline editing. Backstop for the paths focus tracking
+    /// can't see: view disappearing mid-edit, and clearing stale drafts before inserting a new row.
     func removeEmptyItems() {
-        let cleaned = items.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
-        if cleaned.count != items.count {
-            items = cleaned
+        if items.removeAllBlank() {
             schedulePersist()
         }
     }
@@ -175,8 +177,8 @@ class ShoppingListDetailViewModel {
 
     /// Converts this checklist into a freeform (Markdown-style) list: serializes the current items to
     /// text, flips `isFreeform`, and writes both. The content column then re-routes to the freeform
-    /// editor. One-way — item stars aren't represented in the text form and are dropped. Pending
-    /// checklist saves are cancelled first so none lands after the flip.
+    /// editor. One-way — the `isImportant` flag (not currently UI-exposed) has no text form and is
+    /// dropped. Pending checklist saves are cancelled first so none lands after the flip.
     func convertToFreeform() {
         saveTask?.cancel()
         saveTask = nil
