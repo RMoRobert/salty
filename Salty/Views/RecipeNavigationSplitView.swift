@@ -97,6 +97,8 @@ struct RecipeNavigationSplitView: View {
     @State private var showRecipeDetailOnly = false  // when true, shows detail view (third column) only for better recipe viewing
     // Layout to restore when leaving detail-only mode, captured on entry.
     @State private var columnVisibilityBeforeDetailOnly: NavigationSplitViewVisibility = .automatic
+    // Tracking separately from showRecipeDetailOnly so can toggle this a tad before and avoid double animation (see add'l comments below):
+    @State private var removeSidebarToggle = false
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingEditLibTagsSheet = false
     @State private var showingEditLibCoursesSheet = false
@@ -141,14 +143,33 @@ struct RecipeNavigationSplitView: View {
     /// remembering the layout so leaving the mode restores it.
     private func applyDetailOnlyMode(_ detailOnly: Bool) {
         if detailOnly {
-            columnVisibilityBeforeDetailOnly = columnVisibility
-            withAnimation(.smooth) {
-                columnVisibility = .detailOnly
+            // Seems to be oddidiy on at least iOS 26 (only version tested) where restoring .automatic
+            // after .detailOnly  can come back as content plus detail with no sidebar toggle, making
+            // restoration of it possible only via swipe gesture. Using .all instead of .automatic seems
+            // to work around that, so will restore that value here in that case.
+            columnVisibilityBeforeDetailOnly = columnVisibility == .automatic ? .all : columnVisibility
+            removeSidebarToggle = true
+            // Awkward workaround to avoid jitter while sidebar toggle icon removed, but works for now...
+            Task {
+                try? await Task.sleep(for: .milliseconds(30))
+                guard showRecipeDetailOnly else { return }
+                withAnimation(.smooth) {
+                    columnVisibility = .detailOnly
+                }
             }
-        } else if columnVisibility == .detailOnly {
+        } else {
+            removeSidebarToggle = false
             // Only restore if still in detail-only; otherwise the user already picked a layout by hand.
-            withAnimation(.smooth) {
-                columnVisibility = columnVisibilityBeforeDetailOnly
+            guard columnVisibility == .detailOnly else { return }
+            // Same sequencing as entry, mirrored: let the toggle removal lift before the columns
+            // animate. If the removal is still rendered while UIKit rebuilds the bars for the
+            // restore, the system sidebar toggle is dropped and never comes back (verified).
+            Task {
+                try? await Task.sleep(for: .milliseconds(30))
+                guard !showRecipeDetailOnly else { return }
+                withAnimation(.smooth) {
+                    columnVisibility = columnVisibilityBeforeDetailOnly
+                }
             }
         }
     }
@@ -163,10 +184,18 @@ struct RecipeNavigationSplitView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarColumnView(
-                viewModel: viewModel,
-                showingSettingsSheet: $showingSettingsSheet
-            )
+            if removeSidebarToggle {
+                SidebarColumnView(
+                    viewModel: viewModel,
+                    showingSettingsSheet: $showingSettingsSheet
+                )
+                .toolbar(removing: .sidebarToggle) // reduntant with arrows toolbar icon, so removing (only) if detail view expanded to full
+            } else {
+                SidebarColumnView(
+                    viewModel: viewModel,
+                    showingSettingsSheet: $showingSettingsSheet
+                )
+            }
         } content: {
             if viewModel.selectedSidebarItem?.isShoppingLists == true {
                 ShoppingListsListView(viewModel: viewModel)
