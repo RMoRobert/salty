@@ -65,6 +65,8 @@ class RecipeDetailEditViewModel {
     var showingScanTextSheet = false
     var scanTextTarget: ScanTextTarget = .ingredients
     var showingCancelAlert = false
+    var showingSaveErrorAlert = false
+    var saveErrorMessage: String?
     
     enum ScanTextTarget: String, CaseIterable {
         case introduction = "Introduction"
@@ -115,7 +117,10 @@ class RecipeDetailEditViewModel {
     }
     
     // MARK: - Public Methods
-    func saveRecipe() async {
+    /// Saves the recipe and its category relationships. Returns `true` on success;
+    /// on failure, sets `showingSaveErrorAlert` so the view can inform the user.
+    @discardableResult
+    func saveRecipe() async -> Bool {
         recipe.lastModifiedDate = Date()
         // Snapshot main-actor state into locals: the async write closure is @Sendable and runs
         // off the main actor, so it must not touch `self`.
@@ -160,9 +165,13 @@ class RecipeDetailEditViewModel {
             // After successful save, this is no longer a new recipe
             isNewRecipe = false
             originalRecipe = recipeToSave
+            return true
 
         } catch {
             logger.error("Error saving recipe: \(error)")
+            saveErrorMessage = error.localizedDescription
+            showingSaveErrorAlert = true
+            return false
         }
     }
     

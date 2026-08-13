@@ -52,12 +52,20 @@ struct RecipeDetailEditMobileView: View {
                 
                 Button("Save") {
                     Task {
-                        await viewModel.saveRecipe()
-                        dismiss()
+                        // Only dismiss if the save actually succeeded; otherwise the
+                        // view model presents an error alert.
+                        if await viewModel.saveRecipe() {
+                            dismiss()
+                        }
                     }
                 }
                 .buttonStyle(.borderedProminent)
             }
+        }
+        .alert("Couldn't Save Recipe", isPresented: $viewModel.showingSaveErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.saveErrorMessage ?? "An unknown error occurred. Please try again.")
         }
         .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
             Button("Cancel", role: .cancel) { }

@@ -106,6 +106,11 @@ struct CreateRecipeFromWebView: View {
         } message: {
             Text("Please add recipe information before saving.")
         }
+        .alert("Couldn't Save Recipe", isPresented: $viewModel.showingSaveErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.saveErrorMessage ?? "An unknown error occurred. Please try again.")
+        }
         .alert("No Recipe Data Found", isPresented: $viewModel.showingNoRecipeDataAlert) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -357,8 +362,11 @@ struct RecipeWebBrowserView: View {
                 Button("Save Recipe") {
                     if viewModel.hasRecipeData {
                         Task {
-                            await viewModel.saveRecipe()
-                            onSave?()
+                            // Only close the window if the save actually succeeded;
+                            // otherwise the view model presents an error alert.
+                            if await viewModel.saveRecipe() {
+                                onSave?()
+                            }
                         }
                     } else {
                         viewModel.showingSaveAlert = true
@@ -430,18 +438,24 @@ struct RecipeWebBrowserView: View {
 
             Task { @MainActor in
                 let importer = SchemaOrgRecipeJSONLDImporter()
-                let recipes = importer.parseRecipes(from: html)
-                
-                if let firstRecipe = recipes.first {
+                let scannedRecipes = importer.scanRecipes(from: html)
+
+                if let firstScanned = scannedRecipes.first {
                     // Populate the viewModel with the found recipe data
-                    self.viewModel.populateFromScannedRecipe(firstRecipe)
-                    
+                    self.viewModel.populateFromScannedRecipe(firstScanned.recipe)
+
+                    // Fetch recipe photo (if any) before hand-off. On macOS the side
+                    // panel is live-bound, so will appear after download; on iOS, runs
+                    // before editor is presented so copy will include photo.
+                    await self.viewModel.downloadAndAttachImage(from: firstScanned.imageURL)
+
                     #if os(iOS)
-                    // On iOS, save the recipe and show the editor directly
-                    Task {
-                        await self.viewModel.saveRecipe()
-                        self.viewModel.showingExtractedDataSheet = true
-                    }
+                    // On iOS, show the editor directly. The recipe is not saved here:
+                    // it is inserted exactly once, when the user saves in the editor.
+                    // (Saving here too would make the editor's insert fail and roll
+                    // back the user's edits.)
+                    self.viewModel.prepareRecipeForEditing()
+                    self.viewModel.showingExtractedDataSheet = true
                     #endif
                 } else {
                     // No recipe data found - show alert

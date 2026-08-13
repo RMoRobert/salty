@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import ImageIO
 import SwiftSoup
 import OSLog
 
@@ -25,24 +26,40 @@ import OSLog
 class SchemaOrgRecipeJSONLDImporter {
     private let logger = Logger(subsystem: "Salty", category: "App")
 
-    /// Bounds applied to untrusted web content so a malicious or accidentally huge page can't exhaust
-    /// memory or stall the UI while parsing. Generous enough for any real recipe.
+    /// Reasonable bounds to prevent untruested web content from going rogue; should be generous enough for most real recipes
     private enum Limits {
-        static let maxInputBytes = 8 * 1024 * 1024      // cap on fetched HTML / JSON-LD payload
+        static let maxInputBytes = 8 * 1024 * 1024      // cap on fetched HTML/JSON-LD payload
+        static let maxImageBytes = 20 * 1024 * 1024     // cap on downloaded recipe photo
         static let maxScriptTags = 50                   // JSON-LD <script> blocks scanned per page
         static let maxFieldLength = 20_000              // per string field (name, instruction, etc.)
         static let maxArrayItems = 1_000                // ingredients / directions / notes per recipe
         static let requestTimeout: TimeInterval = 15
     }
 
+    /// A recipe parsed from JSON-LD, together with page metadata that isn't stored on `Recipe` itself.
+    struct ScannedRecipe {
+        let recipe: Recipe
+        /// URL of the recipe photo declared in the JSON-LD `image` field, if any. The import flow
+        /// downloads this and generates the app's own thumbnail via `RecipeImageManager`.
+        let imageURL: String?
+    }
+
     // MARK: - Main parsing method
-    
+
     /// Parses schema.org Recipe data from HTML containing JSON-LD
     /// - Parameter html: HTML content containing JSON-LD script tags
     /// - Returns: Array of Recipe objects found in the HTML
     func parseRecipes(from html: String) -> [Recipe] {
-        var recipes: [Recipe] = []
-        
+        scanRecipes(from: html).map(\.recipe)
+    }
+
+    /// Parses schema.org Recipe data from HTML containing JSON-LD, keeping page metadata
+    /// (such as the recipe photo URL) alongside each recipe.
+    /// - Parameter html: HTML content containing JSON-LD script tags
+    /// - Returns: Array of scanned recipes found in the HTML
+    func scanRecipes(from html: String) -> [ScannedRecipe] {
+        var recipes: [ScannedRecipe] = []
+
         // Guard against pathologically large pages before handing them to the HTML parser.
         guard html.utf8.count <= Limits.maxInputBytes else {
             logger.error("HTML input exceeds \(Limits.maxInputBytes) byte limit; refusing to parse")
@@ -67,16 +84,16 @@ class SchemaOrgRecipeJSONLDImporter {
         } catch {
             logger.error("Error parsing HTML: \(error)")
         }
-        
+
         logger.info("Successfully parsed \(recipes.count) recipes from HTML")
         return recipes
     }
     
     // MARK: - JSON-LD parsing
     
-    private func parseJSONLD(_ jsonData: Data) -> [Recipe] {
-        var recipes: [Recipe] = []
-        
+    private func parseJSONLD(_ jsonData: Data) -> [ScannedRecipe] {
+        var recipes: [ScannedRecipe] = []
+
         do {
             let json = try JSONSerialization.jsonObject(with: jsonData, options: [])
             
@@ -111,14 +128,14 @@ class SchemaOrgRecipeJSONLDImporter {
         return recipes
     }
     
-    private func parseRecipeFromJSONDict(_ dict: [String: Any]) -> Recipe? {
+    private func parseRecipeFromJSONDict(_ dict: [String: Any]) -> ScannedRecipe? {
         // Check if this is a Recipe type
         guard isRecipeType(dict) else {
             return nil
         }
-        
+
         logger.info("Parsing Recipe from JSON-LD")
-        
+
         let recipe = Recipe(
             id: UUID().uuidString,
             name: extractString(from: dict, key: "name") ?? "",
@@ -132,7 +149,10 @@ class SchemaOrgRecipeJSONLDImporter {
             //rating: extractRating(from: dict), // probably doesn't make sense; want user-supplied rating, if any
             rating: .notSet,
             imageFilename: nil,
-            imageThumbnailData: nil,  // some sites do appear to ahve this data, so maybe something to look at in future
+            imageThumbnailData: nil,
+            // The photo is attached later by the import flow, which downloads ScannedRecipe.imageURL
+            // and generates our own thumbnail via RecipeImageManager. Site-provided thumbnail data is
+            // intentionally not used, so all thumbnails are created consistently.
             isFavorite: false,
             wantToMake: false,
             yield: extractString(from: dict, key: "recipeYield") ?? "",
@@ -143,8 +163,8 @@ class SchemaOrgRecipeJSONLDImporter {
             preparationTimes: extractPreparationTimes(from: dict),
             nutrition: extractNutritionInformation(from: dict)
         )
-        
-        return recipe
+
+        return ScannedRecipe(recipe: recipe, imageURL: extractImageURL(from: dict))
     }
     
     // MARK: - Type checking
@@ -390,18 +410,10 @@ class SchemaOrgRecipeJSONLDImporter {
 //        }
         // TODO: Consider option offering import above as Tags instead?
         
-        // Extract recipe category as a note
-        if let category = dict["recipeCategory"] as? String, !category.isEmpty {
-//            notes.append(Note(
-//                id: UUID().uuidString,
-//                title: "Category",
-//                content: category
-//            ))
-            
-            // TODO: Check if category with same name already exists and add if so? Maybe offer import option to do or not.
-            // Do not add to notes
-        }
-        
+        // Note: schema.org "recipeCategory" is intentionally NOT imported (as a
+        // category or a note). Categories are the user's own taxonomy; imported
+        // recipes should only get categories the user selects themselves.
+
         // Extract cuisine as a note
 //        if let cuisine = dict["recipeCuisine"] as? String, !cuisine.isEmpty {
 //            notes.append(Note(
@@ -592,5 +604,43 @@ extension SchemaOrgRecipeJSONLDImporter {
         }
 
         return []
+    }
+
+    /// Downloads the recipe photo referenced by a JSON-LD `image` URL (see `ScannedRecipe.imageURL`).
+    /// Returns the raw image data only if the URL is a real web URL, the payload is within the size
+    /// limit, and the data actually decodes as an image (rejects HTML error pages and junk).
+    func downloadImageData(from urlString: String) async -> Data? {
+        // Same SSRF guard as parseRecipes(from:): the URL comes from untrusted page content.
+        guard let url = URL(string: urlString),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            logger.error("Refusing to fetch non-http(s) image URL")
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = Limits.requestTimeout
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            // expectedContentLength is -1 when unknown; only enforce when the server advertises a size.
+            if response.expectedContentLength > Int64(Limits.maxImageBytes) {
+                logger.error("Image content length \(response.expectedContentLength) exceeds limit; skipping")
+                return nil
+            }
+            guard data.count <= Limits.maxImageBytes else {
+                logger.error("Image is \(data.count) bytes, exceeds \(Limits.maxImageBytes) limit; skipping")
+                return nil
+            }
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  CGImageSourceGetCount(source) > 0 else {
+                logger.error("Downloaded image data is not a decodable image; skipping")
+                return nil
+            }
+            return data
+        } catch {
+            logger.error("Error downloading recipe image: \(error)")
+            return nil
+        }
     }
 }

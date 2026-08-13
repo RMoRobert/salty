@@ -71,8 +71,13 @@ struct CategoryEditView: View {
             .onAppear {
                 Task { await loadSelectedCategories() }
             }
-            .onChange(of: categories) { _, _ in
-                Task { await loadSelectedCategories() }
+            .onChange(of: categories) { _, newCategories in
+                // Don't reload from the database here -- would wipe unsaved toggles
+                // (and all pending selections if recipe isn't saved yet).
+                // Just drop any selections whose category no longer exists.
+                let validIDs = Set(newCategories.map(\.id))
+                selectedCategoryIDs.formIntersection(validIDs)
+                originalSelectedCategoryIDs.formIntersection(validIDs)
             }
             .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
                 LibraryCategoriesEditView()
@@ -95,8 +100,9 @@ struct CategoryEditView: View {
                 Text("A category with the name \"\(newCategoryName)\" already exists.")
             }
                     .onChange(of: showingEditLibraryCategoriesSheet) { _, isPresented in
-            if !isPresented {
-                // Refresh selected categories when the sheet is dismissed
+            // Refresh from the database when the library sheet is dismissed, but only
+            // if there are no pending toggles that a reload would discard.
+            if !isPresented && selectedCategoryIDs == originalSelectedCategoryIDs {
                 Task { await loadSelectedCategories() }
             }
         }
@@ -120,17 +126,26 @@ struct CategoryEditView: View {
     private func loadSelectedCategories() async {
         let recipeId = recipe.id
         do {
-            let selectedIDs = try await database.read { db in
-                try RecipeCategory
+            let result = try await database.read { db -> (recipeExists: Bool, selectedIDs: [String]) in
+                let recipeExists = try Recipe
+                    .where { $0.id.eq(recipeId) }
+                    .fetchOne(db) != nil
+                let selectedIDs = try RecipeCategory
                     .where { $0.recipeId.eq(recipeId) }
                     .fetchAll(db)
                     .map { $0.categoryId }
+                return (recipeExists, selectedIDs)
             }
-            selectedCategoryIDs = Set(selectedIDs)
-            originalSelectedCategoryIDs = Set(selectedIDs)
+            if result.recipeExists {
+                selectedCategoryIDs = Set(result.selectedIDs)
+                originalSelectedCategoryIDs = Set(result.selectedIDs)
+            } else {
+                // Unsaved recipe: selections live only in the binding until the recipe
+                // itself is saved, so leave them untouched.
+                originalSelectedCategoryIDs = []
+            }
         } catch {
-            selectedCategoryIDs = []
-            originalSelectedCategoryIDs = []
+            logger.error("Error loading selected categories: \(error)")
         }
     }
 

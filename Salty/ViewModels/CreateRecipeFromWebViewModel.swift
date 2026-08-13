@@ -50,6 +50,8 @@ class CreateRecipeFromWebViewModel {
     var showingCancelAlert = false
     var showingExtractedDataSheet = false
     var showingNoRecipeDataAlert = false
+    var showingSaveErrorAlert = false
+    var saveErrorMessage: String?
     
     // MARK: - Computed Properties
     var hasRecipeData: Bool {
@@ -79,7 +81,10 @@ class CreateRecipeFromWebViewModel {
     }
     
     // MARK: - Recipe Management
-    func saveRecipe() async {
+    /// Saves the recipe and its category relationships. Returns `true` on success;
+    /// on failure, sets `showingSaveErrorAlert` so the view can inform the user.
+    @discardableResult
+    func saveRecipe() async -> Bool {
         // Convert text to structured data before saving
         convertTextToStructuredData()
 
@@ -105,11 +110,36 @@ class CreateRecipeFromWebViewModel {
                 }
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
+            return true
         } catch {
             logger.error("Error saving recipe: \(error)")
+            saveErrorMessage = error.localizedDescription
+            showingSaveErrorAlert = true
+            return false
         }
     }
-    
+
+    /// Prepares the in-memory recipe for hand-off to the structured editor by
+    /// converting any pasted/extracted text into structured ingredients and directions.
+    func prepareRecipeForEditing() {
+        convertTextToStructuredData()
+    }
+
+    /// Downloads the recipe photo from a scanned image URL and attaches it to the recipe
+    /// via the app's standard image pipeline (which also generates the thumbnail).
+    /// Failures are non-fatal: the recipe simply imports without a photo.
+    func downloadAndAttachImage(from urlString: String?) async {
+        guard let urlString, !urlString.isEmpty else { return }
+
+        let importer = SchemaOrgRecipeJSONLDImporter()
+        guard let imageData = await importer.downloadImageData(from: urlString) else {
+            logger.info("No usable recipe photo downloaded; importing without an image")
+            return
+        }
+        recipe.setImage(imageData)
+        logger.info("Attached imported recipe photo (\(imageData.count) bytes)")
+    }
+
     private func convertTextToStructuredData() {
         // Convert ingredients text to structured ingredients
         if !ingredientsText.isEmpty {
