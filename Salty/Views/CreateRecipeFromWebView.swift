@@ -27,10 +27,21 @@ struct CreateRecipeFromWebView: View {
             }
             #else
             // iOS/iPadOS: Use simplified layout with browser and direct editor
-            RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onClose: { dismiss() }, onSave: { dismiss() })
+            RecipeWebBrowserView(
+                viewModel: viewModel,
+                webView: $webView,
+                onClose: {
+                    // Closing without saving discards the import; remove any downloaded photo.
+                    viewModel.cleanUpUnsavedImage()
+                    dismiss()
+                },
+                onSave: { dismiss() }
+            )
                 .sheet(isPresented: $viewModel.showingExtractedDataSheet) {
                     NavigationStack {
                         RecipeDetailEditMobileView(recipe: viewModel.recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
+                            // The hand-off editor saved the recipe (including its photo reference)
+                            viewModel.recipeWasSaved = true
                             // Close the editor after saving
                             viewModel.showingExtractedDataSheet = false
                             dismiss() // Close the web browser window
@@ -42,6 +53,15 @@ struct CreateRecipeFromWebView: View {
         .navigationTitle("Import Recipe from Web")
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
+        #if os(macOS)
+        // Should catch any way the import window can close without saving, so downloaded
+        // photo can be cleaned up if recipe isn't ultimately discared before "full" save/import.
+        // macOS only; on iOS the full-screen cover's exits are explicit (Close button or Save)
+        // and hooked directly, and don't want to trigger false cleanup on sheet present.
+        .onDisappear {
+            viewModel.cleanUpUnsavedImage()
+        }
         #endif
         #if os(macOS)
         .onKeyPress(.init("1"), phases: .down) { keyPress in
@@ -96,6 +116,7 @@ struct CreateRecipeFromWebView: View {
         .alert("Discard Changes?", isPresented: $viewModel.showingCancelAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Discard", role: .destructive) {
+                viewModel.cleanUpUnsavedImage()
                 dismiss()
             }
         } message: {

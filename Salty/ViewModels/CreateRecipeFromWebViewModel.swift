@@ -26,6 +26,14 @@ class CreateRecipeFromWebViewModel {
     
     // MARK: - Recipe State
     var recipe: Recipe
+
+    /// True once the recipe has been saved — by this view model (macOS) or by the hand-off
+    /// editor (iOS). Checked on dismissal so a discarded import can clean up its photo.
+    var recipeWasSaved = false
+
+    /// Set when the import UI is dismissed. A photo download still in flight at that point
+    /// is discarded instead of attached, so it can't recreate the file cleanup just removed.
+    private var importSessionEnded = false
     
     // MARK: - Plain Text State for Import
     var ingredientsText: String = ""
@@ -110,6 +118,7 @@ class CreateRecipeFromWebViewModel {
                 }
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
+            recipeWasSaved = true
             return true
         } catch {
             logger.error("Error saving recipe: \(error)")
@@ -136,8 +145,39 @@ class CreateRecipeFromWebViewModel {
             logger.info("No usable recipe photo downloaded; importing without an image")
             return
         }
+        guard !importSessionEnded else {
+            logger.info("Import session ended before photo download finished; discarding it")
+            return
+        }
         recipe.setImage(imageData)
         logger.info("Attached imported recipe photo (\(imageData.count) bytes)")
+    }
+
+    /// Deletes the downloaded photo when the import session ends without the recipe having been
+    /// saved, so a discarded import doesn't leave an orphaned file in image storage. Safe to call
+    /// from any dismissal path: it does nothing once the recipe is saved or if no photo is attached.
+    func cleanUpUnsavedImage() {
+        // Mark the session over first, so an in-flight photo download can't attach (and
+        // re-create the file) after this cleanup runs.
+        importSessionEnded = true
+        guard !recipeWasSaved, recipe.imageFilename != nil else { return }
+        let recipeId = recipe.id
+        Task {
+            do {
+                // Belt and braces: never delete the photo of a recipe that made it into the database.
+                let recipeExists = try await database.read { db in
+                    try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db) != nil
+                }
+                if !recipeExists {
+                    logger.info("Import discarded; deleting unsaved recipe photo")
+                    recipe.removeImage()
+                }
+            } catch {
+                // Leave the file for the orphaned-image cleanup task rather than risk deleting
+                // a photo we can't verify.
+                logger.error("Could not verify recipe before image cleanup: \(error)")
+            }
+        }
     }
 
     private func convertTextToStructuredData() {
