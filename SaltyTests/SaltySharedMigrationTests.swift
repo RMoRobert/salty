@@ -78,4 +78,67 @@ struct SaltySharedMigrationTests {
         }
         #expect(exists)
     }
+
+    /// The real SHARED-V0003 entry: on a DB predating it, both sync-bookkeeping columns are added at
+    /// the END of `shoppingList` (positional `SELECT *` compat with KMP), and the ledger makes the
+    /// re-run a no-op — a repeated ADD COLUMN would throw "duplicate column name". Runs the full
+    /// production array so the ordering/interplay of the shipped entries is what's exercised.
+    @Test func sharedV0003AddsSyncBookkeepingColumnsOnceToAPreexistingDb() throws {
+        let dbQueue = try DatabaseQueue()
+        try dbQueue.write { db in
+            // Minimal pre-V0003 shapes: just enough of `recipe` for the image-date entry's ALTER, and
+            // the `shoppingList` shape SHARED-V0002 leaves behind.
+            try db.execute(sql: #"CREATE TABLE "recipe" ("id" TEXT)"#)
+            try db.execute(sql: """
+                CREATE TABLE "shoppingList" (
+                    "id" TEXT PRIMARY KEY NOT NULL,
+                    "name" TEXT,
+                    "isFreeform" BOOLEAN,
+                    "contentsForFreeform" TEXT,
+                    "contentsForList" TEXT,
+                    "lastModifiedDate" DATETIME
+                )
+                """)
+        }
+
+        try runSaltySharedMigrations(dbQueue)
+        #expect(try columnExists(dbQueue, table: "shoppingList", column: "syncedRevision"))
+        #expect(try columnExists(dbQueue, table: "shoppingList", column: "syncedSnapshot"))
+        // Appended LAST, in migration order — the cross-platform positional contract.
+        let columns = try dbQueue.read { db in
+            try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('shoppingList') ORDER BY cid")
+        }
+        #expect(columns.suffix(2) == ["syncedRevision", "syncedSnapshot"])
+
+        // Second open must NOT re-run.
+        try runSaltySharedMigrations(dbQueue)
+    }
+
+    /// A KMP-created DB already has the columns (fresh Schema.sq CREATE) but no ledger row for this
+    /// app to skip on — the per-column guard is what keeps the ALTER from throwing.
+    @Test func sharedV0003IsANoOpWhenTheColumnsAlreadyExist() throws {
+        let dbQueue = try DatabaseQueue()
+        try dbQueue.write { db in
+            try db.execute(sql: #"CREATE TABLE "recipe" ("id" TEXT, "lastModifiedImageDate" DATETIME)"#)
+            try db.execute(sql: """
+                CREATE TABLE "shoppingList" (
+                    "id" TEXT PRIMARY KEY NOT NULL,
+                    "name" TEXT,
+                    "isFreeform" BOOLEAN,
+                    "contentsForFreeform" TEXT,
+                    "contentsForList" TEXT,
+                    "lastModifiedDate" DATETIME,
+                    "syncedRevision" INTEGER,
+                    "syncedSnapshot" TEXT
+                )
+                """)
+        }
+
+        try runSaltySharedMigrations(dbQueue)
+
+        let recorded = try dbQueue.read { db in
+            try Int.fetchOne(db, sql: #"SELECT 1 FROM "saltyMigration" WHERE "identifier" = 'SHARED-V0003'"#) != nil
+        }
+        #expect(recorded)
+    }
 }

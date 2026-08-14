@@ -2,9 +2,10 @@
 //  ShoppingListSyncTests.swift
 //  SaltyTests
 //
-//  The model<->wire conversion behind shopping list sync. The reconciliation rules themselves are
-//  covered by RecipeSyncReconcilerTests — this sync path routes through that same reconciler rather
-//  than reimplementing them, so what's left to pin here is the payload mapping.
+//  The model<->wire conversion behind shopping list sync. The reconciliation itself is revision-based
+//  (see salty_kmp/SHOPPING_LIST_REVISIONS_PLAN.md), with the data-loss-critical merge covered by
+//  ShoppingListMergeTests — what's pinned here is the payload mapping, including the revision fields
+//  the algorithm rides on.
 //
 
 import Testing
@@ -131,5 +132,35 @@ struct ShoppingListSyncTests {
         #expect(restored.name == "")
         #expect(restored.isFreeform == false)
         #expect(restored.contentsForList.isEmpty)
+    }
+
+    // MARK: - Revision fields (SHARED-V0003 / revision-based sync)
+
+    @Test func decodesRevisionAndBaseRevisionWhenPresent() throws {
+        let list = try decode(#"{"id":"sl1","name":"G","revision":7,"baseRevision":6}"#)
+        #expect(list.revision == 7)
+        #expect(list.baseRevision == 6)
+    }
+
+    /// An old server omits the fields entirely — the row must decode with nils (landing on the
+    /// legacy-seeding path), never throw.
+    @Test func payloadWithoutRevisionFieldsDecodesToNil() throws {
+        let list = try decode(#"{"id":"sl1","name":"G"}"#)
+        #expect(list.revision == nil)
+        #expect(list.baseRevision == nil)
+    }
+
+    /// Nil revision fields must stay OFF the wire (synthesized `encodeIfPresent`): an explicit null
+    /// is exactly the kind of unknown-shape value an older server could choke on.
+    @Test func encodingOmitsNilRevisionFieldsButCarriesASetBaseRevision() throws {
+        var payload = ServerShoppingList(list: ShoppingList(id: "sl5", name: "X", isFreeform: false))
+        let bare = try JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any]
+        #expect(bare?.keys.contains("revision") == false)
+        #expect(bare?.keys.contains("baseRevision") == false)
+
+        payload.baseRevision = 3
+        let based = try JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any]
+        #expect(based?["baseRevision"] as? Int == 3)
+        #expect(based?.keys.contains("revision") == false)
     }
 }

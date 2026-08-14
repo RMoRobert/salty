@@ -423,8 +423,14 @@ struct ShoppingList: Hashable, Identifiable, Codable, Equatable {
     var contentsForFreeform: String?
     @Column(as: [ShoppingListListContents].JSONRepresentation.self)
     var contentsForList: [ShoppingListListContents] = []
-    // Appended at the end of the table (shared migration) so other writers' positional SELECT * keeps working.
+    // Appended at the end of the table (shared migration) so positional SELECT * keeps working if in use anywhere in any app
     var lastModifiedDate: Date?
+    // Sync version owned entirely by sync layer (UI edit paths never set), so ditry data detected
+    // as row vs. snapshot, not tracked by Swift (or Kotlin) clients: server revision this row was last synced
+    // at, plus a snapshot of the `ServerShoppingList` JSON at that time (so can do three-way merge if needed).
+    // Column added at end as above to preserve positional SELECT * queries.
+    var syncedRevision: Int64?
+    var syncedSnapshot: String?
 }
 
 struct ShoppingListListContents: Codable, Hashable, Equatable, Identifiable  {
@@ -808,6 +814,26 @@ let saltySharedMigrations: [SaltySharedMigration] = [
         ) ?? 0 > 0
         if !exists {
             try db.execute(sql: #"ALTER TABLE "shoppingList" ADD COLUMN "lastModifiedDate" DATETIME"#)
+        }
+    },
+    // Revision-based shopping-list sync (see salty_kmp/SHOPPING_LIST_REVISIONS_PLAN.md): the server
+    // revision each row was last agreed at, plus the wire-JSON snapshot of that agreement (the
+    // three-way merge base). Guarded per column so it's safe whether a KMP-created DB already has
+    // them or not. Mirror: SaltyKMP's SHARED_MIGRATIONS with the SAME id ("SHARED-V0003").
+    SaltySharedMigration(id: "SHARED-V0003") { db in
+        let revisionExists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('shoppingList') WHERE name = 'syncedRevision'"
+        ) ?? 0 > 0
+        if !revisionExists {
+            try db.execute(sql: #"ALTER TABLE "shoppingList" ADD COLUMN "syncedRevision" INTEGER"#)
+        }
+        let snapshotExists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('shoppingList') WHERE name = 'syncedSnapshot'"
+        ) ?? 0 > 0
+        if !snapshotExists {
+            try db.execute(sql: #"ALTER TABLE "shoppingList" ADD COLUMN "syncedSnapshot" TEXT"#)
         }
     }
 ]

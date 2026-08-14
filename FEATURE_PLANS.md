@@ -495,6 +495,17 @@ vocab tables — through it instead.
 checkbox toggle already schedules a debounced 90s sync that does nothing for lists. Harmless, but
 worth scoping if list write traffic grows.
 
+**Update (2026-08): per-row revisions + three-way merge superseded whole-row LWW.** Decision 2
+above no longer holds: shopping lists now sync on a server-owned per-row `revision`, with a stored
+`syncedSnapshot` of the last server agreement as the merge base (`SHARED-V0003` appends both
+columns; view models and edit paths are untouched — dirtiness is derived as row-vs-snapshot).
+Concurrent edits three-way merge item-by-item (`ShoppingListMerge`, vectors mirrored 1:1 from KMP
+in `ShoppingListMergeTests`); unmergeable freeform conflicts survive as "(conflicted copy …)"
+lists; uploads carry `baseRevision` so a race 409s into a merge instead of clobbering; server-side
+deletes send `If-Match` so an edit beats a delete. `syncShoppingListsWithDeletions` no longer
+routes through `RecipeSyncReconciler` (recipes and the vocab tables still do). Full design:
+salty_kmp/SHOPPING_LIST_REVISIONS_PLAN.md.
+
 ---
 
 ## Cross-app deletion parity (Swift ⇄ SaltyKMP)
@@ -526,6 +537,11 @@ Swift, and it matches the chosen policy above. The change is in SaltyKMP:
 
 Not yet done. This is data-loss-critical logic in a second repo; do it deliberately, with the
 `SyncIntegrationTest` tombstone assertions updated to match the new policy.
+
+**Update (2026-08):** shopping lists have since left the absence-inference scheme entirely —
+per-row revisions plus `If-Match` deletes give them real conflict detection on both apps (see the
+Shopping Lists update above and salty_kmp/SHOPPING_LIST_REVISIONS_PLAN.md). The parity question in
+this section now applies only to recipes and the vocab tables.
 
 ### Known residual risks (accepted, both apps)
 

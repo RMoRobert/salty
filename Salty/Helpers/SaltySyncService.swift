@@ -425,6 +425,10 @@ class SaltySyncService {
                 RecipeImageManager.shared.deleteImage(filename: filename)
             }
 
+            // Shopping-list rows land with their sync bookkeeping (revision + snapshot) so the next
+            // regular sync starts revision-based instead of legacy-seeding every row.
+            let shoppingListRows = try serverShoppingLists.map { try syncedLocalRow(for: $0) }
+
             // Insert courses/categories/tags first -- downloadRecipe only links categories/tags that already exist locally.
             try await database.write { db in
                 for c in serverCourses {
@@ -436,8 +440,8 @@ class SaltySyncService {
                 for t in serverTags {
                     try Tag.insert { Tag(id: t.id, name: t.name ?? "", lastModifiedDate: t.lastModifiedDate ?? Date()) }.execute(db)
                 }
-                for l in serverShoppingLists {
-                    try ShoppingList.insert { l.asShoppingList }.execute(db)
+                for row in shoppingListRows {
+                    try ShoppingList.insert { row }.execute(db)
                 }
             }
             syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count + serverShoppingLists.count
@@ -473,9 +477,11 @@ class SaltySyncService {
     /// Force a full re-sync in the opposite direction: make the server an exact mirror of this
     /// device. Every local recipe/course/category/tag is pushed (overwriting the server copy), and
     /// anything present on the server but absent locally is deleted from the server. One-way
-    /// (local -> server); the local database is the source of truth and is never modified, so it's a
-    /// safe recovery path when the server holds stale or corrupt data. A failure partway leaves the
-    /// server partially updated, but local data is untouched and a retry resolves it.
+    /// (local -> server); the local database is the source of truth and its contents are never
+    /// modified (only the shopping lists' sync-bookkeeping columns are refreshed as the server
+    /// accepts each row), so it's a safe recovery path when the server holds stale or corrupt data.
+    /// A failure partway leaves the server partially updated, but local data is untouched and a
+    /// retry resolves it.
     func forceFullResyncToServer() async throws {
         guard serverEnabled, !serverUrl.isEmpty else { throw SyncError.serverNotConfigured }
         guard hasCredentials else { throw SyncError.credentialsNotConfigured }
@@ -512,7 +518,7 @@ class SaltySyncService {
             let serverCourseIds = Set(serverCourses.map { $0.id })
             let serverCategoryIds = Set(serverCategories.map { $0.id })
             let serverTagIds = Set(serverTags.map { $0.id })
-            let serverShoppingListIds = Set(serverShoppingLists.map { $0.id })
+            let serverShoppingListsById = Dictionary(serverShoppingLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
 
             // Push courses/categories/tags first. Recipes link them by id, which must already exist
             // server-side. Update items the server already has, create the rest.
@@ -539,11 +545,21 @@ class SaltySyncService {
                 }
             }
             for l in localShoppingLists {
-                let payload = ServerShoppingList(list: l)
-                if serverShoppingListIds.contains(l.id) {
-                    try await putToServer(payload, endpoint: "/api/shoppingLists/\(l.id)")
-                } else {
-                    try await postToServer(payload, endpoint: "/api/shoppingLists")
+                var payload = ServerShoppingList(list: l)
+                // Local is the source of truth here: base each save on the server's CURRENT revision
+                // (0 = no server row) so the conditional save always accepts — the legacy
+                // no-baseRevision path would let a newer server timestamp veto the push. A 409 means
+                // a writer raced our inventory fetch; retry once against the row it returned, still
+                // forcing this device's content. Each accepted save's revision + snapshot are
+                // recorded so the next regular sync starts revision-based, contents untouched.
+                payload.baseRevision = serverShoppingListsById[l.id]?.revision ?? 0
+                var outcome = try await saveShoppingListOnServer(payload)
+                if case .conflict(let current) = outcome {
+                    payload.baseRevision = current.revision ?? 0
+                    outcome = try await saveShoppingListOnServer(payload)
+                }
+                if case .saved(let accepted) = outcome {
+                    try await markShoppingListSynced(accepted)
                 }
             }
             syncProgress.itemsUploaded += localCourses.count + localCategories.count + localTags.count + localShoppingLists.count
@@ -612,72 +628,94 @@ class SaltySyncService {
         return true
     }
 
-    // MARK: - Course Sync
-    
-    /// Shopping lists: reconciled through `RecipeSyncReconciler` rather than repeating the
-    /// hand-rolled diff the course/category/tag paths each carry a copy of. The reconciler is only
-    /// *named* for recipes; it operates on `(id, lastModified)` and is the one unit-tested copy of
-    /// these rules (`RecipeSyncReconcilerTests`).
+    // MARK: - Shopping List Sync (revision-based)
+
+    /// A local shopping-list row plus its sync state, as the sync algorithm consumes it. Mirrors
+    /// SaltyKMP's `LocalStore.LocalShoppingList`. `syncedSnapshot` is nil for legacy/never-synced
+    /// rows — and for a snapshot that fails to decode (older build wrote junk?), which degrades to
+    /// the same one-off timestamp-seeding path: never a crash, never data loss.
+    private struct LocalShoppingListState {
+        let list: ServerShoppingList
+        let syncedRevision: Int64?
+        let syncedSnapshot: ServerShoppingList?
+
+        /// Edited since the last server agreement? Compares this device's own stamps only — no
+        /// cross-machine clock comparison. Nil snapshot (legacy row) is the caller's case to handle.
+        /// Compared at the wire's millisecond resolution: the row's Date (GRDB) and the snapshot's
+        /// (wire JSON) can land on adjacent Doubles for the SAME millisecond.
+        var isDirty: Bool {
+            guard let syncedSnapshot else { return false }
+            return list.lastModifiedDate?.roundedToWireMillis != syncedSnapshot.lastModifiedDate?.roundedToWireMillis
+        }
+    }
+
+    /// Saving a shopping list is optimistic-concurrency-aware: a 409 is a first-class outcome
+    /// carrying the CURRENT server row (the merge input), never an error.
+    private enum ShoppingListSaveOutcome {
+        case saved(ServerShoppingList)
+        case conflict(current: ServerShoppingList)
+    }
+
+    private enum ShoppingListDeleteOutcome {
+        case deleted
+        case conflict(current: ServerShoppingList)
+    }
+
+    /// Shopping lists sync on per-row REVISIONS, not timestamps — a mirror of SaltyKMP's
+    /// `SyncService.syncShoppingLists` (see salty_kmp/SHOPPING_LIST_REVISIONS_PLAN.md); keep the two
+    /// in lockstep. For every row on both sides, two clock-free questions classify it:
+    ///   dirty         — does the local row differ from its `syncedSnapshot` (last server agreement)?
+    ///   serverChanged — does the server's `revision` differ from our `syncedRevision`?
+    /// neither → in sync; dirty → upload (with baseRevision, so a race 409s instead of clobbering);
+    /// serverChanged → download; BOTH → real conflict, resolved by `ShoppingListMerge` (three-way
+    /// against the snapshot; freeform conflicts keep the local text as a new "conflicted copy" list).
     ///
-    /// Whole-row last-writer-wins: `contentsForList` moves as one blob, so a concurrent edit on
-    /// another device overwrites this one's items wholesale. Deliberate -- see FEATURE_PLANS.md.
+    /// Legacy rows (no snapshot yet — pre-revision builds wrote them) get ONE timestamp-based
+    /// decision to pick a direction, then the bookkeeping is seeded and every later sync is
+    /// revision-based. Rows on only one side keep the watermark absence logic (no tombstones for
+    /// lists, a deliberate FEATURE_PLANS.md decision), except server-side deletes now carry If-Match
+    /// so a list that changed under us is downloaded instead of deleted.
     private func syncShoppingListsWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverLists = try await fetchListFromServer(ServerShoppingList.self, endpoint: "/api/shoppingLists")
-        let localLists = try await database.read { db in
+        let localRows = try await database.read { db in
             try ShoppingList.fetchAll(db)
         }
 
         // uniquingKeysWith (not uniqueKeysWithValues) so a duplicate id from the server can't trap.
         let serverById = Dictionary(serverLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
-        let localById = Dictionary(localLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+        let localIds = Set(localRows.map { $0.id })
+        var toDeleteLocally: [String] = []
 
-        // Compare at the wire's resolution; see the note in syncRecipesWithDeletions for why a raw
-        // Date comparison re-syncs every row forever.
-        let plan = RecipeSyncReconciler.plan(
-            local: localLists.map {
-                RecipeSyncReconciler.Entry(
-                    id: $0.id,
-                    lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
-                )
-            },
-            server: serverLists.map {
-                RecipeSyncReconciler.Entry(
-                    id: $0.id,
-                    lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
-                )
-            },
-            isFirstSync: deviceInfo.isFirstSync,
-            lastSyncDate: deviceInfo.lastSyncDate
-        )
-
-        logger.info("Shopping list sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server")
-
-        for id in plan.toUpload {
-            guard let local = localById[id] else { continue }
-            let payload = ServerShoppingList(list: local)
-            // POST creates, PUT updates: mirrors the vocab paths, where a POST of an existing id is
-            // not guaranteed to upsert on every server build.
-            if serverById[id] != nil {
-                try await putToServer(payload, endpoint: "/api/shoppingLists/\(id)")
-            } else {
-                try await postToServer(payload, endpoint: "/api/shoppingLists")
+        for row in localRows {
+            try Task.checkCancellation()
+            let l = shoppingListState(of: row)
+            guard let s = serverById[l.list.id] else {
+                if let id = try await shoppingListAbsentOnServer(l, deviceInfo: deviceInfo) {
+                    toDeleteLocally.append(id)
+                }
+                continue
             }
-            syncProgress.itemsUploaded += 1
-        }
-
-        for id in plan.toDownload {
-            guard let remote = serverById[id] else { continue }
-            let list = remote.asShoppingList
-            try await database.write { db in
-                try ShoppingList.upsert { list }.execute(db)
+            if l.syncedRevision == nil || l.syncedSnapshot == nil {
+                try await shoppingListLegacySeed(l, server: s)
+                continue
             }
-            syncProgress.itemsDownloaded += 1
+            let dirty = l.isDirty
+            let serverChanged = s.revision != l.syncedRevision
+            switch (dirty, serverChanged) {
+            case (false, false):
+                break
+            case (true, false):
+                try await uploadShoppingList(l.list, baseRevision: l.syncedRevision, snapshot: l.syncedSnapshot)
+            case (false, true):
+                try await downloadShoppingList(s)
+            case (true, true):
+                try await resolveShoppingListConflict(l, server: s)
+            }
         }
 
         // Guarded against an empty/incomplete server response being read as "everything was deleted".
-        let toDeleteLocally = plan.toDeleteLocally
         if serverResponseAllowsLocalDeletions(serverItemCount: serverLists.count, pendingLocalDeletions: toDeleteLocally.count, entity: "shopping list") {
-            try await database.write { db in
+            try await database.write { [toDeleteLocally] db in
                 for id in toDeleteLocally {
                     try ShoppingList.where { $0.id.eq(id) }.delete().execute(db)
                 }
@@ -687,11 +725,240 @@ class SaltySyncService {
             }
         }
 
-        for id in plan.toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/shoppingLists/\(id)")
-            logger.info("Deleted shopping list \(id) on server (was deleted locally)")
+        for s in serverLists where !localIds.contains(s.id) {
+            try Task.checkCancellation()
+            // Server-only row: new to us, or deleted here. No tombstones for lists, so the watermark
+            // decides — except a failed If-Match delete proves the row changed, and change wins.
+            let serverDate = (s.lastModifiedDate ?? .distantPast).roundedToWireMillis
+            if deviceInfo.isFirstSync || deviceInfo.lastSyncDate == nil || serverDate > deviceInfo.lastSyncDate! {
+                try await downloadShoppingList(s)
+            } else {
+                switch try await deleteShoppingListOnServer(id: s.id, expectedRevision: s.revision) {
+                case .deleted:
+                    logger.info("Deleted shopping list \(s.id) on server (was deleted locally)")
+                case .conflict(let current):
+                    try await downloadShoppingList(current)
+                }
+            }
         }
     }
+
+    /// Local row the server doesn't have: never-uploaded (push it) or server-deleted (respect it —
+    /// unless we edited since). Returns the id to delete locally — deferred so the caller can apply
+    /// the empty-response guard first — or nil when the row was uploaded instead.
+    private func shoppingListAbsentOnServer(_ l: LocalShoppingListState, deviceInfo: DeviceInfo) async throws -> String? {
+        // baseRevision 0 = "I expect NO server row": an insert sails through (the server accepts any
+        // save of a row it doesn't have), but if another writer re-created the id between our GET and
+        // this POST, the mismatch 409s into a proper merge instead of silently last-writer-winning.
+        if l.syncedRevision != nil {
+            if l.isDirty {
+                // Deleted on the server but edited here since our last agreement: edit beats delete.
+                try await uploadShoppingList(l.list, baseRevision: 0, snapshot: nil)
+                return nil
+            }
+            return l.list.id
+        }
+        // Legacy/never-synced row: the old watermark logic, then the upload seeds the bookkeeping.
+        let localDate = (l.list.lastModifiedDate ?? .distantPast).roundedToWireMillis
+        if deviceInfo.isFirstSync || deviceInfo.lastSyncDate == nil || localDate > deviceInfo.lastSyncDate! {
+            try await uploadShoppingList(l.list, baseRevision: 0, snapshot: nil)
+            return nil
+        }
+        return l.list.id
+    }
+
+    /// Row exists on both sides but predates revision bookkeeping locally: ONE timestamp-based
+    /// last-writer-wins decision (exactly what every sync did before revisions), whose outcome seeds
+    /// `syncedRevision`/`syncedSnapshot` so this row never takes this path again.
+    private func shoppingListLegacySeed(_ l: LocalShoppingListState, server s: ServerShoppingList) async throws {
+        let localDate = (l.list.lastModifiedDate ?? .distantPast).roundedToWireMillis
+        let serverDate = (s.lastModifiedDate ?? .distantPast).roundedToWireMillis
+        if localDate > serverDate {
+            try await uploadShoppingList(l.list, baseRevision: s.revision, snapshot: nil)
+        } else if serverDate > localDate {
+            try await downloadShoppingList(s)
+        } else {
+            try await markShoppingListSynced(s) // equal → agree; just record it
+        }
+    }
+
+    /// Upload one list; a 409 means it changed since we fetched → resolve as a conflict instead.
+    private func uploadShoppingList(_ list: ServerShoppingList, baseRevision: Int64?, snapshot: ServerShoppingList?) async throws {
+        var payload = list
+        payload.revision = nil
+        payload.baseRevision = baseRevision
+        switch try await saveShoppingListOnServer(payload) {
+        case .saved(let accepted):
+            try await markShoppingListSynced(accepted)
+            syncProgress.itemsUploaded += 1
+        case .conflict(let current):
+            try await resolveShoppingListConflict(
+                LocalShoppingListState(list: list, syncedRevision: baseRevision, syncedSnapshot: snapshot),
+                server: current
+            )
+        }
+    }
+
+    /// Both sides changed since the last agreement. Merge (three-way when a snapshot exists), push
+    /// the result with the server's CURRENT revision as base, and store what the server accepted. A
+    /// 409 on that push means yet another writer landed in between — retry once against the newest
+    /// row; a second 409 leaves the row dirty for the next sync (never a wrong overwrite, by
+    /// construction).
+    private func resolveShoppingListConflict(
+        _ l: LocalShoppingListState,
+        server s: ServerShoppingList,
+        retriesLeft: Int = 1
+    ) async throws {
+        let resolution = ShoppingListMerge.resolve(
+            base: l.syncedSnapshot,
+            local: l.list,
+            server: s,
+            conflictCopyId: UUID().uuidString,
+            conflictCopyLabel: "conflicted copy from \(deviceName) \(Self.dayStamp())"
+        )
+
+        // The conflict copy is a brand-new list: keep it locally and push it up like any other row.
+        if let copy = resolution.conflictCopy {
+            let copyRow = copy.asShoppingList // no agreement to record yet (nil bookkeeping)
+            try await database.write { db in
+                try ShoppingList.upsert { copyRow }.execute(db)
+            }
+            switch try await saveShoppingListOnServer(copy) {
+            case .saved(let accepted):
+                try await markShoppingListSynced(accepted)
+                syncProgress.itemsUploaded += 1
+            case .conflict:
+                break // fresh id — can't happen; next sync retries
+            }
+            logger.info("Kept a conflicted copy of shopping list \(l.list.id) as \(copy.id)")
+        }
+
+        var merged = resolution.merged
+        merged.baseRevision = s.revision
+        switch try await saveShoppingListOnServer(merged) {
+        case .saved(let accepted):
+            try await downloadShoppingList(accepted) // contents + bookkeeping land together, row is clean
+            syncProgress.itemsUploaded += 1
+        case .conflict(let current):
+            if retriesLeft > 0 {
+                try await resolveShoppingListConflict(
+                    LocalShoppingListState(list: resolution.merged, syncedRevision: l.syncedRevision, syncedSnapshot: l.syncedSnapshot),
+                    server: current,
+                    retriesLeft: retriesLeft - 1
+                )
+            }
+            // else: give up this round; the row stays dirty and next sync re-merges
+        }
+    }
+
+    /// Writes a SERVER-agreed row: contents and sync bookkeeping move together, so the row lands
+    /// already-clean with the server row itself as the snapshot.
+    private func downloadShoppingList(_ server: ServerShoppingList) async throws {
+        let row = try syncedLocalRow(for: server)
+        try await database.write { db in
+            try ShoppingList.upsert { row }.execute(db)
+        }
+        syncProgress.itemsDownloaded += 1
+    }
+
+    /// Records the server agreement after a successful UPLOAD without touching the row's contents:
+    /// [accepted] is the server's response (our content + the revision it assigned).
+    private func markShoppingListSynced(_ accepted: ServerShoppingList) async throws {
+        let revision = accepted.revision
+        let snapshot = try shoppingListSnapshotJson(accepted)
+        try await database.write { db in
+            try db.execute(
+                sql: #"UPDATE "shoppingList" SET "syncedRevision" = ?, "syncedSnapshot" = ? WHERE "id" = ?"#,
+                arguments: [revision, snapshot, accepted.id]
+            )
+        }
+    }
+
+    /// The local row for a server-agreed payload: contents plus the bookkeeping columns.
+    private func syncedLocalRow(for server: ServerShoppingList) throws -> ShoppingList {
+        var row = server.asShoppingList
+        row.syncedRevision = server.revision
+        row.syncedSnapshot = try shoppingListSnapshotJson(server)
+        return row
+    }
+
+    /// Wire-JSON snapshot of a server-agreed row (the future merge base), encoded with the wire
+    /// encoder so one serialization covers both storage and transfer. Nil when the server didn't
+    /// return a revision (pre-v3.2 server without this data); such a row stays on the legacy-seeding path.
+    private func shoppingListSnapshotJson(_ list: ServerShoppingList) throws -> String? {
+        guard list.revision != nil else { return nil }
+        var snapshot = list
+        snapshot.baseRevision = nil
+        return String(data: try makeWireEncoder().encode(snapshot), encoding: .utf8)
+    }
+
+    /// The sync algorithm's view of one local row: its wire form plus the decoded snapshot.
+    private func shoppingListState(of row: ShoppingList) -> LocalShoppingListState {
+        LocalShoppingListState(
+            list: ServerShoppingList(list: row),
+            syncedRevision: row.syncedRevision,
+            syncedSnapshot: row.syncedSnapshot.flatMap { json in
+                try? makeWireDecoder().decode(ServerShoppingList.self, from: Data(json.utf8))
+            }
+        )
+    }
+
+    /// POSTs one shopping list and decodes the outcome: 2xx → the saved row (now carrying the
+    /// server-assigned revision); 409 → the CURRENT server row, for the caller to merge against.
+    private func saveShoppingListOnServer(_ list: ServerShoppingList) async throws -> ShoppingListSaveOutcome {
+        let url = try makeURL(endpoint: "/api/shoppingLists")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addAuthHeader(to: &request)
+        request.httpBody = try makeWireEncoder().encode(list)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.uploadFailed("No HTTP response saving shopping list \(list.id)")
+        }
+        if httpResponse.statusCode == 409 {
+            return .conflict(current: try makeWireDecoder().decode(ServerShoppingList.self, from: data))
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            logger.error("Shopping list save failed HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8)?.prefix(200) ?? "")")
+            throw SyncError.uploadFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
+        }
+        return .saved(try makeWireDecoder().decode(ServerShoppingList.self, from: data))
+    }
+
+    /// DELETEs one shopping list, conditional on [expectedRevision] via If-Match when present. A 409
+    /// means the list changed past that revision — edit beats delete; the current row rides in the
+    /// body so the caller downloads it instead. 404 counts as deleted: the goal state is already true.
+    private func deleteShoppingListOnServer(id: String, expectedRevision: Int64?) async throws -> ShoppingListDeleteOutcome {
+        let url = try makeURL(endpoint: "/api/shoppingLists/\(id)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        addAuthHeader(to: &request)
+        if let expectedRevision {
+            request.setValue(String(expectedRevision), forHTTPHeaderField: "If-Match")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.uploadFailed("No HTTP response deleting shopping list \(id)")
+        }
+        if httpResponse.statusCode == 409 {
+            return .conflict(current: try makeWireDecoder().decode(ServerShoppingList.self, from: data))
+        }
+        guard (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 else {
+            throw SyncError.uploadFailed("DELETE shopping list \(id) failed: \(SyncError.httpMessage(status: httpResponse.statusCode, body: data))")
+        }
+        return .deleted
+    }
+
+    /// Today as "yyyy-MM-dd" (UTC), for conflict-copy labels — mirrors SaltyKMP's `nowDayStamp()`.
+    /// nonisolated because it's pure (the enclosing class is @MainActor).
+    nonisolated private static func dayStamp(_ date: Date = Date()) -> String {
+        String(SyncWireDate.string(from: date).prefix(10))
+    }
+
+    // MARK: - Course Sync
 
     private func syncCoursesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
@@ -1816,17 +2083,9 @@ class SaltySyncService {
             logger.error("HTTP \(statusCode) from \(endpoint): \(responseBody.prefix(500))")
             throw SyncError.networkError(SyncError.httpMessage(status: statusCode, body: data))
         }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let dateString = try container.decode(String.self)
-            guard let date = SyncWireDate.date(from: dateString) else {
-                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
-            }
-            return date
-        }
-        
+
+        let decoder = makeWireDecoder()
+
         do {
             let value = try decoder.decode(type, from: data)
             let totalCount = httpResponse.value(forHTTPHeaderField: "X-Total-Count").flatMap { Int($0) }
@@ -1852,6 +2111,22 @@ class SaltySyncService {
             try container.encode(SyncWireDate.string(from: date))
         }
         return encoder
+    }
+
+    /// The decode-side counterpart of `makeWireEncoder`: dates parse through `SyncWireDate`, which
+    /// prefers the canonical `.SSS'Z'` form and tolerates the known server/GRDB variants. Shared by
+    /// every response-body decode so the two directions can't drift.
+    private func makeWireDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            guard let date = SyncWireDate.date(from: dateString) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+            }
+            return date
+        }
+        return decoder
     }
 
     private func postToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
@@ -2430,6 +2705,14 @@ struct ServerShoppingList: Codable {
     var contentsForList: [ShoppingListListContents]?
     var contentsForFreeform: String?
     var lastModifiedDate: Date?
+    /// Server-owned optimistic-concurrency counter: present on every GET/save response, bumped on
+    /// every accepted write. Nil only from clients or servers that predate revisions.
+    var revision: Int64?
+    /// Client → server on upload: the `revision` this edit is based on. The server rejects the write
+    /// with 409 (+ its current row) when this no longer matches — that mismatch IS conflict
+    /// detection. Legacy clients omit it and get timestamp-guarded last-writer-wins instead.
+    /// Encoding stays synthesized (`encodeIfPresent`), so nil keeps both fields off the wire.
+    var baseRevision: Int64?
 }
 
 /// Decodes a value, yielding nil instead of throwing. Wrapping array *elements* in this is what makes
@@ -2445,6 +2728,7 @@ private struct FailableDecodable<T: Decodable>: Decodable {
 extension ServerShoppingList {
     private enum CodingKeys: String, CodingKey {
         case id, name, isFreeform, contentsForList, contentsForFreeform, lastModifiedDate
+        case revision, baseRevision
     }
 
     /// Hand-written purely so `contentsForList` decodes item-by-item: one malformed item would
@@ -2468,6 +2752,8 @@ extension ServerShoppingList {
         isFreeform = try container.decodeIfPresent(Bool.self, forKey: .isFreeform)
         contentsForFreeform = try container.decodeIfPresent(String.self, forKey: .contentsForFreeform)
         lastModifiedDate = try container.decodeIfPresent(Date.self, forKey: .lastModifiedDate)
+        revision = try container.decodeIfPresent(Int64.self, forKey: .revision)
+        baseRevision = try container.decodeIfPresent(Int64.self, forKey: .baseRevision)
 
         if let wrapped = try container.decodeIfPresent([FailableDecodable<ShoppingListListContents>].self, forKey: .contentsForList) {
             let items = wrapped.compactMap(\.value)
