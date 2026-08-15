@@ -11,12 +11,6 @@ import OSLog
 import Foundation
 import UUIDV7
 
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
-
 private let logger = Logger(subsystem: "Salty", category: "Database")
 
 // Record Types

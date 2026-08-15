@@ -13,9 +13,7 @@ import OSLog
 import UUIDV7
 import SaltyCore
 #if canImport(UIKit)
-import UIKit
-#elseif canImport(AppKit)
-import AppKit
+import UIKit   // sole use: UIDevice.current.name in `deviceName` (macOS uses Foundation's Host)
 #endif
 
 // MARK: - Sync Service
@@ -1796,12 +1794,14 @@ class SaltySyncService {
         let boundary = UUID().uuidString
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        // Prepare image data (converts HEIC to JPEG if needed)
-        let prepared = prepareImageForUpload(imageData)
+        // Prepare image data (converts HEIC to JPEG if needed). Awaited rather than called directly:
+        // this class is @MainActor, and a large photo's decode/re-encode would otherwise run on the
+        // main thread. See SyncImagePreparer.
+        let prepared = await SyncImagePreparer.prepare(imageData)
 
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.\(prepared.extension)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.\(prepared.fileExtension)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: \(prepared.mimeType)\r\n\r\n".data(using: .utf8)!)
         body.append(prepared.data)
         body.append("\r\n".data(using: .utf8)!)
@@ -1827,144 +1827,6 @@ class SaltySyncService {
             logger.error("Image upload failed with status \(httpResponse.statusCode): \(errorBody)")
             throw SyncError.uploadFailed("Image upload failed (HTTP \(httpResponse.statusCode))")
         }
-    }
-    
-    /// Detects image type from file header bytes and returns converted data if needed
-    private func prepareImageForUpload(_ data: Data) -> (data: Data, mimeType: String, extension: String) {
-        guard data.count >= 8 else {
-            return (data, "image/jpeg", "jpg")
-        }
-        
-        let bytes = [UInt8](data.prefix(8))
-        
-        // PNG: 89 50 4E 47 0D 0A 1A 0A
-        if bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
-            return (data, "image/png", "png")
-        }
-        
-        // JPEG: FF D8 FF
-        if bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
-            return (data, "image/jpeg", "jpg")
-        }
-        
-        // GIF: 47 49 46 38
-        if bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38 {
-            return (data, "image/gif", "gif")
-        }
-        
-        // WebP: 52 49 46 46 ... 57 45 42 50 - convert to JPEG for broader compatibility
-        if bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 {
-            if let jpegData = convertToJPEG(data) {
-                logger.debug("Converted WebP image to JPEG")
-                return (jpegData, "image/jpeg", "jpg")
-            }
-            // If conversion fails, send as WebP
-            return (data, "image/webp", "webp")
-        }
-        
-        // HEIC/HEIF: Check for 'ftyp' box - convert to JPEG
-        if data.count >= 12 {
-            let ftypBytes = [UInt8](data[4..<8])
-            if ftypBytes[0] == 0x66 && ftypBytes[1] == 0x74 && ftypBytes[2] == 0x79 && ftypBytes[3] == 0x70 {
-                // Get the brand to log what type of HEIC it is
-                let brandBytes = [UInt8](data[8..<12])
-                let brand = String(bytes: brandBytes, encoding: .ascii) ?? "unknown"
-                logger.debug("Detected HEIC/HEIF image with brand: \(brand)")
-                
-                // Convert HEIC to PNG for Salty Server compatibility
-                if let pngData = convertToPNG(data) {
-                    logger.info("Converted HEIC image to PNG (\(data.count) bytes -> \(pngData.count) bytes)")
-                    return (pngData, "image/png", "png")
-                } else {
-                    logger.error("Failed to convert HEIC image to PNG - image may not display on server")
-                }
-            }
-        }
-        
-        // Unknown format - try to convert to JPEG
-        let hexHeader = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
-        logger.debug("Unknown image format, header: \(hexHeader), attempting JPEG conversion")
-        
-        if let jpegData = convertToJPEG(data) {
-            logger.info("Converted unknown format to JPEG (\(data.count) bytes -> \(jpegData.count) bytes)")
-            return (jpegData, "image/jpeg", "jpg")
-        }
-        
-        // Fallback: send as-is - but log a warning since this may not work
-        logger.warning("Could not convert image to JPEG, sending original data (\(data.count) bytes) - may not display correctly")
-        return (data, "application/octet-stream", "bin")
-    }
-    
-    /// Converts image data to JPEG format
-    private func convertToJPEG(_ data: Data) -> Data? {
-        #if canImport(UIKit)
-        guard let image = UIImage(data: data) else {
-            logger.warning("UIImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let jpegData = image.jpegData(compressionQuality: 0.9) else {
-            logger.warning("Failed to convert UIImage to JPEG")
-            return nil
-        }
-        return jpegData
-        #elseif canImport(AppKit)
-        guard let image = NSImage(data: data) else {
-            logger.warning("NSImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let tiffData = image.tiffRepresentation else {
-            logger.warning("Failed to get TIFF representation from NSImage")
-            return nil
-        }
-        guard let bitmap = NSBitmapImageRep(data: tiffData) else {
-            logger.warning("Failed to create NSBitmapImageRep from TIFF data")
-            return nil
-        }
-        guard let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
-            logger.warning("Failed to create JPEG representation from bitmap")
-            return nil
-        }
-        return jpegData
-        #else
-        logger.warning("No image conversion available on this platform")
-        return nil
-        #endif
-    }
-    
-    /// Converts image data to PNG format
-    private func convertToPNG(_ data: Data) -> Data? {
-        #if canImport(UIKit)
-        guard let image = UIImage(data: data) else {
-            logger.warning("UIImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let pngData = image.pngData() else {
-            logger.warning("Failed to convert UIImage to PNG")
-            return nil
-        }
-        return pngData
-        #elseif canImport(AppKit)
-        guard let image = NSImage(data: data) else {
-            logger.warning("NSImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let tiffData = image.tiffRepresentation else {
-            logger.warning("Failed to get TIFF representation from NSImage")
-            return nil
-        }
-        guard let bitmap = NSBitmapImageRep(data: tiffData) else {
-            logger.warning("Failed to create NSBitmapImageRep from TIFF data")
-            return nil
-        }
-        guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
-            logger.warning("Failed to create PNG representation from bitmap")
-            return nil
-        }
-        return pngData
-        #else
-        logger.warning("No image conversion available on this platform")
-        return nil
-        #endif
     }
     
     /// Percent-encodes a server-supplied image filename as a SINGLE path component: unlike
@@ -2014,7 +1876,13 @@ class SaltySyncService {
         logger.debug("Downloaded image '\(filename)': \(data.count) bytes")
 
         // Save image locally and update recipe (filename + thumbnail + image timestamp together).
-        if let result = RecipeImageManager.shared.saveImage(data, for: recipeId) {
+        // Detached for the same reason the upload path awaits SyncImagePreparer: saveImage writes the
+        // file AND renders a 300x300 thumbnail, and this class is @MainActor, so doing it inline held
+        // the main thread for every downloaded photo. RecipeImageManager is already Sendable.
+        let saved = await Task.detached(priority: .userInitiated) {
+            RecipeImageManager.shared.saveImage(data, for: recipeId)
+        }.value
+        if let result = saved {
             logger.debug("Saved image as '\(result.filename)' with \(result.thumbnailData.count) byte thumbnail")
             try await database.write { db in
                 try db.execute(sql: """
