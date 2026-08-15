@@ -56,6 +56,37 @@ struct RecipeListQueryBuilderTests {
         #expect(!s.contains("ASC"))
     }
 
+    // MARK: - Last Made
+
+    /// Never-made recipes must sink to the bottom whichever way the sort points, so the ORDER BY leads
+    /// with an `IS NULL` term in BOTH directions. Ascending is the case that would otherwise break:
+    /// SQLite sorts NULLs first, filling the top of the list with recipes that have no date at all.
+    @Test func lastMadeSortsNullsLastInBothDirections() {
+        for direction in RecipeListSortDirection.allCases {
+            let s = sql(sortOrder: .byLastMade, sortDirection: direction)
+            let orderBy = s.components(separatedBy: "ORDER BY")[1]
+            #expect(orderBy.contains("IS NULL"))
+            // The IS NULL term must come FIRST — it's what pushes the nulls to the end.
+            let nullIndex = orderBy.range(of: "IS NULL")!.lowerBound
+            let directionIndex = orderBy.range(of: direction.sqlSuffix)!.lowerBound
+            #expect(nullIndex < directionIndex)
+        }
+    }
+
+    @Test func lastMadeSortOrdersByLastPrepared() {
+        let s = sql(sortOrder: .byLastMade, sortDirection: .descending)
+        #expect(s.components(separatedBy: "ORDER BY")[1].contains("lastPrepared"))
+    }
+
+    /// The projection is decoded positionally into `RecipeListItem`, so `lastPrepared` has to be present
+    /// (and last). Without it the list can't show or refresh on a "last made" change.
+    @Test func projectionIncludesLastPreparedLast() {
+        let s = sql()
+        let select = s.components(separatedBy: "FROM")[0]
+        #expect(select.contains("lastPrepared"))
+        #expect(select.range(of: "imageThumbnailData")!.lowerBound < select.range(of: "lastPrepared")!.lowerBound)
+    }
+
     // MARK: - The bug fix: every field combination is honored
 
     @Test func singleFieldSearchUsesThatFieldOnly() {

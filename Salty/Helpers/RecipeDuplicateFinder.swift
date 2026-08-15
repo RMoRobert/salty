@@ -145,8 +145,9 @@ enum RecipeDuplicateFinder {
     ///   never shares them with its original -- comparing them would find nothing, ever.
     /// - the image (`imageFilename`, `imageThumbnailData`, `lastModifiedImageDate`):  a copied image
     ///   is a distinct file with a distinct name, and the thumbnail is re-encoded.
-    /// - the dates (`createdDate`, `lastModifiedDate`, `lastPrepared`): a duplicate is by definition
-    ///   created at a different time.
+    /// - the dates (`createdDate`, `lastModifiedDate`, `lastPrepared`, `lastModifiedPreparedDate`): a
+    ///   duplicate is by definition created at a different time, and having cooked one copy but not the
+    ///   other shouldn't stop the two being reported as the same recipe.
     /// - the user's own marks on the recipe -- `rating`, `isFavorite`, `wantToMake` -- and `courseId`.
     ///   These drift apart the moment one copy is used: rate one, favorite the other, file one under
     ///   Dessert, and two genuinely identical recipes would stop being reported. Missing a real
@@ -165,6 +166,7 @@ enum RecipeDuplicateFinder {
         normalized.createdDate = .distantPast
         normalized.lastModifiedDate = .distantPast
         normalized.lastPrepared = nil
+        normalized.lastModifiedPreparedDate = nil
         normalized.rating = .notSet
         normalized.isFavorite = false
         normalized.wantToMake = false

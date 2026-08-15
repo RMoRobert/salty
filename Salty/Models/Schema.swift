@@ -28,6 +28,11 @@ struct Recipe: Codable, Hashable, Identifiable, Equatable, TableRecord  {
     var createdDate: Date = Date()
     var lastModifiedDate: Date = Date()
     var lastPrepared: Date?
+    // Bumped ONLY when `lastPrepared` changes, never by a body edit — and marking a recipe made leaves
+    // `lastModifiedDate` alone in return, so cooking something doesn't reorder the "Date Modified" sort.
+    // Sync reconciles `lastPrepared` against this stamp on its own (SaltySyncService.reconcilePreparedDates),
+    // exactly as image bytes reconcile against `lastModifiedImageDate`. Added via SHARED-V0004.
+    var lastModifiedPreparedDate: Date?
     var source: String = ""
     var sourceDetails: String = ""
     var introduction: String = ""
@@ -196,6 +201,10 @@ struct RecipeListItem: Identifiable, Hashable, Equatable {
     let rating: Rating
     let isFavorite: Bool
     let imageThumbnailData: Data?
+    /// "Last made on". Appended last, so the positional decode above stays valid. Marking a recipe made
+    /// deliberately leaves `lastModifiedDate` alone, so this column is also what makes the change visible
+    /// to the observing list — without it the projection wouldn't budge and the row wouldn't refresh.
+    let lastPrepared: Date?
 }
 
 extension RecipeListItem {
@@ -209,7 +218,8 @@ extension RecipeListItem {
         self.init(
             id: r.id, name: r.name, source: r.source, sourceDetails: r.sourceDetails,
             introduction: r.introduction, createdDate: r.createdDate, lastModifiedDate: r.lastModifiedDate,
-            rating: r.rating, isFavorite: r.isFavorite, imageThumbnailData: r.imageThumbnailData
+            rating: r.rating, isFavorite: r.isFavorite, imageThumbnailData: r.imageThumbnailData,
+            lastPrepared: r.lastPrepared
         )
     }
 }
@@ -675,7 +685,8 @@ func saltyMigrator() -> DatabaseMigrator {
 /// another writer (SaltyKMP, a raw `INSERT`, an older import) still decodes. Best-effort and idempotent:
 /// each `UPDATE` only matches rows that are actually NULL, so re-running is a cheap no-op. The
 /// genuinely-optional columns (`lastPrepared`, `image*`, `servings`, `courseId`, `nutrition`,
-/// `lastModifiedImageDate`) are intentionally left alone. `difficulty`/`rating` coalesce to 0 (`.notSet`).
+/// `lastModifiedImageDate`, `lastModifiedPreparedDate`) are intentionally left alone.
+/// `difficulty`/`rating` coalesce to 0 (`.notSet`).
 ///
 /// NOTE: this repairs existing rows but does not prevent future NULL writes. SaltyKMP's `Schema.sq` now
 /// declares these columns `NOT NULL DEFAULT` (mirroring this set) so fresh shared DBs enforce the
@@ -834,6 +845,21 @@ let saltySharedMigrations: [SaltySharedMigration] = [
         ) ?? 0 > 0
         if !snapshotExists {
             try db.execute(sql: #"ALTER TABLE "shoppingList" ADD COLUMN "syncedSnapshot" TEXT"#)
+        }
+    },
+    // Decouples the "last made on" date (`lastPrepared`) from the recipe body clock: marking a recipe
+    // made stamps THIS column and leaves `lastModifiedDate` alone, so cooking something never shoves it
+    // to the top of the "Date Modified" sort. Sync reconciles `lastPrepared` against this timestamp in
+    // its own pass, the same way image bytes reconcile against `lastModifiedImageDate`. Guarded per
+    // column so it's safe whether a KMP-created DB already has it or not. Mirror: SaltyKMP's
+    // `SHARED_MIGRATIONS` with the SAME id ("SHARED-V0004").
+    SaltySharedMigration(id: "SHARED-V0004") { db in
+        let exists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('recipe') WHERE name = 'lastModifiedPreparedDate'"
+        ) ?? 0 > 0
+        if !exists {
+            try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "lastModifiedPreparedDate" DATETIME"#)
         }
     }
 ]

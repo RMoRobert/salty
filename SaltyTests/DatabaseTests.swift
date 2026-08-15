@@ -591,6 +591,7 @@ struct DatabaseIntegrationTests {
             #expect(columnNames == [
                 "id", "name", "source", "sourceDetails", "introduction",
                 "createdDate", "lastModifiedDate", "rating", "isFavorite", "imageThumbnailData",
+                "lastPrepared",
             ])
 
             // Spot-check that each named column carries its own value (not a neighbor's).

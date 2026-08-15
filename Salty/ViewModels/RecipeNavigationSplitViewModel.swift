@@ -38,6 +38,11 @@ extension Notification.Name {
     static let openSelectedRecipesInNewWindows = Notification.Name("openSelectedRecipesInNewWindows")
     static let showDuplicateRecipes = Notification.Name("showDuplicateRecipes")
     static let showConsolidateDuplicates = Notification.Name("showConsolidateDuplicates")
+    // "Last Made" actions on the current selection. These mirror the recipe context menu — the menu bar
+    // carries them too because a contextual menu shouldn't be the only way to reach a command.
+    static let markSelectedRecipesMadeToday = Notification.Name("markSelectedRecipesMadeToday")
+    static let setSelectedRecipesLastMadeDate = Notification.Name("setSelectedRecipesLastMadeDate")
+    static let clearSelectedRecipesLastMade = Notification.Name("clearSelectedRecipesLastMade")
     /// Posted after a web import saves a recipe (userInfo["recipeId"]: String), so the main window/view can scroll to it
     static let recipeImportedFromWeb = Notification.Name("recipeImportedFromWeb")
 }
@@ -343,9 +348,45 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
+    /// Sets (or clears, with `date: nil`) the "last made on" date for one or more recipes.
+    ///
+    /// Deliberately does not touch `lastModifiedDate`: would move recipe to the top of the "Date Modified" sort every time
+    /// this is set when the recipe itself didn't change`lastModifiedPreparedDate` is stamped instead and used for sync.
+    ///
+    /// A picked calendar day is stored at local noon; "Today" sets current time. Usually only displayed as date, but noon should
+    /// at least cover any reasonable offsets to avoid unexpected date changes with minor time zone shifts.
+    func setLastMade(_ date: Date?, forRecipeIds ids: [String]) async {
+        guard !ids.isEmpty else { return }
+        let stamp = Date()
+        do {
+            // Raw SQL so ONLY these two columns change (a record-level update would rewrite every column,
+            // and the whole point of this write is that lastModifiedDate stays exactly as it was)
+            try await database.write { db in
+                for id in ids {
+                    try db.execute(
+                        sql: """
+                            UPDATE recipe
+                            SET lastPrepared = ?, lastModifiedPreparedDate = ?
+                            WHERE id = ?
+                            """,
+                        arguments: [date, stamp, id]
+                    )
+                }
+            }
+        } catch {
+            logger.error("Error setting last-made date for \(ids.count) recipe(s): \(error)")
+        }
+    }
+
+    /// Local noon on the calendar day of [day] — the storage form for a user-picked date. Falls back to
+    /// the raw value if the calendar can't build it (it always can for a real date).
+    static func localNoon(on day: Date) -> Date {
+        Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
+    }
+
     func recipeToEdit(recipeId: String?) -> Recipe? {
         guard let recipeId = recipeId else { return nil }
-        
+
         return fullRecipe(id: recipeId)
     }
 

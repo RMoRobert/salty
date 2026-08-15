@@ -84,7 +84,10 @@ struct RecipeDuplicateFinderTests {
         var copy = makeRecipe(id: "r2", createdDaysAgo: 0)
         copy.imageFilename = "r2.jpg"
         copy.imageThumbnailData = Data([0x09])
+        // Cooking one copy but not the other must not split the group — the prepared date and its sync
+        // stamp are bookkeeping, like every other date here.
         copy.lastPrepared = Date(timeIntervalSince1970: 900_000)
+        copy.lastModifiedPreparedDate = Date(timeIntervalSince1970: 900_001)
 
         let groups = RecipeDuplicateFinder.groups(in: [original, copy], level: .allContent)
 

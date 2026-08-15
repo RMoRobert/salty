@@ -14,7 +14,8 @@ enum RecipeListSortOrderSetting: String, Codable, CaseIterable {
     case bySource
     case byRating
     case byDifficulty
-    
+    case byLastMade
+
     var displayName: String {
         switch self {
         case .byName:
@@ -29,6 +30,8 @@ enum RecipeListSortOrderSetting: String, Codable, CaseIterable {
             return "Rating"
         case .byDifficulty:
             return "Difficulty"
+        case .byLastMade:
+            return "Last Made"
         }
     }
 }

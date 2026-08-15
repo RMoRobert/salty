@@ -485,9 +485,14 @@ private struct RecipeListColumnView: View {
 
     @Environment(\.openWindow) private var openWindow
     @State private var searchOptionsTracker = SearchOptionsTracker()
+    @FocusState private var isSearchFieldFocused: Bool
     @State private var isEditMode = false
     @State private var showingDeleteConfirmation = false
     @State private var recipeIDForInspector: String? = nil
+    /// Recipes awaiting a custom "last made" date, and the date being picked. Non-nil `lastMadePickerDate`
+    /// drives the sheet, so the two are set together when "Set Date…" is chosen.
+    @State private var lastMadeTargetIDs: [String] = []
+    @State private var lastMadePickerDate: Date? = nil
     private let logger = Logger(subsystem: "Salty", category: "UI")
 
     #if os(macOS)
@@ -664,6 +669,36 @@ private struct RecipeListColumnView: View {
             openSelectedRecipesInNewWindows(recipeIds: selectedIDs)
         }
         #endif
+        .sheet(isPresented: Binding(
+            get: { lastMadePickerDate != nil },
+            set: { if !$0 { lastMadePickerDate = nil } }
+        )) {
+            LastMadeDatePickerSheet(
+                date: lastMadePickerDate ?? Date(),
+                recipeCount: lastMadeTargetIDs.count,
+                onCancel: { lastMadePickerDate = nil },
+                onSave: { picked in
+                    let ids = lastMadeTargetIDs
+                    lastMadePickerDate = nil
+                    Task {
+                        await viewModel.setLastMade(
+                            RecipeNavigationSplitViewModel.localNoon(on: picked),
+                            forRecipeIds: ids
+                        )
+                    }
+                }
+            )
+        }
+        // This sheet lives in the list column, not the outer view that owns `isAnySheetShown`, so it
+        // reports its own state — otherwise the menu bar would still offer commands that open a second
+        // sheet while the picker is up.
+        .onChange(of: lastMadePickerDate) { _, date in
+            NotificationCenter.default.post(
+                name: .sheetStateChanged,
+                object: nil,
+                userInfo: ["isShown": date != nil]
+            )
+        }
         .task(id: recipeQueryId) {
             await viewModel.updateRecipesQuery()
         }
@@ -900,6 +935,10 @@ private struct RecipeListColumnView: View {
         }
         #endif
         .searchable(text: $viewModel.searchString)
+        .searchFocused($isSearchFieldFocused)
+        // Edit ▸ Find (⌘F) lands here. Scene-scoped, so only the frontmost window showing the
+        // recipe list responds.
+        .focusedSceneValue(\.searchFieldFocusAction, SearchFieldFocusAction { isSearchFieldFocused = true })
         #if !os(macOS)
         .refreshable { await ManualSyncRunner.shared.sync() }
         #endif
@@ -907,6 +946,24 @@ private struct RecipeListColumnView: View {
             if let recipeId = viewModel.selectedRecipeIDs.first {
                 recipeIDForInspector = recipeId
             }
+        }
+        // "Last Made" from the menu bar, applied to the whole selection like the other selection commands.
+        // The menu items are already disabled without a selection; the guards keep a stray post harmless.
+        .onReceive(NotificationCenter.default.publisher(for: .markSelectedRecipesMadeToday)) { _ in
+            let ids = Array(viewModel.selectedRecipeIDs)
+            guard !ids.isEmpty else { return }
+            Task { await viewModel.setLastMade(Date(), forRecipeIds: ids) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .setSelectedRecipesLastMadeDate)) { _ in
+            let ids = Array(viewModel.selectedRecipeIDs)
+            guard !ids.isEmpty else { return }
+            lastMadeTargetIDs = ids
+            lastMadePickerDate = Date()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clearSelectedRecipesLastMade)) { _ in
+            let ids = Array(viewModel.selectedRecipeIDs)
+            guard !ids.isEmpty else { return }
+            Task { await viewModel.setLastMade(nil, forRecipeIds: ids) }
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .openSelectedRecipesInNewWindows)) { _ in
@@ -953,6 +1010,7 @@ private struct RecipeListColumnView: View {
                 jsonLD: { viewModel.exportSelectedRecipesAsJSONLD() }
             )
         }
+        lastMadeMenu(for: Array(viewModel.selectedRecipeIDs))
         Button(role: .destructive, action: {
             showingDeleteConfirmation = true
         }) {
@@ -961,6 +1019,25 @@ private struct RecipeListColumnView: View {
         .keyboardShortcut(.delete, modifiers: [.command])
     }
     #endif
+
+    /// "Last Made" submenu, shared by the single-recipe and multi-selection context menus. Setting a
+    /// custom date opens the picker sheet, or "Clear" removes
+    @ViewBuilder
+    private func lastMadeMenu(for recipeIds: [String]) -> some View {
+        Menu("Last Prepared Date") {
+            Button("Set to Today") {
+                Task { await viewModel.setLastMade(Date(), forRecipeIds: recipeIds) }
+            }
+            Button("Set as Date…") {
+                lastMadeTargetIDs = recipeIds
+                lastMadePickerDate = Date()
+            }
+            Divider()
+            Button("Clear") {
+                Task { await viewModel.setLastMade(nil, forRecipeIds: recipeIds) }
+            }
+        }
+    }
 
     /// Single-recipe context menu, shared by the iOS list rows and the macOS selection menu. Identical
     /// on both platforms except for "Open in New Window" (macOS only).
@@ -1009,6 +1086,8 @@ private struct RecipeListColumnView: View {
 
 
         Divider()
+
+        lastMadeMenu(for: [recipe.id])
 
         Button("Get Info", systemImage: "info.circle") {
             recipeIDForInspector = recipe.id
@@ -1269,6 +1348,38 @@ struct ExportDocument: FileDocument {
 
 // MARK: - Inspector View
 
+/// Date picker for "Last Made → Set Date…". Only past dates are selectable — a recipe can't have been
+/// made in the future, and the field's whole purpose is recording what already happened.
+private struct LastMadeDatePickerSheet: View {
+    @State var date: Date
+    let recipeCount: Int
+    let onCancel: () -> Void
+    let onSave: (Date) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(recipeCount > 1 ? "Last Made (\(recipeCount) Recipes)" : "Last Made")
+                .font(.headline)
+            DatePicker(
+                "Date",
+                selection: $date,
+                in: ...Date(),
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { onCancel() }
+                Button("Save") { onSave(date) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(minWidth: 320)
+    }
+}
+
 private struct RecipeInfoInspectorView: View {
     let recipe: RecipeListItem
     var body: some View {
@@ -1287,6 +1398,17 @@ private struct RecipeInfoInspectorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(recipe.lastModifiedDate.formatted(date: .abbreviated, time: .shortened))
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Last Made")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                // Date only since we don't care about time resolution (and "set as day" gets local noon so not always exact)
+                if let lastPrepared = recipe.lastPrepared {
+                    Text(lastPrepared.formatted(date: .abbreviated, time: .omitted))
+                } else {
+                    Text("Not set").foregroundStyle(.secondary)
+                }
             }
         }
         .padding()

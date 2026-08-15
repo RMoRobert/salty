@@ -156,6 +156,8 @@ struct Menus: Commands {
     @State private var selectionTracker = SelectionStateTracker()
     @State private var searchOptionsTracker = SearchOptionsTracker()
     @State private var syncService = SaltySyncService.shared
+    /// Non-nil only while a window showing the recipe list is frontmost; see `SearchFieldFocusAction`.
+    @FocusedValue(\.searchFieldFocusAction) private var focusSearchField
     @AppStorage("serverUse") private var serverUse = false
     
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
@@ -213,6 +215,22 @@ struct Menus: Commands {
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            .keyboardShortcut(.return)
+           // Mirrors the recipe context menu, item for item. The menu bar carries it because a
+           // contextual menu shouldn't be the only route to a command — and unlike right-clicking a
+           // row, this one follows the whole selection. Disabled (not hidden) without one, per HIG.
+           Menu("Last Made") {
+               Button("Made Today") {
+                   NotificationCenter.default.post(name: .markSelectedRecipesMadeToday, object: nil)
+               }
+               Button("Set Date…") {
+                   NotificationCenter.default.post(name: .setSelectedRecipesLastMadeDate, object: nil)
+               }
+               Divider()
+               Button("Clear") {
+                   NotificationCenter.default.post(name: .clearSelectedRecipesLastMade, object: nil)
+               }
+           }
+           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            Button("Get Info") {
                NotificationCenter.default.post(name: .showRecipeInfoInspector, object: nil)
            }
@@ -273,6 +291,16 @@ struct Menus: Commands {
            .keyboardShortcut("r", modifiers: [.command, .shift])
            .disabled(!serverUse || syncService.isSyncing)
            Divider()
+       }
+       // ⌘F, where the Edit menu's Find items belong. No ellipsis: it moves focus to the search
+       // field rather than opening a dialog. Disabled without a recipe list to search — which also
+       // hands ⌘F back to the standard Find bar in windows that are only text editing.
+       CommandGroup(before: .textEditing) {
+           Button("Find") {
+               focusSearchField?()
+           }
+           .keyboardShortcut("f", modifiers: .command)
+           .disabled(focusSearchField == nil || sheetTracker.isAnySheetShown)
        }
         CommandGroup(before: .sidebar) {
             Menu("Sort By") {

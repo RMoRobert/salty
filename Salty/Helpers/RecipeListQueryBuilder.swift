@@ -79,7 +79,7 @@ enum RecipeListQueryBuilder {
 
         // Lightweight projection. The column order here MUST match RecipeListItem's stored-property
         // order -- the raw-SQL decoder reads columns positionally.
-        var sql: QueryFragment = "SELECT \(Recipe.id), \(Recipe.name), \(Recipe.source), \(Recipe.sourceDetails), \(Recipe.introduction), \(Recipe.createdDate), \(Recipe.lastModifiedDate), \(Recipe.rating), \(Recipe.isFavorite), \(Recipe.imageThumbnailData) FROM \(Recipe.self)"
+        var sql: QueryFragment = "SELECT \(Recipe.id), \(Recipe.name), \(Recipe.source), \(Recipe.sourceDetails), \(Recipe.introduction), \(Recipe.createdDate), \(Recipe.lastModifiedDate), \(Recipe.rating), \(Recipe.isFavorite), \(Recipe.imageThumbnailData), \(Recipe.lastPrepared) FROM \(Recipe.self)"
         if !conditions.isEmpty {
             sql = "\(sql) WHERE \(conditions.joined(separator: " AND "))"
         }
@@ -157,6 +157,10 @@ enum RecipeListQueryBuilder {
         case .byDateCreated:  return "\(Recipe.createdDate) \(direction)"
         case .byRating:       return "\(Recipe.rating) \(direction)"
         case .byDifficulty:   return "\(Recipe.difficulty) \(direction)"
+        // Never-made recipes sort LAST in BOTH directions. SQLite puts NULLs first when ascending, which
+        // would fill the top of the list with recipes that have no date at all — for a sort whose whole
+        // point is "what have I cooked lately", those belong at the bottom whichever way it's pointed.
+        case .byLastMade:     return "\(Recipe.lastPrepared) IS NULL, \(Recipe.lastPrepared) \(direction)"
         }
     }
 }

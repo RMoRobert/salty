@@ -1463,8 +1463,75 @@ class SaltySyncService {
         if !plan.toDeleteLocally.isEmpty || !plan.toDeleteOnServer.isEmpty {
             logger.info("Deletion sync: \(plan.toDeleteLocally.count) deleted locally, \(plan.toDeleteOnServer.count) deleted on server")
         }
+
+        // 8. "Last made on" dates, which the body plan above is blind to by design.
+        try await syncPreparedDates(manifest: manifest, plan: plan)
     }
-    
+
+    /// Independent "last made on" reconciliation, keyed on `lastModifiedPreparedDate` — the same decoupling
+    /// as `syncImages`, for the opposite reason. Images get their own channel because re-sending bytes on a
+    /// body edit is EXPENSIVE; prepared dates get one because marking a recipe made deliberately does NOT
+    /// bump `lastModifiedDate` (that would shove the recipe to the top of the "Date Modified" sort every
+    /// time you cook it), so the body reconciler never sees the change.
+    ///
+    /// Newer stamp wins; a nil stamp means "never marked made through a prepared-date-aware client" and
+    /// always loses. A whole-row upload is what moves the value — safe because the bodies agree by the
+    /// time a push happens here, so it re-sends matching content and moves only the prepared pair,
+    /// needing no partial-update endpoint.
+    ///
+    /// Recipes whose bodies moved this cycle need only ONE direction, because the body transfer already
+    /// carried the prepared pair through a merge at the far end (`RecipeRepository.upsert` server-side,
+    /// `downloadRecipe` locally), both keyed on this same stamp:
+    ///   - body UPLOADED — the server kept its own pair exactly when its stamp was newer, so only a pull
+    ///     can still be owed. Pushing again would be a no-op.
+    ///   - body DOWNLOADED — the local merge kept its own pair exactly when the local stamp was newer, so
+    ///     only a push can still be owed.
+    /// Skipping such ids entirely (the obvious simplification) leaves the losing side stale until the
+    /// NEXT sync. Mirror of SaltyKMP's `SyncService.syncPreparedDates`.
+    private func syncPreparedDates(
+        manifest: [ServerRecipeManifestEntry],
+        plan: RecipeSyncReconciler.Plan
+    ) async throws {
+        let uploadedBodies = Set(plan.toUpload)
+        let downloadedBodies = Set(plan.toDownload)
+        let deleted = Set(plan.toDeleteLocally).union(plan.toDeleteOnServer)
+        // Read AFTER the body plan ran, so downloaded rows show their post-merge prepared pair.
+        let localRecipes = try await database.read { db in try Recipe.fetchAll(db) }
+        let localById = Dictionary(localRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+        var uploaded = 0
+        var downloaded = 0
+
+        for entry in manifest {
+            try Task.checkCancellation()
+            // Intersection only: a recipe missing on either side has no body agreement to piggyback on.
+            guard !deleted.contains(entry.id), let local = localById[entry.id] else { continue }
+            let serverStamp = (entry.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
+            let localStamp = (local.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
+            if localStamp > serverStamp, !uploadedBodies.contains(entry.id) {
+                try await uploadRecipe(local)
+                uploaded += 1
+            } else if serverStamp > localStamp, !downloadedBodies.contains(entry.id) {
+                // Targeted write, like the image path: deliberately does NOT touch lastModifiedDate.
+                try await database.write { db in
+                    try db.execute(sql: """
+                        UPDATE recipe
+                        SET lastPrepared = ?, lastModifiedPreparedDate = ?
+                        WHERE id = ?
+                        """,
+                        arguments: [entry.lastPrepared, entry.lastModifiedPreparedDate, entry.id]
+                    )
+                }
+                downloaded += 1
+            }
+        }
+
+        if uploaded > 0 || downloaded > 0 {
+            syncProgress.itemsUploaded += uploaded
+            syncProgress.itemsDownloaded += downloaded
+            logger.info("Prepared-date sync: \(uploaded) uploaded, \(downloaded) downloaded")
+        }
+    }
+
     /// Delete recipes on the server. Internal (not private) so its non-2xx throw is unit-testable.
     func deleteRecipesOnServer(recipeIds: [String]) async throws {
         guard let url = URL(string: "\(serverUrl)/api/recipes/sync/delete") else {
@@ -1556,6 +1623,17 @@ class SaltySyncService {
             toWrite.imageFilename = existing?.imageFilename
             toWrite.imageThumbnailData = existing?.imageThumbnailData
             toWrite.lastModifiedImageDate = existing?.lastModifiedImageDate
+
+            // The "last made on" pair rides along with the body, but the body's clock doesn't decide it:
+            // keep whichever side's lastModifiedPreparedDate is newer. Without this, downloading a body
+            // edit made elsewhere would silently undo a mark-as-made this device hasn't uploaded yet.
+            // (The server applies the same merge on upsert, so both directions agree.)
+            if let existing,
+               (existing.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
+                 > (toWrite.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis {
+                toWrite.lastPrepared = existing.lastPrepared
+                toWrite.lastModifiedPreparedDate = existing.lastModifiedPreparedDate
+            }
 
             if existing != nil {
                 try Recipe.update(toWrite).execute(db)
@@ -2432,6 +2510,10 @@ struct ServerRecipeManifestEntry: Codable {
     // Image filename + image timestamp let the client reconcile image transfer independently of the body.
     var imageFilename: String?
     var lastModifiedImageDate: Date?
+    // Likewise the "last made on" value + its stamp, so the prepared-date pass settles a recipe straight
+    // from the manifest instead of fetching bodies to compare one field.
+    var lastPrepared: Date?
+    var lastModifiedPreparedDate: Date?
 }
 
 struct ServerRecipe: Codable {
@@ -2440,6 +2522,9 @@ struct ServerRecipe: Codable {
     var createdDate: Date?
     var lastModifiedDate: Date?
     var lastPrepared: Date?
+    // Bumped only when lastPrepared changes; the server merges the pair by this stamp on every upsert,
+    // so the two must always travel together (see RecipeRepository.upsert in salty_kmp).
+    var lastModifiedPreparedDate: Date?
     var source: String?
     var sourceDetails: String?
     var introduction: String?
@@ -2467,7 +2552,7 @@ struct ServerRecipe: Codable {
     var tagIds: [String]?
     
     enum CodingKeys: String, CodingKey {
-        case id, name, createdDate, lastModifiedDate, lastPrepared
+        case id, name, createdDate, lastModifiedDate, lastPrepared, lastModifiedPreparedDate
         case source, sourceDetails, introduction
         case difficulty, rating, imageFilename, lastModifiedImageDate
         case isFavorite, wantToMake, yield, servings
@@ -2484,6 +2569,7 @@ struct ServerRecipe: Codable {
             createdDate: recipe.createdDate,
             lastModifiedDate: recipe.lastModifiedDate,
             lastPrepared: recipe.lastPrepared,
+            lastModifiedPreparedDate: recipe.lastModifiedPreparedDate,
             source: recipe.source,
             sourceDetails: recipe.sourceDetails,
             introduction: recipe.introduction,
@@ -2512,6 +2598,7 @@ struct ServerRecipe: Codable {
             createdDate: createdDate ?? Date(),
             lastModifiedDate: lastModifiedDate ?? Date(),
             lastPrepared: lastPrepared,
+            lastModifiedPreparedDate: lastModifiedPreparedDate,
             source: source ?? "",
             sourceDetails: sourceDetails ?? "",
             introduction: introduction ?? "",
