@@ -9,6 +9,7 @@
 //  Created by Robert on 10/25/22, substantial re-creations on 7/24/23 and 6/10/25
 //
 
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 #if !os(macOS)
@@ -261,6 +262,11 @@ struct RecipeNavigationSplitView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showCreateFromWebSheet)) { _ in
             showingCreateFromWebSheet = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .recipeImportedFromWeb)) { notification in
+            if let recipeId = notification.userInfo?["recipeId"] as? String {
+                viewModel.handleNewRecipeSaved(recipeId: recipeId)
+            }
+        }
         .onChange(of: viewModel.selectedRecipeIDs) { _, _ in
             postRecipeSelectionChanged()
         }
@@ -482,7 +488,7 @@ private struct RecipeListColumnView: View {
     @State private var isEditMode = false
     @State private var showingDeleteConfirmation = false
     @State private var recipeIDForInspector: String? = nil
-    @State private var recipeListScrollPosition = ScrollPosition()
+    private let logger = Logger(subsystem: "Salty", category: "UI")
 
     #if os(macOS)
     private func openRecipeInNewWindow(recipeId: String) {
@@ -527,6 +533,55 @@ private struct RecipeListColumnView: View {
         }
     }
 
+    /// Scrolls the list to a newly added recipe once its row actually exists.
+    ///
+    /// The row can't be scrolled to right away; the database write has to propagate through
+    /// `@FetchAll`, and when the sidebar selection also changed (as it does after an import) the
+    /// list query is re-issued and reloaded asynchronously. Wait for the row to appear (replaces old
+    /// awkward, fixed-delay workaround).
+    private func scrollToNewRecipe(id: String, proxy: ScrollViewProxy) async {
+        guard await waitForSettledRecipeRow(id: id) else {
+            logger.warning("Recipe \(id) did not appear in the list; skipped scrolling to this recipe.")
+            return
+        }
+
+        // Multiple scroll tries since seems to not make it all the way to item if at bottom of large
+        // list, possibly as view stil builds row. Make animation short (but present) for first try,
+        // instant for later "catch-ups" if needed.
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(id, anchor: .center)
+        }
+        for _ in 0..<3 {
+            try? await Task.sleep(for: .milliseconds(250))
+            proxy.scrollTo(id, anchor: .center)
+        }
+    }
+
+    /// Waits for the new recipe's row to appear *and* for the list contents to stop changing, so the
+    /// scroll isn't issued against a list that is still swapping in the results of a reloaded query.
+    /// Returns false if the row never showed up.
+    private func waitForSettledRecipeRow(id: String) async -> Bool {
+        let pollInterval = Duration.milliseconds(50)
+        let maxAttempts = 100 // ~5 seconds
+        let requiredStablePolls = 3
+        var stablePolls = 0
+        var lastCount = -1
+
+        for _ in 0..<maxAttempts {
+            let currentRecipes = viewModel.recipes
+            let containsRow = currentRecipes.contains { $0.id == id }
+            stablePolls = (containsRow && currentRecipes.count == lastCount) ? stablePolls + 1 : 0
+            lastCount = currentRecipes.count
+
+            if stablePolls >= requiredStablePolls {
+                return true
+            }
+            try? await Task.sleep(for: pollInterval)
+        }
+
+        return false
+    }
+
     private var recipeQueryId: String {
         // Include search options in the query ID so changes trigger refresh
         // Use the tracker's changeId to force update when search options change
@@ -537,37 +592,50 @@ private struct RecipeListColumnView: View {
     }
 
     var body: some View {
-        List(selection: $viewModel.selectedRecipeIDs) {
-            ForEach(viewModel.recipes) { recipe in
-                RecipeRowView(recipe: recipe)
-                    .popover(isPresented: Binding(
-                        get: { recipeIDForInspector == recipe.id },
-                        set: { if !$0 { recipeIDForInspector = nil } }
-                    )) {
-                        RecipeInfoInspectorView(recipe: recipe)
-                            .frame(minWidth: 280)
-                    }
-                    .id(recipe.id)
-                    .tag(recipe.id)
-                    .draggable(recipe.id)
-                    #if !os(macOS)
-                    .contextMenu {
-                        recipeContextMenu(for: recipe)
-                    }
-                    #endif
-            }
-            #if !os(macOS)
-            .onDelete { indexSet in
-                withAnimation {
-                    let recipesToDelete = indexSet.compactMap { index in
-                        viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
-                    }
-                    for recipe in recipesToDelete {
-                        Task { await viewModel.deleteRecipe(id: recipe.id) }
+        // ScrollViewReader (rather than ScrollPosition, preferred elsewhere in the app) because
+        // `ScrollPosition.scrollTo(id:)` only scrolls to views registered as scroll targets via
+        // `.scrollTargetLayout()`, which a `List` has no way to apply — so it silently does nothing
+        // here. `scrollTo(edge:)` works on a List (see the library editors), but scrolling to a
+        // specific row needs the proxy.
+        ScrollViewReader { proxy in
+            List(selection: $viewModel.selectedRecipeIDs) {
+                ForEach(viewModel.recipes) { recipe in
+                    RecipeRowView(recipe: recipe)
+                        .popover(isPresented: Binding(
+                            get: { recipeIDForInspector == recipe.id },
+                            set: { if !$0 { recipeIDForInspector = nil } }
+                        )) {
+                            RecipeInfoInspectorView(recipe: recipe)
+                                .frame(minWidth: 280)
+                        }
+                        .id(recipe.id)
+                        .tag(recipe.id)
+                        .draggable(recipe.id)
+                        #if !os(macOS)
+                        .contextMenu {
+                            recipeContextMenu(for: recipe)
+                        }
+                        #endif
+                }
+                #if !os(macOS)
+                .onDelete { indexSet in
+                    withAnimation {
+                        let recipesToDelete = indexSet.compactMap { index in
+                            viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
+                        }
+                        for recipe in recipesToDelete {
+                            Task { await viewModel.deleteRecipe(id: recipe.id) }
+                        }
                     }
                 }
+                #endif
             }
-            #endif
+            .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
+                guard shouldScroll, let newId = viewModel.selectedRecipeIDs.first else { return }
+                // Reset the flag so a later addition can trigger another scroll
+                viewModel.shouldScrollToNewRecipe = false
+                Task { await scrollToNewRecipe(id: newId, proxy: proxy) }
+            }
         }
         .overlay {
             // As an overlay rather than a list row, so it centers in the column instead of
@@ -589,7 +657,6 @@ private struct RecipeListColumnView: View {
                 }
             }
         }
-        .scrollPosition($recipeListScrollPosition)
         #if os(macOS)
         .contextMenu(forSelectionType: String.self) { selectedIDs in
             contextMenuForSelection(selectedIDs)
@@ -609,21 +676,6 @@ private struct RecipeListColumnView: View {
             }
         }
         #endif
-        .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
-            if shouldScroll, let newId = viewModel.selectedRecipeIDs.first {
-                // Wait a bit for the recipe to appear in the list before scrolling
-                Task {
-                    try? await Task.sleep(for: .seconds(0.5))
-                    if viewModel.recipes.contains(where: { $0.id == newId }) {
-                        withAnimation {
-                            recipeListScrollPosition.scrollTo(id: newId)
-                        }
-                    }
-                }
-                // Reset the flag after attempting to scroll
-                viewModel.shouldScrollToNewRecipe = false
-            }
-        }
         .navigationTitle(viewModel.navigationTitle)
         .toolbar {
             #if !os(macOS)

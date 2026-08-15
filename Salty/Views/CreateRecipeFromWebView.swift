@@ -39,9 +39,15 @@ struct CreateRecipeFromWebView: View {
             )
                 .sheet(isPresented: $viewModel.showingExtractedDataSheet) {
                     NavigationStack {
-                        RecipeDetailEditMobileView(recipe: viewModel.recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
+                        RecipeDetailEditMobileView(recipe: viewModel.recipe, isNewRecipe: true, onNewRecipeSaved: { recipeId in
                             // The hand-off editor saved the recipe (including its photo reference)
                             viewModel.recipeWasSaved = true
+                            // Tell the recipe list to select and scroll to the new recipe
+                            NotificationCenter.default.post(
+                                name: .recipeImportedFromWeb,
+                                object: nil,
+                                userInfo: ["recipeId": recipeId]
+                            )
                             // Close the editor after saving
                             viewModel.showingExtractedDataSheet = false
                             dismiss() // Close the web browser window
@@ -509,6 +515,8 @@ struct RecipeWebImportEditView: View {
                     TextField("Source Details:", text: $viewModel.recipe.sourceDetails, prompt: Text("Source Details (⌘3)"))
                     TextField("Servings", value: $viewModel.recipe.servings, format: .number, prompt: Text("Servings (⌘4)"))
                     TextField("Yield", text: $viewModel.recipe.yield, prompt: Text("Yield (⌘7)"))
+                    Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
+                    Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                 }
                 
                 // Introduction Section

@@ -851,8 +851,8 @@ class SaltySyncService {
         }
     }
 
-    /// Writes a SERVER-agreed row: contents and sync bookkeeping move together, so the row lands
-    /// already-clean with the server row itself as the snapshot.
+    /// Writes a server-agreed row: contents and sync bookkeeping move together, so the row lands
+    /// already-clean with server row itself as the snapshot.
     private func downloadShoppingList(_ server: ServerShoppingList) async throws {
         let row = try syncedLocalRow(for: server)
         try await database.write { db in
@@ -861,8 +861,8 @@ class SaltySyncService {
         syncProgress.itemsDownloaded += 1
     }
 
-    /// Records the server agreement after a successful UPLOAD without touching the row's contents:
-    /// [accepted] is the server's response (our content + the revision it assigned).
+    /// Records the server agreement after a successful *upload* without touching the row's contents:
+    /// [accepted] is the server's response (our content plus the revision it assigned).
     private func markShoppingListSynced(_ accepted: ServerShoppingList) async throws {
         let revision = accepted.revision
         let snapshot = try shoppingListSnapshotJson(accepted)
@@ -952,7 +952,7 @@ class SaltySyncService {
         return .deleted
     }
 
-    /// Today as "yyyy-MM-dd" (UTC), for conflict-copy labels — mirrors SaltyKMP's `nowDayStamp()`.
+    /// Today as "yyyy-MM-dd" (UTC), for conflict-copy labels; mirrors SaltyKMP's `nowDayStamp()`.
     /// nonisolated because it's pure (the enclosing class is @MainActor).
     nonisolated private static func dayStamp(_ date: Date = Date()) -> String {
         String(SyncWireDate.string(from: date).prefix(10))

@@ -119,6 +119,13 @@ class CreateRecipeFromWebViewModel {
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
             recipeWasSaved = true
+            // Tell main window to select and scroll to the new recipe (lives in
+            // separate window on macOS, so can't be done through shared state).
+            NotificationCenter.default.post(
+                name: .recipeImportedFromWeb,
+                object: nil,
+                userInfo: ["recipeId": recipeToSave.id]
+            )
             return true
         } catch {
             logger.error("Error saving recipe: \(error)")

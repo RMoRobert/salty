@@ -38,6 +38,8 @@ extension Notification.Name {
     static let openSelectedRecipesInNewWindows = Notification.Name("openSelectedRecipesInNewWindows")
     static let showDuplicateRecipes = Notification.Name("showDuplicateRecipes")
     static let showConsolidateDuplicates = Notification.Name("showConsolidateDuplicates")
+    /// Posted after a web import saves a recipe (userInfo["recipeId"]: String), so the main window/view can scroll to it
+    static let recipeImportedFromWeb = Notification.Name("recipeImportedFromWeb")
 }
 
 @Observable
@@ -382,6 +384,11 @@ class RecipeNavigationSplitViewModel {
     func handleNewRecipeSaved(recipeId: String) {
         // Switch to "All Recipes" view so the new recipe will be visible
         selectedSidebarItem = .allRecipes
+
+        // Clear the search text and favorites filter too: together with the scope above, these are
+        // what can otherwise hide the new recipe, leaving it selected but absent from the list.
+        searchString = ""
+        isFavoritesFilterActive = false
 
         // Select the newly saved recipe and scroll to it
         selectedRecipeIDs = [recipeId]
