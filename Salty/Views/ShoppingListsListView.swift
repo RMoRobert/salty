@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 /// The middle (content) column when "All Lists" is selected: the collection of shopping lists, whose
 /// selection drives the detail column. Mirrors the recipe-list column so the two flows ()and their

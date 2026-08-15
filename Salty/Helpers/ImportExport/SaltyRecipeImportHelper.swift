@@ -8,6 +8,7 @@
 import Foundation
 import SQLiteData
 import OSLog
+import SaltyCore
 
 struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")

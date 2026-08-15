@@ -10,6 +10,7 @@
 
 import Testing
 import Foundation
+import SaltyCore
 @testable import Salty
 
 // MARK: - Recipes

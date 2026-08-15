@@ -6,6 +6,7 @@
 import Foundation
 import SQLiteData
 import UUIDV7
+import SaltyCore
 
 enum RecipeDuplicator {
     

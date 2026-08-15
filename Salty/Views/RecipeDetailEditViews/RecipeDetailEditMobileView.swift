@@ -9,6 +9,7 @@
 
 import SwiftUI
 import Flow
+import SaltyCore
 
 struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss

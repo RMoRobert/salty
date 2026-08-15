@@ -25,6 +25,7 @@ import Foundation
 import GRDB
 import SQLiteData
 @testable import Salty
+import SaltyCore
 
 /// Builds a fresh, migrated, isolated database for a single test.
 private func makeTestDatabase() throws -> any DatabaseWriter {

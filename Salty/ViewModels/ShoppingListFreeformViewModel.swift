@@ -8,6 +8,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import SaltyCore
 
 /// Backs the freeform (Markdown-style) editor for one shopping list. Mirrors the debounced-save
 /// pattern of `ShoppingListDetailViewModel`, but the payload is a single text blob

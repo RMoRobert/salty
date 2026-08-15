@@ -12,6 +12,7 @@ import Testing
 import Foundation
 import GRDB
 @testable import Salty
+import SaltyCore
 
 struct SaltySharedMigrationTests {
 

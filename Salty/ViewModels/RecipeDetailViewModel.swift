@@ -8,6 +8,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import SaltyCore
 
 @Observable
 @MainActor

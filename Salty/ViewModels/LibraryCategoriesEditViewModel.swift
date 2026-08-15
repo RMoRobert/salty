@@ -10,6 +10,7 @@ import SwiftUI
 import SQLiteData
 import UUIDV7
 import OSLog
+import SaltyCore
 
 @MainActor
 @Observable

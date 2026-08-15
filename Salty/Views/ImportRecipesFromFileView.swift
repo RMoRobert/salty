@@ -9,6 +9,7 @@ import SwiftUI
 import SQLiteData
 import UniformTypeIdentifiers
 import OSLog
+import SaltyCore
 
 struct ImportRecipesFromFileView: View {
     private let logger = Logger(subsystem: "Salty", category: "Import")

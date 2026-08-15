@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import Flow
+import SaltyCore
 
 struct RecipeDetailView: View {
     @State private var viewModel: RecipeDetailViewModel

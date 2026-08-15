@@ -7,6 +7,7 @@
 
 import Foundation
 import SQLiteData
+import SaltyCore
 import OSLog
 
 struct MacGourmetImportHelper: RecipeFileImporterProtocol {

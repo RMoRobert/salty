@@ -10,6 +10,7 @@ import OSLog
 import SQLiteData
 import UniformTypeIdentifiers
 import UUIDV7
+import SaltyCore
 #if os(macOS)
 import WebKit
 import AppKit

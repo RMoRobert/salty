@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct CreateRecipeFromWebView: View {
     @Environment(\.dismiss) private var dismiss

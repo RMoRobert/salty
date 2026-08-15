@@ -7,6 +7,7 @@
 
 import Testing
 import Foundation
+import SaltyCore
 @testable import Salty
 
 struct LastSyncedDescriptionTests {

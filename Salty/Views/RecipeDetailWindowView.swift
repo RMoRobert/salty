@@ -5,6 +5,7 @@
 //  Dedicated recipe detail window for macOS (opened from the list).
 //
 
+import SaltyCore
 #if os(macOS)
 
 import SwiftUI

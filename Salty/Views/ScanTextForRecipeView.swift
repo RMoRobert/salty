@@ -8,6 +8,7 @@
 import SwiftUI
 import PhotosUI
 import OSLog
+import SaltyCore
 
 #if os(iOS)
 import VisionKit

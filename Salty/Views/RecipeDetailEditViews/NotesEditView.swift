@@ -5,6 +5,7 @@
 //  Created by Assistant on 1/27/25.
 //
 
+import SaltyCore
 #if os(macOS)
 
 import SwiftUI

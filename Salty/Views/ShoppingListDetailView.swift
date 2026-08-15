@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 /// Reminders-style checklist for one shopping list: tap-to-check items, inline text editing, and
 /// heading rows for grouping by store/category/aisle. The parent recreates this view per list via

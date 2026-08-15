@@ -12,6 +12,7 @@
 import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
+import SaltyCore
 #if !os(macOS)
 import UIKit
 #endif

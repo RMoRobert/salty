@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import SaltyCore
 
 struct LibraryCoursesEditView: View {
     @State private var viewModel = LibraryCoursesEditViewModel()

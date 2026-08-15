@@ -7,6 +7,7 @@
 
 import Foundation
 import OSLog
+import SaltyCore
 
 private let fileLogger = Logger(subsystem: "Salty", category: "FileAccess")
 

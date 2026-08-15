@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct ConsolidateDuplicatesView: View {
     @State private var viewModel = ConsolidateDuplicatesViewModel()

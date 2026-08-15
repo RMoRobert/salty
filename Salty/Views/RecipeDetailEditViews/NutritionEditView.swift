@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 // MARK: - Validated Text Field Component
 struct ValidatedTextField: View {

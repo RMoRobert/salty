@@ -9,6 +9,7 @@
 import Testing
 import Foundation
 @testable import Salty
+import SaltyCore
 
 struct RecipeHtmlTagsTests {
 

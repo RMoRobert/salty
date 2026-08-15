@@ -12,6 +12,7 @@ import Testing
 import Foundation
 import SQLiteData
 @testable import Salty
+import SaltyCore
 
 struct RecipeListQueryBuilderTests {
 

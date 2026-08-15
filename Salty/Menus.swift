@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 // Want to disable some menu items on macOS (and iPadOS 26+?) when
 // sheets are open since can't open more than one; this should help

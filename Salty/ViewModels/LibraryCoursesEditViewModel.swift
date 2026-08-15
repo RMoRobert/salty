@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import SQLiteData
 import OSLog
+import SaltyCore
 
 @MainActor
 @Observable

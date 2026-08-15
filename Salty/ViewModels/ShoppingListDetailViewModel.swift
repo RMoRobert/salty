@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SQLiteData
 import UUIDV7
+import SaltyCore
 
 /// Backs the checklist view for one shopping list. Items are edited in memory (so inline TextFields
 /// don't fight a reactive fetch) and persisted with a short debounce; the view is recreated per list

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct MainView: View {
     // Own the root view model here (created once) rather than re-instantiating it inside `body`

@@ -8,6 +8,7 @@
 import SwiftUI
 import SQLiteData
 import OSLog
+import SaltyCore
 
 struct SettingsView: View {
     @Dependency(\.defaultDatabase) private var database

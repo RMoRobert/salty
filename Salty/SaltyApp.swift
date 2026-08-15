@@ -8,6 +8,7 @@
 import OSLog
 import SQLiteData
 import SwiftUI
+import SaltyCore
 #if os(macOS)
 import AppKit
 #endif

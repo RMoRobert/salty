@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SQLiteData
 import UUIDV7
+import SaltyCore
 
 @Observable
 @MainActor
