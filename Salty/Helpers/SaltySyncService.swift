@@ -2296,7 +2296,7 @@ func friendlySyncMessage(_ error: Error) -> String {
     // Checked first: a cancelled request is a `URLError` whose default wording ("Couldn't reach the
     // server") would blame the network for something the user chose to do.
     if SyncError.isCancellation(error) {
-        return "Sync was cancelled. Anything already transferred was kept — sync again to finish the rest."
+        return "Sync was cancelled. (Anything already transferred was kept; sync again to finish the rest.)"
     }
     switch error {
     case let urlError as URLError:
