@@ -415,8 +415,9 @@ class SaltySyncService {
 
             // Wipe the local database + local image files.
             syncProgress.currentStep = "Clearing local data..."
-            let oldImageFilenames = try await database.read { db in
-                try Recipe.fetchAll(db).compactMap { $0.imageFilename }
+            let (oldImageFilenames, oldShoppingListIds) = try await database.read { db in
+                (try Recipe.fetchAll(db).compactMap { $0.imageFilename },
+                 try ShoppingList.fetchAll(db).map { $0.id })
             }
             try await database.write { db in
                 try RecipeCategory.delete().execute(db)
@@ -449,6 +450,11 @@ class SaltySyncService {
                 for row in shoppingListRows {
                     try ShoppingList.insert { row }.execute(db)
                 }
+            }
+            // Every list was replaced (or removed) wholesale; any open editor must reload rather
+            // than save its pre-wipe content back.
+            for id in Set(oldShoppingListIds).union(shoppingListRows.map { $0.id }) {
+                ShoppingListChangeNotifier.shared.noteExternalChange(listId: id)
             }
             syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count + serverShoppingLists.count
 
@@ -527,27 +533,28 @@ class SaltySyncService {
             let serverShoppingListsById = Dictionary(serverShoppingLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
 
             // Push courses/categories/tags first. Recipes link them by id, which must already exist
-            // server-side. Update items the server already has, create the rest.
+            // server-side. Update items the server already has, create the rest. `force` marks these
+            // as deliberate mirror-this-device overwrites (see `forceWriteHeader`).
             syncProgress.currentStep = "Uploading to server..."
             for c in localCourses {
                 if serverCourseIds.contains(c.id) {
-                    try await putToServer(c, endpoint: "/api/courses/\(c.id)")
+                    try await putToServer(c, endpoint: "/api/courses/\(c.id)", force: true)
                 } else {
-                    try await postToServer(c, endpoint: "/api/courses")
+                    try await postToServer(c, endpoint: "/api/courses", force: true)
                 }
             }
             for c in localCategories {
                 if serverCategoryIds.contains(c.id) {
-                    try await putToServer(c, endpoint: "/api/categories/\(c.id)")
+                    try await putToServer(c, endpoint: "/api/categories/\(c.id)", force: true)
                 } else {
-                    try await postToServer(c, endpoint: "/api/categories")
+                    try await postToServer(c, endpoint: "/api/categories", force: true)
                 }
             }
             for t in localTags {
                 if serverTagIds.contains(t.id) {
-                    try await putToServer(t, endpoint: "/api/tags/\(t.id)")
+                    try await putToServer(t, endpoint: "/api/tags/\(t.id)", force: true)
                 } else {
-                    try await postToServer(t, endpoint: "/api/tags")
+                    try await postToServer(t, endpoint: "/api/tags", force: true)
                 }
             }
             for l in localShoppingLists {
@@ -573,7 +580,7 @@ class SaltySyncService {
             // Push recipes (uploadRecipe overwrites existing or creates new as needed).
             syncProgress.currentStep = "Uploading recipes..."
             for recipe in localRecipes {
-                try await uploadRecipe(recipe)
+                try await uploadRecipe(recipe, force: true)
                 syncProgress.itemsUploaded += 1
                 syncProgress.uploadedRecipeIds.insert(recipe.id)
             }
@@ -726,6 +733,11 @@ class SaltySyncService {
                     try ShoppingList.where { $0.id.eq(id) }.delete().execute(db)
                 }
             }
+            for id in toDeleteLocally {
+                // An open editor for a deleted list should show it empty, not keep a ghost copy
+                // whose edits would silently persist nowhere.
+                ShoppingListChangeNotifier.shared.noteExternalChange(listId: id)
+            }
             if !toDeleteLocally.isEmpty {
                 logger.info("Deleted \(toDeleteLocally.count) shopping list(s) locally (were deleted on server)")
             }
@@ -865,6 +877,9 @@ class SaltySyncService {
             try ShoppingList.upsert { row }.execute(db)
         }
         syncProgress.itemsDownloaded += 1
+        // The list may be open in a checklist/freeform editor, which holds its content in memory —
+        // without this, its next keystroke would save the pre-download content right back.
+        ShoppingListChangeNotifier.shared.noteExternalChange(listId: server.id)
     }
 
     /// Records the server agreement after a successful *upload* without touching the row's contents:
@@ -964,6 +979,47 @@ class SaltySyncService {
         String(SyncWireDate.string(from: date).prefix(10))
     }
 
+    // MARK: - Conditional vocabulary deletes
+
+    /// Outcome of a conditional course/category/tag delete: a 409 means the row changed on the
+    /// server after we fetched it, and carries the CURRENT row for the caller to download instead.
+    private enum LibraryDeleteOutcome<Item: Decodable> {
+        case deleted
+        case conflict(current: Item)
+    }
+
+    /// DELETEs one course/category/tag, conditional on [expectedLastModified] via `If-Match`
+    /// carrying the wire timestamp string. Today's server ignores the header and deletes
+    /// unconditionally, so behavior is unchanged; a future server (planned alongside web editing)
+    /// compares it against the stored stamp and answers 409 + the current row on mismatch — the
+    /// same edit-beats-delete contract shopping lists already have via If-Match revisions. Sent
+    /// only by the regular sync path: the force re-sync-to-server deletes stay unconditional,
+    /// because there the local library is deliberately the source of truth.
+    /// 404 counts as deleted: the goal state is already true.
+    private func deleteLibraryItemOnServer<Item: Decodable>(
+        _ type: Item.Type, endpoint: String, expectedLastModified: Date?
+    ) async throws -> LibraryDeleteOutcome<Item> {
+        let url = try makeURL(endpoint: endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        addAuthHeader(to: &request)
+        if let expectedLastModified {
+            request.setValue(Self.wireDateString(expectedLastModified), forHTTPHeaderField: "If-Match")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.uploadFailed("No HTTP response for DELETE \(endpoint)")
+        }
+        if httpResponse.statusCode == 409 {
+            return .conflict(current: try makeWireDecoder().decode(Item.self, from: data))
+        }
+        guard (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 else {
+            throw SyncError.uploadFailed("DELETE to \(endpoint) failed: \(SyncError.httpMessage(status: httpResponse.statusCode, body: data))")
+        }
+        return .deleted
+    }
+
     // MARK: - Course Sync
 
     private func syncCoursesWithDeletions(deviceInfo: DeviceInfo) async throws {
@@ -976,8 +1032,8 @@ class SaltySyncService {
         // can't trap/crash the sync; keep the last occurrence.
         let serverCoursesById = Dictionary(serverCourses.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localCourseIds = Set(localCourses.map { $0.id })
-        
-        var toDeleteOnServer: [String] = []
+
+        var toDeleteOnServer: [ServerCourse] = []
         var toDeleteLocally: [String] = []
         
         // Process each local course
@@ -1035,7 +1091,7 @@ class SaltySyncService {
                         }
                         syncProgress.itemsDownloaded += 1
                     } else {
-                        toDeleteOnServer.append(serverCourse.id)
+                        toDeleteOnServer.append(serverCourse)
                     }
                 } else {
                     let course = Course(id: serverCourse.id, name: serverCourse.name ?? "", lastModifiedDate: serverCourse.lastModifiedDate ?? Date())
@@ -1060,10 +1116,24 @@ class SaltySyncService {
             }
         }
         
-        // Delete on server
-        for id in toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/courses/\(id)")
-            logger.info("Deleted course \(id) on server (was deleted locally)")
+        // Delete on server — conditional on the timestamp we based the decision on, so a row that
+        // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
+        for serverCourse in toDeleteOnServer {
+            switch try await deleteLibraryItemOnServer(
+                ServerCourse.self,
+                endpoint: "/api/courses/\(serverCourse.id)",
+                expectedLastModified: serverCourse.lastModifiedDate
+            ) {
+            case .deleted:
+                logger.info("Deleted course \(serverCourse.id) on server (was deleted locally)")
+            case .conflict(let current):
+                let course = Course(id: current.id, name: current.name ?? "", lastModifiedDate: current.lastModifiedDate ?? Date())
+                try await database.write { db in
+                    try Course.upsert { course }.execute(db)
+                }
+                syncProgress.itemsDownloaded += 1
+                logger.info("Course \(current.id) changed on server after our fetch; downloaded instead of deleting")
+            }
         }
     }
     
@@ -1120,8 +1190,8 @@ class SaltySyncService {
         
         let serverCategoriesById = Dictionary(serverCategories.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localCategoryIds = Set(localCategories.map { $0.id })
-        
-        var toDeleteOnServer: [String] = []
+
+        var toDeleteOnServer: [ServerCategory] = []
         var toDeleteLocally: [String] = []
         
         // Process each local category
@@ -1179,7 +1249,7 @@ class SaltySyncService {
                         }
                         syncProgress.itemsDownloaded += 1
                     } else {
-                        toDeleteOnServer.append(serverCategory.id)
+                        toDeleteOnServer.append(serverCategory)
                     }
                 } else {
                     let category = Category(id: serverCategory.id, name: serverCategory.name ?? "", lastModifiedDate: serverCategory.lastModifiedDate ?? Date())
@@ -1204,10 +1274,24 @@ class SaltySyncService {
             }
         }
         
-        // Delete on server
-        for id in toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/categories/\(id)")
-            logger.info("Deleted category \(id) on server (was deleted locally)")
+        // Delete on server — conditional on the timestamp we based the decision on, so a row that
+        // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
+        for serverCategory in toDeleteOnServer {
+            switch try await deleteLibraryItemOnServer(
+                ServerCategory.self,
+                endpoint: "/api/categories/\(serverCategory.id)",
+                expectedLastModified: serverCategory.lastModifiedDate
+            ) {
+            case .deleted:
+                logger.info("Deleted category \(serverCategory.id) on server (was deleted locally)")
+            case .conflict(let current):
+                let category = Category(id: current.id, name: current.name ?? "", lastModifiedDate: current.lastModifiedDate ?? Date())
+                try await database.write { db in
+                    try Category.upsert { category }.execute(db)
+                }
+                syncProgress.itemsDownloaded += 1
+                logger.info("Category \(current.id) changed on server after our fetch; downloaded instead of deleting")
+            }
         }
     }
     
@@ -1221,8 +1305,8 @@ class SaltySyncService {
         
         let serverTagsById = Dictionary(serverTags.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localTagIds = Set(localTags.map { $0.id })
-        
-        var toDeleteOnServer: [String] = []
+
+        var toDeleteOnServer: [ServerTag] = []
         var toDeleteLocally: [String] = []
         
         // Process each local tag
@@ -1280,7 +1364,7 @@ class SaltySyncService {
                         }
                         syncProgress.itemsDownloaded += 1
                     } else {
-                        toDeleteOnServer.append(serverTag.id)
+                        toDeleteOnServer.append(serverTag)
                     }
                 } else {
                     let tag = Tag(id: serverTag.id, name: serverTag.name ?? "", lastModifiedDate: serverTag.lastModifiedDate ?? Date())
@@ -1305,10 +1389,24 @@ class SaltySyncService {
             }
         }
         
-        // Delete on server
-        for id in toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/tags/\(id)")
-            logger.info("Deleted tag \(id) on server (was deleted locally)")
+        // Delete on server — conditional on the timestamp we based the decision on, so a row that
+        // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
+        for serverTag in toDeleteOnServer {
+            switch try await deleteLibraryItemOnServer(
+                ServerTag.self,
+                endpoint: "/api/tags/\(serverTag.id)",
+                expectedLastModified: serverTag.lastModifiedDate
+            ) {
+            case .deleted:
+                logger.info("Deleted tag \(serverTag.id) on server (was deleted locally)")
+            case .conflict(let current):
+                let tag = Tag(id: current.id, name: current.name ?? "", lastModifiedDate: current.lastModifiedDate ?? Date())
+                try await database.write { db in
+                    try Tag.upsert { tag }.execute(db)
+                }
+                syncProgress.itemsDownloaded += 1
+                logger.info("Tag \(current.id) changed on server after our fetch; downloaded instead of deleting")
+            }
         }
     }
     
@@ -1574,7 +1672,7 @@ class SaltySyncService {
         SyncWireDate.date(from: dateStr)
     }
     
-    private func uploadRecipe(_ recipe: Recipe) async throws {
+    private func uploadRecipe(_ recipe: Recipe, force: Bool = false) async throws {
         // Convert to server format
         var serverRecipe = ServerRecipe.from(recipe)
         
@@ -1595,9 +1693,9 @@ class SaltySyncService {
         let exists = try await checkExists(endpoint: "/api/recipes/\(recipe.id)")
         
         if exists {
-            try await putToServer(serverRecipe, endpoint: "/api/recipes/\(recipe.id)")
+            try await putToServer(serverRecipe, endpoint: "/api/recipes/\(recipe.id)", force: force)
         } else {
-            try await postToServer(serverRecipe, endpoint: "/api/recipes")
+            try await postToServer(serverRecipe, endpoint: "/api/recipes", force: force)
         }
         
         logger.info("Uploaded recipe: \(recipe.name) with \(categoryIds.count) categories (IDs: \(categoryIds)) and \(tagIds.count) tags (IDs: \(tagIds))")
@@ -2083,11 +2181,18 @@ class SaltySyncService {
         return decoder
     }
 
-    private func postToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
+    /// Header sent by the force re-sync-to-server paths on every overwrite. The server doesn't read
+    /// it yet; it exists so a future server-side "reject writes with an older lastModifiedDate"
+    /// guard (planned for web editing) has a way to recognize a deliberate mirror-this-device push
+    /// and accept it anyway. Harmless today — unknown headers are ignored.
+    nonisolated static let forceWriteHeader = "X-Salty-Force"
+
+    private func postToServer<T: Encodable>(_ object: T, endpoint: String, force: Bool = false) async throws {
         let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if force { request.setValue("1", forHTTPHeaderField: Self.forceWriteHeader) }
         addAuthHeader(to: &request)
 
         let encoder = makeWireEncoder()
@@ -2103,11 +2208,12 @@ class SaltySyncService {
         }
     }
     
-    private func putToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
+    private func putToServer<T: Encodable>(_ object: T, endpoint: String, force: Bool = false) async throws {
         let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if force { request.setValue("1", forHTTPHeaderField: Self.forceWriteHeader) }
         addAuthHeader(to: &request)
 
         let encoder = makeWireEncoder()

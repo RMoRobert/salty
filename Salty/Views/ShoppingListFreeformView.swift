@@ -64,10 +64,10 @@ struct ShoppingListFreeformView: View {
         .onDisappear {
             viewModel.flush()
         }
-        // Ingredients added from a recipe elsewhere in the app land in the database, not in this
-        // view model's in-memory text — pick them up rather than saving over them.
-        .onChange(of: ShoppingListChangeNotifier.shared.changeCount) {
-            guard ShoppingListChangeNotifier.shared.isMostRecentChange(forListId: viewModel.listId) else { return }
+        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, or a sync
+        // download) write to database, not in the in-memory text. Pick them up rather than
+        // saving over them.
+        .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
             Task { await viewModel.reloadAfterExternalChange() }
         }
         .toolbar {

@@ -111,14 +111,13 @@ struct ShoppingListDetailView: View {
             viewModel.removeEmptyItems()
             viewModel.flush()
         }
-        // Ingredients added from a recipe elsewhere in the app land in the database, not in this
-        // view model's in-memory items — pick them up rather than saving over them.
-        .onChange(of: ShoppingListChangeNotifier.shared.changeCount) {
-            guard ShoppingListChangeNotifier.shared.isMostRecentChange(forListId: viewModel.listId) else { return }
+        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet or a sync
+        // download) end up in in the database, not in the in-memory items. Pick them up rather than
+        // saving over them.
+        .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
             Task { await viewModel.reloadAfterExternalChange() }
         }
-        // Reminders behavior: a row the user never typed into vanishes the moment focus leaves it,
-        // whether that's a tap into another row, Return, or dismissing the keyboard.
+        // Remove rows user never typed into (simulating Reminders app behavior, better UX)
         .onChange(of: focusedItemId) { previousId, _ in
             guard let previousId else { return }
             withAnimation {

@@ -71,9 +71,8 @@ class ShoppingListFreeformViewModel {
         }
     }
 
-    /// Re-reads the document after the row was written by something other than this view model --
-    /// today that's a recipe's "Add to Shopping List" sheet, which can land while this list is open
-    /// in another window. See the matching note in `ShoppingListDetailViewModel` on why a pending
+    /// Re-reads the document after the row was written by something other than this view model, like a
+    /// recipe's "Add to Shopping List" sheet.  See the matching note in `ShoppingListDetailViewModel` on why pending
     /// save is dropped rather than flushed.
     func reloadAfterExternalChange() async {
         guard isLoaded else { return }
