@@ -18,6 +18,11 @@ struct SaltyApp: App {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Chef View cooking progress, owned at app level so it's shared by every scene that can show a
+    /// recipe — leave Chef View, glance at something else, come back to the same current step.
+    /// In-memory only; see ChefSessionState.
+    @State private var chefSessionStore = ChefViewSessionStore()
+
     /// The live database writer, kept so we can checkpoint its WAL when the app quiesces (so SaltyKMP,
     /// syncing the linked folder, sees the latest data in the main `.sqlite`). Nil in non-live contexts.
     private let database: (any DatabaseWriter)?
@@ -74,6 +79,7 @@ struct SaltyApp: App {
         WindowGroup(id: "main-window") {
             MainView()
                 .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
+                .environment(chefSessionStore)
         }
         .handlesExternalEvents(matching: ["salty-recipe"])
         .onChange(of: scenePhase) { _, newPhase in
@@ -154,8 +160,19 @@ struct SaltyApp: App {
                 RecipeDetailWindowView(recipeId: $recipeId)
             }
             .frame(minWidth: 520, idealWidth: 720, minHeight: 420, idealHeight: 680)
+            .environment(chefSessionStore)
         }
         .defaultSize(width: 720, height: 680)
+
+        // Chef View gets its own window on macOS so it can go full screen on an external display or
+        // TV while the main window stays usable. iOS/iPadOS presents it as a full-screen cover from
+        // the recipe detail view instead.
+        WindowGroup(id: "chef-view-window", for: ChefViewLaunch.self) { $launch in
+            ChefViewWindowView(launch: $launch)
+                .frame(minWidth: 640, idealWidth: 1100, minHeight: 480, idealHeight: 760)
+                .environment(chefSessionStore)
+        }
+        .defaultSize(width: 1100, height: 760)
 
         Settings {
             SettingsView()

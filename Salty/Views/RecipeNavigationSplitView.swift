@@ -1106,6 +1106,11 @@ private struct RecipeDetailColumnView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
+    private func editRecipe(_ recipeId: String) {
+        viewModel.recipeToEditID = recipeId
+        viewModel.showingEditSheet = true
+    }
+
     var body: some View {
         if viewModel.selectedSidebarItem?.isShoppingLists == true {
             // Currently, don't show preview if more than one selected:
@@ -1132,8 +1137,22 @@ private struct RecipeDetailColumnView: View {
             Group {
                 if useWebRecipeDetailView {
                     RecipeDetailWebView(recipe: recipe)
+                        // The web preview has no Chef View button to order against, so it keeps
+                        // declaring Edit itself. RecipeDetailView owns both in the other branch.
+                        .toolbar {
+                            ToolbarItem(placement: .primaryAction) {
+                                Button("Edit", systemImage: "pencil") { editRecipe(recipeId) }
+                                    .keyboardShortcut("e", modifiers: .command)
+                            }
+                        }
                 } else {
-                    RecipeDetailView(recipe: recipe, onScaledRecipeSaved: viewModel.handleNewRecipeSaved)
+                    RecipeDetailView(
+                        recipe: recipe,
+                        // Handed down so Chef View and Edit are declared in one place, in the order
+                        // that puts Edit on the outer edge. See RecipeDetailView.onEdit.
+                        onEdit: { editRecipe(recipeId) },
+                        onScaledRecipeSaved: viewModel.handleNewRecipeSaved
+                    )
                 }
             }
             .id(recipeId) // seems to be needed to force full reload when recipe changes?
@@ -1150,15 +1169,6 @@ private struct RecipeDetailColumnView: View {
                     }
                 }
             #endif
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: {
-                        viewModel.recipeToEditID = recipeId
-                        viewModel.showingEditSheet = true
-                    }) {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .keyboardShortcut("e", modifiers: .command)
-                }
             }
         } else {
             ContentUnavailableView("No Recipe Selected", systemImage: "list.bullet.rectangle")
@@ -1318,6 +1328,7 @@ private struct RootPresentationsModifier: ViewModifier {
     RecipeNavigationSplitView(
         viewModel: RecipeNavigationSplitViewModel()
     )
+    .environment(ChefViewSessionStore())
 }
 
 // MARK: - Export Document

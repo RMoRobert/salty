@@ -21,7 +21,9 @@ class RecipeDetailViewModel {
     // MARK: - State
     let recipeId: String
     var showingFullImage = false
-    
+    /// iOS/iPadOS only — macOS opens Chef View in its own window instead of a cover.
+    var isChefViewPresented = false
+
     /// Temporary ingredient scale for detail view only. Stored as a fraction for `.percent` formatting (1.0 = 100%, 2.0 = 200%).
     var ingredientScalePercent = 1.0
     var isIngredientScalePopoverShowing = false

@@ -159,6 +159,8 @@ struct Menus: Commands {
     @State private var syncService = SaltySyncService.shared
     /// Non-nil only while a window showing the recipe list is frontmost; see `SearchFieldFocusAction`.
     @FocusedValue(\.searchFieldFocusAction) private var focusSearchField
+    /// Non-nil only while a window showing a recipe is frontmost; see `ChefViewOpenAction`.
+    @FocusedValue(\.chefViewOpenAction) private var openChefView
     @AppStorage("serverUse") private var serverUse = false
     
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
@@ -304,6 +306,14 @@ struct Menus: Commands {
            .disabled(focusSearchField == nil || sheetTracker.isAnySheetShown)
        }
         CommandGroup(before: .sidebar) {
+            // Disabled (not hidden) when no recipe is on screen, per HIG. On macOS this opens a
+            // Chef View window; on iPadOS, a full-screen cover — hence the sheet guard.
+            Button("Chef View") {
+                openChefView?()
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .disabled(openChefView == nil || sheetTracker.isAnySheetShown)
+            Divider()
             Menu("Sort By") {
                 Picker("Sort Options", selection: $recipeListSortOrder) {
                     ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in

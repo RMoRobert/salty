@@ -13,7 +13,9 @@ import OSLog
 struct MacGourmetImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
     
-    static func importIntoDatabase(_ database: any DatabaseWriter, xmlFileUrl: URL) async throws {
+    /// Imports the recipes in a .mgourmet file and returns the ids of those inserted (in file order).
+    @discardableResult
+    static func importIntoDatabase(_ database: any DatabaseWriter, xmlFileUrl: URL) async throws -> [String] {
         guard let xmlData = getDataFromFile(xmlFileUrl) else {
             logger.error("No XML data found in file; returning")
             throw ImportError.noDataFound
@@ -25,10 +27,11 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
             
             var successCount = 0
             var failureCount = 0
-            
+            var insertedIds: [String] = []
+
             for mgRecipe in mgRecipes {
                 do {
-                    try await database.write { db in
+                    let newId = try await database.write { db -> String in
                         var imgData: Data?
                         var categories: [String]?
                         var recipe = mgRecipe.convertToRecipe(imageData: &imgData, categories: &categories)
@@ -80,15 +83,19 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                                 try Recipe.update(recipe).execute(db)
                             }
                         }
+
+                        return recipe.id
                     }
+                    insertedIds.append(newId)
                     successCount += 1
                 } catch {
                     failureCount += 1
                     logger.error("Failed to import recipe '\(mgRecipe.name)': \(error.localizedDescription)")
                 }
             }
-            
+
             logger.info("Import completed: \(successCount) successful, \(failureCount) failed")
+            return insertedIds
         } catch {
             logger.error("Could not decode MacGourmet file. Error: \(error.localizedDescription)")
             throw ImportError.decodingFailed(error)

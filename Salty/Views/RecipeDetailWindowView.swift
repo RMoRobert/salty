@@ -25,17 +25,6 @@ struct RecipeDetailWindowView: View {
             if recipeId != nil {
                 recipeContent()
                     .navigationTitle(displayTitle)
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                showingEditSheet = true
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
-                            }
-                            .keyboardShortcut("e", modifiers: .command)
-                            .disabled(viewModel?.recipe == nil)
-                        }
-                    }
             } else {
                 ContentUnavailableView("No Recipe Selected", systemImage: "list.bullet.rectangle")
             }
@@ -66,10 +55,24 @@ struct RecipeDetailWindowView: View {
             if useWebRecipeDetailView {
                 RecipeDetailWebView(recipe: recipe)
                     .id(recipe.id)
+                    // The web preview has no Chef View button to order against, so it keeps
+                    // declaring Edit itself. RecipeDetailView owns both in the other branch.
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button("Edit", systemImage: "pencil") { showingEditSheet = true }
+                                .keyboardShortcut("e", modifiers: .command)
+                        }
+                    }
             } else {
-                RecipeDetailView(recipe: recipe, onScaledRecipeSaved: { newId in
-                    recipeId = newId
-                })
+                RecipeDetailView(
+                    recipe: recipe,
+                    // Handed down so Chef View and Edit are declared in one place, in the order
+                    // that puts Edit on the outer edge. See RecipeDetailView.onEdit.
+                    onEdit: { showingEditSheet = true },
+                    onScaledRecipeSaved: { newId in
+                        recipeId = newId
+                    }
+                )
                 .id(recipe.id)
             }
         } else {
