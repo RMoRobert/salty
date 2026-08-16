@@ -71,6 +71,24 @@ class ShoppingListFreeformViewModel {
         }
     }
 
+    /// Re-reads the document after the row was written by something other than this view model --
+    /// today that's a recipe's "Add to Shopping List" sheet, which can land while this list is open
+    /// in another window. See the matching note in `ShoppingListDetailViewModel` on why a pending
+    /// save is dropped rather than flushed.
+    func reloadAfterExternalChange() async {
+        guard isLoaded else { return }
+        saveTask?.cancel()
+        saveTask = nil
+        do {
+            let list = try await database.read { [listId] db in
+                try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
+            }
+            text = list?.contentsForFreeform ?? ""
+        } catch {
+            logger.error("Error reloading shopping list \(self.listId): \(error)")
+        }
+    }
+
     /// Debounced save: collapses a burst of keystrokes into one write. Guarded on `isLoaded` so the
     /// initial text assignment during `load()` doesn't schedule a redundant save.
     func scheduleSave() {

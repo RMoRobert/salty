@@ -30,6 +30,11 @@ class SaltySyncService {
     @ObservationIgnored
     private let session: URLSession
 
+    /// Storage for the server password and JWT. Defaults to the keychain; injectable so tests can run
+    /// against an in-memory store instead of the developer's own keychain.
+    @ObservationIgnored
+    private let credentials: any SyncCredentialStore
+
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
     
@@ -75,14 +80,14 @@ class SaltySyncService {
     
     /// Password for server authentication (stored securely in Keychain)
     var serverPassword: String {
-        get { KeychainHelper.shared.getPassword() }
-        set { KeychainHelper.shared.savePassword(newValue) }
+        get { credentials.password() }
+        set { credentials.setPassword(newValue) }
     }
-    
+
     /// Cached JWT token (stored securely in Keychain)
     private var jwtToken: String? {
-        get { KeychainHelper.shared.getJwtToken() }
-        set { KeychainHelper.shared.saveJwtToken(newValue) }
+        get { credentials.jwtToken() }
+        set { credentials.setJwtToken(newValue) }
     }
     
     /// Token expiration date (stored in UserDefaults - not sensitive)
@@ -128,9 +133,11 @@ class SaltySyncService {
         #endif
     }
     
-    /// `session` defaults to `.shared` for the app singleton; tests inject a stubbed session.
-    init(session: URLSession = .shared) {
+    /// `session` defaults to `.shared` and `credentials` to the keychain, as the app singleton needs;
+    /// tests inject a stubbed session and an in-memory credential store.
+    init(session: URLSession = .shared, credentials: any SyncCredentialStore = KeychainHelper.shared) {
         self.session = session
+        self.credentials = credentials
         // Restore the last sync time from a previous run. Assignment in `init` doesn't fire `didSet`, so
         // this doesn't write the value straight back.
         lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncDateKey) as? Date

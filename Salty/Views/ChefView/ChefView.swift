@@ -93,9 +93,24 @@ struct ChefView: View {
         .navigationTitle(viewModel.recipeName)
         .task { await viewModel.loadRecipeIfNeeded() }
         // Paired explicitly rather than relying on task cancellation: the display must come back
-        // under the system's control the moment Chef View goes away, on every exit path.
-        .onAppear { ScreenSleepBlocker.shared.begin() }
-        .onDisappear { ScreenSleepBlocker.shared.end() }
+        // under the system's control the moment Chef View goes away, on every exit path. The
+        // external-display coordinator piggybacks on the same pairing — while this view is up, a
+        // mirroring TV shows this recipe (see ExternalChefDisplayView); when it goes, the TV
+        // returns to its placeholder.
+        .onAppear {
+            ScreenSleepBlocker.shared.begin()
+            #if !os(macOS)
+            ChefExternalDisplayCoordinator.shared.chefViewAppeared(
+                ChefViewLaunch(recipeId: viewModel.recipeId, scalePercent: viewModel.scaleFactor)
+            )
+            #endif
+        }
+        .onDisappear {
+            ScreenSleepBlocker.shared.end()
+            #if !os(macOS)
+            ChefExternalDisplayCoordinator.shared.chefViewDisappeared(recipeId: viewModel.recipeId)
+            #endif
+        }
         .sheet(isPresented: $viewModel.isIngredientsDrawerShowing) {
             ingredientsDrawer
         }
@@ -145,12 +160,12 @@ struct ChefView: View {
             ContentUnavailableView(
                 "No Directions",
                 systemImage: "list.number",
-                description: Text("This recipe doesn't have any directions to cook from.")
+                description: Text("No directions in this recipe.")
             )
         } else {
             HStack(spacing: 0) {
                 if !isCompact {
-                    ChefViewIngredientsPane(viewModel: viewModel)
+                    ChefViewIngredientsPane(viewModel: viewModel, scrollSync: .publishes)
                         .containerRelativeFrame(.horizontal) { length, _ in
                             min(max(length / 3, 260), 460)
                         }
@@ -177,7 +192,9 @@ struct ChefView: View {
 
     private var ingredientsDrawer: some View {
         NavigationStack {
-            ChefViewIngredientsPane(viewModel: viewModel, showsTitle: false)
+            // Publishes too: at compact width the drawer is the only ingredient list there is, so
+            // it's what a connected TV has to follow.
+            ChefViewIngredientsPane(viewModel: viewModel, showsTitle: false, scrollSync: .publishes)
                 .dynamicTypeSize(textSize)
                 .background(Color.recipeDetailPageBackgroundA)
                 .foregroundStyle(Color.recipeDetailBoxForeground)

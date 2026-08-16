@@ -64,6 +64,12 @@ struct ShoppingListFreeformView: View {
         .onDisappear {
             viewModel.flush()
         }
+        // Ingredients added from a recipe elsewhere in the app land in the database, not in this
+        // view model's in-memory text — pick them up rather than saving over them.
+        .onChange(of: ShoppingListChangeNotifier.shared.changeCount) {
+            guard ShoppingListChangeNotifier.shared.isMostRecentChange(forListId: viewModel.listId) else { return }
+            Task { await viewModel.reloadAfterExternalChange() }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Picker("View", selection: $showsPreview) {

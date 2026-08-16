@@ -18,10 +18,17 @@ struct SaltyApp: App {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
 
-    /// Chef View cooking progress, owned at app level so it's shared by every scene that can show a
-    /// recipe — leave Chef View, glance at something else, come back to the same current step.
-    /// In-memory only; see ChefSessionState.
-    @State private var chefSessionStore = ChefViewSessionStore()
+    /// Chef View cooking progress, shared by every scene that can show a recipe — leave Chef View,
+    /// glance at something else, come back to the same current step. In-memory only; see
+    /// ChefSessionState. The shared instance (not a fresh one) so the iOS external-display scene,
+    /// which lives outside this environment, observes the same progress.
+    @State private var chefSessionStore = ChefViewSessionStore.shared
+
+    // No app delegate: the external-display (AirPlay / HDMI) scene — the one scene role SwiftUI
+    // can't declare — is claimed declaratively by the UIApplicationSceneManifest in Info.plist,
+    // which names ExternalDisplaySceneDelegate for it. Verified: with the manifest present, UIKit
+    // never consults a delegate's configurationForConnecting for that role, so an adaptor here
+    // would be dead code.
 
     /// The live database writer, kept so we can checkpoint its WAL when the app quiesces (so SaltyKMP,
     /// syncing the linked folder, sees the latest data in the main `.sqlite`). Nil in non-live contexts.
@@ -34,6 +41,11 @@ struct SaltyApp: App {
 
         var createdDatabase: (any DatabaseWriter)? = nil
         if context == .live {
+#if os(macOS)
+            // One-shot, and the last time the login-keychain authorization dialog can appear: everything
+            // afterwards uses the data-protection keychain. See migrateLegacyMacKeychainIfNeeded().
+            KeychainHelper.shared.migrateLegacyMacKeychainIfNeeded()
+#endif
             do {
                 // Begin (and hold) security-scoped access to the database location before opening it.
                 FileManager.beginAccessingDatabaseLocation()

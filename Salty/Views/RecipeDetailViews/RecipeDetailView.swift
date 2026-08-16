@@ -377,23 +377,81 @@ private struct IngredientsSection: View {
                     .padding(.top, 8)
                     .font(.caption)
             }
-            Button("Scale…", systemImage: "slider.horizontal.3") {
-                viewModel.isIngredientScalePopoverShowing = true
+            IngredientsSectionActions(viewModel: viewModel, recipe: recipe)
+                .padding(.bottom, 4)
+                .padding(.top, 16)
+        }
+        .frame(minWidth: 85, maxWidth: 300)
+        .modifier(RecipeSectionBoxModifier())
+    }
+}
+
+/// The ingredients box footer. Side by side when the box has the width for it, stacked when it
+/// doesn't -- the box narrows to 85pt, where two labels on one line would truncate to nothing.
+private struct IngredientsSectionActions: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    let recipe: Recipe
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                IngredientsScaleButton(viewModel: viewModel)
+                IngredientsAddToListButton(viewModel: viewModel, recipe: recipe)
             }
+            VStack(alignment: .leading, spacing: 8) {
+                IngredientsScaleButton(viewModel: viewModel)
+                IngredientsAddToListButton(viewModel: viewModel, recipe: recipe)
+            }
+        }
+    }
+}
+
+private struct IngredientsScaleButton: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+
+    var body: some View {
+        Button("Scale…", systemImage: "slider.horizontal.3") {
+            viewModel.isIngredientScalePopoverShowing = true
+        }
+        .modifier(IngredientsActionButtonModifier())
+        .popover(isPresented: $viewModel.isIngredientScalePopoverShowing) {
+            IngredientScalePopoverContent(viewModel: viewModel)
+        }
+    }
+}
+
+private struct IngredientsAddToListButton: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    let recipe: Recipe
+    @State private var isAddToShoppingListShowing = false
+
+    var body: some View {
+        Button("Add to List…", systemImage: "cart.badge.plus") {
+            isAddToShoppingListShowing = true
+        }
+        .modifier(IngredientsActionButtonModifier())
+        .sheet(isPresented: $isAddToShoppingListShowing) {
+            AddToShoppingListView(
+                recipe: recipe,
+                // Whatever the ingredients list is currently showing is what gets added, so a
+                // recipe being read at half scale adds half-scale amounts.
+                scaleFactor: viewModel.ingredientScaleFactor,
+                scaleLabel: viewModel.isIngredientScaleActive ? viewModel.ingredientScalePercentLabel : nil
+            )
+        }
+    }
+}
+
+/// Shared look for the small actions under the ingredients list.
+private struct IngredientsActionButtonModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
             #if os(macOS)
             .buttonStyle(.link)
             #else
             .buttonStyle(.plain)
             #endif
             .controlSize(.small)
-            .padding(.bottom, 4)
-            .padding(.top, 16)
-            .popover(isPresented: $viewModel.isIngredientScalePopoverShowing) {
-                IngredientScalePopoverContent(viewModel: viewModel)
-            }
-        }
-        .frame(minWidth: 85, maxWidth: 300)
-        .modifier(RecipeSectionBoxModifier())
     }
 }
 

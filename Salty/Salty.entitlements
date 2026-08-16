@@ -19,5 +19,20 @@
 	<true/>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
+
+	<!--
+	  Keychain Sharing, declaring this app's own default access group. Not about sharing: on macOS,
+	  the data-protection keychain KeychainHelper targets is only available to a binary carrying an
+	  application-identifier entitlement, which signing only issues when a capability like this one
+	  requires a provisioning profile. Without it every SecItemAdd fails with errSecMissingEntitlement
+	  and the app falls back to the login keychain, whose per-binary ACLs prompt on every rebuild.
+
+	  The group resolves per configuration (…salty-dev in Debug, …salty in Release), so Debug and
+	  Release keep separate credentials -- deliberate; a hard-coded group would merge them again.
+	-->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(CFBundleIdentifier)</string>
+	</array>
 </dict>
 </plist>

@@ -16,6 +16,10 @@ struct ChefViewFocusStepView: View {
     /// Enough travel that scrolling a long step's text doesn't read as "next".
     private let swipeThreshold: CGFloat = 60
 
+    /// 1 everywhere but an external display, where the text is drawn several times the size — and a
+    /// comfortable line length has to grow with it, or a TV shows four huge words per line.
+    @Environment(\.chefFontScale) private var fontScale
+
     var body: some View {
         ZStack {
             stepContent
@@ -64,7 +68,7 @@ struct ChefViewFocusStepView: View {
                 }
                 .padding(.horizontal, 32)
                 .padding(.vertical, 28)
-                .frame(maxWidth: 900, alignment: .leading)
+                .frame(maxWidth: 900 * fontScale, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
             .id(step.id)
@@ -72,7 +76,7 @@ struct ChefViewFocusStepView: View {
             ContentUnavailableView(
                 "No Steps",
                 systemImage: "list.number",
-                description: Text("This recipe doesn't have any directions to cook from.")
+                description: Text("No directions in this recipe.")
             )
         }
     }

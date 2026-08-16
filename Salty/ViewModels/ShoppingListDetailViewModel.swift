@@ -69,6 +69,28 @@ class ShoppingListDetailViewModel {
         }
     }
 
+    /// Re-reads the checklist after the row was written by something other than this view model --
+    /// today that's a recipe's "Add to Shopping List" sheet, which can land while this list is open
+    /// in another window.
+    ///
+    /// A save still sitting in the debounce is dropped rather than flushed: the external write
+    /// already added to what was stored, so replaying this older array over it would erase the
+    /// additions. The cost is at most the last fraction of a second of typing, which beats silently
+    /// losing everything that was just added.
+    func reloadAfterExternalChange() async {
+        guard isLoaded else { return }
+        saveTask?.cancel()
+        saveTask = nil
+        do {
+            let list = try await database.read { [listId] db in
+                try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
+            }
+            items = list?.contentsForList ?? []
+        } catch {
+            logger.error("Error reloading shopping list \(self.listId): \(error)")
+        }
+    }
+
     // MARK: - Item operations (each persists)
 
     /// Inserts a new empty item after the given one (or at the end) and returns its id for focusing.

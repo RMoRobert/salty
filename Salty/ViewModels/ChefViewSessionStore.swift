@@ -4,10 +4,14 @@
 //
 //  App-level home for Chef View cooking progress, keyed by recipe id.
 //
-//  Owned as `@State` by SaltyApp and injected with `.environment`, so leaving Chef View to glance
-//  at another recipe (or, on macOS, opening the same recipe in a second Chef View window) comes
-//  back to the same checked ingredients and current step. Progress lives for the app session and
-//  no longer: see the note in ChefSessionState.
+//  A single shared instance, held by SaltyApp as `@State` and injected with `.environment`, so
+//  leaving Chef View to glance at another recipe (or, on macOS, opening the same recipe in a second
+//  Chef View window) comes back to the same checked ingredients and current step. Progress lives
+//  for the app session and no longer: see the note in ChefSessionState.
+//
+//  `shared` exists because the iOS external-display scene (ExternalDisplaySceneDelegate) is created
+//  by UIKit outside the SwiftUI environment, and its Chef View must see the SAME progress the
+//  phone's does — that sharing is the whole mechanism by which the TV follows along.
 //
 
 import Foundation
@@ -15,6 +19,8 @@ import Foundation
 @Observable
 @MainActor
 final class ChefViewSessionStore {
+    static let shared = ChefViewSessionStore()
+
     private var sessions: [String: ChefSessionState] = [:]
 
     /// Current progress for a recipe — an empty session for one that hasn't been cooked yet.

@@ -99,10 +99,10 @@ private struct ChefViewStepRow: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
         }
-        // The current step is a size up and full contrast; finished steps dim but stay legible,
-        // and steps still to come read normally — nothing here is ever hidden.
+        // The current step is a size up and sits on its own card; every other step — done or still
+        // to come — reads at full contrast, since a dimmed step is exactly the one being squinted
+        // at from across the kitchen. Completion is said with the checkmark instead.
         .chefFont(isCurrent ? .title2 : .title3)
-        .opacity(isCompleted && !isCurrent ? 0.4 : 1)
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .background {
