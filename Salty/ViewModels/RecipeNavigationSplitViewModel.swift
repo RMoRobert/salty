@@ -368,6 +368,18 @@ class RecipeNavigationSplitViewModel {
         RecipeLastPreparedWriter.localNoon(on: day)
     }
 
+    /// Heading for the "Last Prepared Date" menus: the current value for [ids]. Read from the
+    /// already-loaded list projection rather than the database, so opening a menu costs nothing.
+    func lastPreparedSummary(forRecipeIds ids: [String]) -> String {
+        let wanted = Set(ids)
+        return LastPreparedSummary.text(for: recipes.filter { wanted.contains($0.id) }.map(\.lastPrepared))
+    }
+
+    /// The same heading for whatever is currently selected — what the menu bar's copy shows.
+    var lastPreparedSummaryForSelection: String {
+        lastPreparedSummary(forRecipeIds: Array(selectedRecipeIDs))
+    }
+
     func recipeToEdit(recipeId: String?) -> Recipe? {
         guard let recipeId = recipeId else { return nil }
 

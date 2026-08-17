@@ -18,7 +18,7 @@ public extension UTType {
 
 extension SaltyRecipeExport: Transferable {
     public static var transferRepresentation: some TransferRepresentation {
-        // A real .saltyRecipe FILE is the representation that AirDrops cleanly and lets the receiving
+        // A real .saltyRecipe file is the representation that AirDrops cleanly and lets the receiving
         // device "Open in Salty" (the app registers this UTType in Info.plist). A FileRepresentation is
         // far more reliable for this than CodableRepresentation, which historically failed to populate
         // some share destinations. Plain text is kept as a fallback for Mail/Messages to recipients

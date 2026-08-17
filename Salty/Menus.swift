@@ -41,6 +41,10 @@ class SheetStateTracker {
 class SelectionStateTracker {
     var hasRecipeSelected = false
     var selectedRecipeCount = 0
+    /// Heading for the menu bar's "Last Prepared Date" menu. Computed by the view (which holds the
+    /// recipe list) and pushed here, since Commands can't reach the view model. Re-posted when the
+    /// value changes as well as when the selection does, so marking a recipe made updates the menu.
+    var lastPreparedSummary = "Last Prepared"
 
     init() {
         NotificationCenter.default.addObserver(
@@ -51,10 +55,12 @@ class SelectionStateTracker {
             // Extract the Sendable values before hopping; Notification itself isn't Sendable.
             let hasSelected = notification.userInfo?["hasSelected"] as? Bool
             let count = notification.userInfo?["count"] as? Int
+            let summary = notification.userInfo?["lastPreparedSummary"] as? String
             // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
             MainActor.assumeIsolated {
                 if let hasSelected { self.hasRecipeSelected = hasSelected }
                 if let count { self.selectedRecipeCount = count }
+                if let summary { self.lastPreparedSummary = summary }
             }
         }
     }
@@ -218,19 +224,22 @@ struct Menus: Commands {
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            .keyboardShortcut(.return)
-           // Mirrors the recipe context menu, item for item. The menu bar carries it because a
-           // contextual menu shouldn't be the only route to a command — and unlike right-clicking a
-           // row, this one follows the whole selection. Disabled (not hidden) without one, per HIG.
-           Menu("Last Made") {
-               Button("Made Today") {
-                   NotificationCenter.default.post(name: .markSelectedRecipesMadeToday, object: nil)
-               }
-               Button("Set Date…") {
-                   NotificationCenter.default.post(name: .setSelectedRecipesLastMadeDate, object: nil)
-               }
-               Divider()
-               Button("Clear") {
-                   NotificationCenter.default.post(name: .clearSelectedRecipesLastMade, object: nil)
+           // Mirrors the recipe context menu, item for item — same titles, same order, same section
+           // heading showing the current value. The menu bar carries it because a contextual menu
+           // shouldn't be the only route to a command; unlike right-clicking a row, this one follows
+           // the whole selection. Disabled (not hidden) without one, per HIG.
+           Menu("Last Prepared Date") {
+               Section(selectionTracker.lastPreparedSummary) {
+                   Button("Set to Today") {
+                       NotificationCenter.default.post(name: .markSelectedRecipesMadeToday, object: nil)
+                   }
+                   Button("Set as Date…") {
+                       NotificationCenter.default.post(name: .setSelectedRecipesLastMadeDate, object: nil)
+                   }
+                   Divider()
+                   Button("Clear") {
+                       NotificationCenter.default.post(name: .clearSelectedRecipesLastMade, object: nil)
+                   }
                }
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
