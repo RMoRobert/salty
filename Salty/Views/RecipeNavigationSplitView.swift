@@ -1512,7 +1512,7 @@ private struct RecipeInfoInspectorView: View {
                 Text(recipe.lastModifiedDate.formatted(date: .abbreviated, time: .shortened))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("Last Made")
+                Text("Last Prepared")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 // Date only since we don't care about time resolution (and "set as day" gets local noon so not always exact)
