@@ -56,7 +56,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                             for categoryName in uniqueCategories {
                                 // Reuses an existing category whose name differs only in case or
                                 // spacing, rather than creating a near-duplicate row.
-                                guard let categoryId = try LibraryItemResolver.resolveId(kind: .category, name: categoryName, in: db) else {
+                                guard let categoryId = try LibraryClassifierResolver.resolveId(kind: .category, name: categoryName, in: db) else {
                                     continue
                                 }
 
@@ -77,7 +77,7 @@ struct MacGourmetImportHelper: RecipeFileImporterProtocol {
                         
                         // Set course if present
                         if let courseName = mgRecipe.courseName, !courseName.isEmpty, courseName != "--" {
-                            if let courseId = try LibraryItemResolver.resolveId(kind: .course, name: courseName, in: db) {
+                            if let courseId = try LibraryClassifierResolver.resolveId(kind: .course, name: courseName, in: db) {
                                 // Set the recipe's courseId
                                 recipe.courseId = courseId
                                 try Recipe.update(recipe).execute(db)

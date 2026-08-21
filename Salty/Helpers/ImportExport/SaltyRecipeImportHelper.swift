@@ -80,7 +80,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             for categoryName in uniqueCategories {
                                 // Reuses an existing category whose name differs only in case or
                                 // spacing, rather than creating a near-duplicate row.
-                                guard let categoryId = try LibraryItemResolver.resolveId(kind: .category, name: categoryName, in: db) else {
+                                guard let categoryId = try LibraryClassifierResolver.resolveId(kind: .category, name: categoryName, in: db) else {
                                     continue
                                 }
 
@@ -105,7 +105,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             let uniqueTags = Set(tags)
                             
                             for tagName in uniqueTags {
-                                guard let tagId = try LibraryItemResolver.resolveId(kind: .tag, name: tagName, in: db) else {
+                                guard let tagId = try LibraryClassifierResolver.resolveId(kind: .tag, name: tagName, in: db) else {
                                     continue
                                 }
 
@@ -124,7 +124,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                         
                         // Set course if present
                         if let courseName = saltyRecipe.course, !courseName.isEmpty {
-                            if let courseId = try LibraryItemResolver.resolveId(kind: .course, name: courseName, in: db) {
+                            if let courseId = try LibraryClassifierResolver.resolveId(kind: .course, name: courseName, in: db) {
                                 // Set the recipe's courseId
                                 recipe.courseId = courseId
                                 try Recipe.update(recipe).execute(db)

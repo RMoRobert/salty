@@ -294,9 +294,9 @@ struct LibraryDuplicateFinderTests {
 
     @Test func groupsNamesIgnoringCaseAndSurroundingWhitespace() {
         let groups = LibraryDuplicateFinder.groups(kind: .category, items: [
-            LibraryDuplicateItem(id: "c1", name: "Breads", recipeCount: 4),
-            LibraryDuplicateItem(id: "c2", name: " breads ", recipeCount: 1),
-            LibraryDuplicateItem(id: "c3", name: "Soups", recipeCount: 2),
+            LibraryClassifierItem(id: "c1", name: "Breads", recipeCount: 4),
+            LibraryClassifierItem(id: "c2", name: " breads ", recipeCount: 1),
+            LibraryClassifierItem(id: "c3", name: "Soups", recipeCount: 2),
         ])
 
         #expect(groups.count == 1)
@@ -306,8 +306,8 @@ struct LibraryDuplicateFinderTests {
 
     @Test func collapsesInternalWhitespace() {
         let groups = LibraryDuplicateFinder.groups(kind: .course, items: [
-            LibraryDuplicateItem(id: "co1", name: "Side Dish", recipeCount: 3),
-            LibraryDuplicateItem(id: "co2", name: "Side  dish", recipeCount: 1),
+            LibraryClassifierItem(id: "co1", name: "Side Dish", recipeCount: 3),
+            LibraryClassifierItem(id: "co2", name: "Side  dish", recipeCount: 1),
         ])
 
         #expect(groups.count == 1)
@@ -316,9 +316,9 @@ struct LibraryDuplicateFinderTests {
 
     @Test func survivorIsTheMostUsedRow() {
         let groups = LibraryDuplicateFinder.groups(kind: .tag, items: [
-            LibraryDuplicateItem(id: "t9", name: "vegan", recipeCount: 1),
-            LibraryDuplicateItem(id: "t1", name: "Vegan", recipeCount: 7),
-            LibraryDuplicateItem(id: "t5", name: "VEGAN", recipeCount: 3),
+            LibraryClassifierItem(id: "t9", name: "vegan", recipeCount: 1),
+            LibraryClassifierItem(id: "t1", name: "Vegan", recipeCount: 7),
+            LibraryClassifierItem(id: "t5", name: "VEGAN", recipeCount: 3),
         ])
 
         #expect(groups.first?.survivor.id == "t1")
@@ -330,8 +330,8 @@ struct LibraryDuplicateFinderTests {
     @Test func tiesGoToTheOldestRow() {
         // UUIDv7 ids sort by creation time, so the smallest id is the earliest-created row.
         let groups = LibraryDuplicateFinder.groups(kind: .tag, items: [
-            LibraryDuplicateItem(id: "b-newer", name: "quick", recipeCount: 2),
-            LibraryDuplicateItem(id: "a-older", name: "Quick", recipeCount: 2),
+            LibraryClassifierItem(id: "b-newer", name: "quick", recipeCount: 2),
+            LibraryClassifierItem(id: "a-older", name: "Quick", recipeCount: 2),
         ])
 
         #expect(groups.first?.survivor.id == "a-older")
@@ -340,8 +340,8 @@ struct LibraryDuplicateFinderTests {
     @Test func skipsBlankNames() {
         // Two unnamed rows aren't evidence of the same thing; merging them would be a guess.
         let groups = LibraryDuplicateFinder.groups(kind: .category, items: [
-            LibraryDuplicateItem(id: "c1", name: "", recipeCount: 1),
-            LibraryDuplicateItem(id: "c2", name: "   ", recipeCount: 2),
+            LibraryClassifierItem(id: "c1", name: "", recipeCount: 1),
+            LibraryClassifierItem(id: "c2", name: "   ", recipeCount: 2),
         ])
 
         #expect(groups.isEmpty)
@@ -349,8 +349,8 @@ struct LibraryDuplicateFinderTests {
 
     @Test func uniqueNamesProduceNoGroups() {
         let groups = LibraryDuplicateFinder.groups(kind: .category, items: [
-            LibraryDuplicateItem(id: "c1", name: "Breads", recipeCount: 1),
-            LibraryDuplicateItem(id: "c2", name: "Soups", recipeCount: 1),
+            LibraryClassifierItem(id: "c1", name: "Breads", recipeCount: 1),
+            LibraryClassifierItem(id: "c2", name: "Soups", recipeCount: 1),
         ])
 
         #expect(groups.isEmpty)
@@ -360,5 +360,36 @@ struct LibraryDuplicateFinderTests {
         #expect(LibraryDuplicateFinder.normalizedName("  Main   Dish  ") == "main dish")
         #expect(LibraryDuplicateFinder.normalizedName("\tSNACK\n") == "snack")
         #expect(LibraryDuplicateFinder.normalizedName("   ").isEmpty)
+    }
+
+    // MARK: - Ranking (the editor's merge sheet opens on the first row)
+
+    @Test func rankingPutsTheMostUsedRowFirstRegardlessOfName() {
+        // Unlike `groups`, these names have nothing in common -- this is the hand-picked merge.
+        let ranked = LibraryDuplicateFinder.ranked([
+            LibraryClassifierItem(id: "t3", name: "speedy", recipeCount: 1),
+            LibraryClassifierItem(id: "t1", name: "quick", recipeCount: 7),
+            LibraryClassifierItem(id: "t2", name: "fast", recipeCount: 3),
+        ])
+
+        #expect(ranked.map(\.id) == ["t1", "t2", "t3"])
+    }
+
+    @Test func rankingTiesGoToTheOldestRow() {
+        let ranked = LibraryDuplicateFinder.ranked([
+            LibraryClassifierItem(id: "b-newer", name: "Sweets", recipeCount: 2),
+            LibraryClassifierItem(id: "a-older", name: "Desserts", recipeCount: 2),
+        ])
+
+        #expect(ranked.first?.id == "a-older")
+    }
+
+    @Test func rankingByIdIgnoresRecipeCounts() {
+        let ranked = LibraryDuplicateFinder.ranked([
+            LibraryClassifierItem(id: "b", name: "Sweets", recipeCount: 9),
+            LibraryClassifierItem(id: "a", name: "Desserts", recipeCount: 1),
+        ], rule: .oldestId)
+
+        #expect(ranked.map(\.id) == ["a", "b"])
     }
 }

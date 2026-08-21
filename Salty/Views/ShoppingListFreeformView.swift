@@ -64,10 +64,14 @@ struct ShoppingListFreeformView: View {
         .onDisappear {
             viewModel.flush()
         }
-        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, or a sync
-        // download) write to database, not in the in-memory text. Pick them up rather than
-        // saving over them.
+        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, a sync
+        // download, or this same list being edited in another window) go to the database, not to the
+        // in-memory text. Pick them up rather than saving over them.
         .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
+            // Our own saves announce themselves too, for the sake of the other windows; reloading
+            // one here would only interrupt whoever is typing.
+            guard !ShoppingListChangeNotifier.shared.isOwnChange(listId: viewModel.listId,
+                                                                 source: viewModel.editorToken) else { return }
             Task { await viewModel.reloadAfterExternalChange() }
         }
         .toolbar {

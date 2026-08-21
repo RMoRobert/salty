@@ -64,7 +64,7 @@ struct CroutonImportHelper: RecipeFileImporterProtocol {
                         for tagName in Set(tags) {
                             // Reuses an existing tag whose name differs only in case or spacing,
                             // rather than creating a near-duplicate row.
-                            guard let tagId = try LibraryItemResolver.resolveId(kind: .tag, name: tagName, in: db) else {
+                            guard let tagId = try LibraryClassifierResolver.resolveId(kind: .tag, name: tagName, in: db) else {
                                 continue
                             }
 

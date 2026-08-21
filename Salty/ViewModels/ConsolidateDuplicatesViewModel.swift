@@ -35,8 +35,8 @@ final class ConsolidateDuplicatesViewModel {
 
     // MARK: - Derived state
 
-    var groupsByKind: [(kind: LibraryItemKind, groups: [LibraryDuplicateGroup])] {
-        LibraryItemKind.allCases.compactMap { kind in
+    var groupsByKind: [(kind: LibraryClassifier, groups: [LibraryDuplicateGroup])] {
+        LibraryClassifier.allCases.compactMap { kind in
             let matching = groups.filter { $0.kind == kind }
             return matching.isEmpty ? nil : (kind, matching)
         }

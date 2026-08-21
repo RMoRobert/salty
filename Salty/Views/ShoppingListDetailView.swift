@@ -111,10 +111,14 @@ struct ShoppingListDetailView: View {
             viewModel.removeEmptyItems()
             viewModel.flush()
         }
-        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet or a sync
-        // download) end up in in the database, not in the in-memory items. Pick them up rather than
-        // saving over them.
+        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, a sync
+        // download, or this same list being edited in another window) end up in the database, not in
+        // the in-memory items. Pick them up rather than saving over them.
         .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
+            // Our own saves announce themselves too, for the sake of the other windows; reloading
+            // one here would only interrupt whoever is typing.
+            guard !ShoppingListChangeNotifier.shared.isOwnChange(listId: viewModel.listId,
+                                                                 source: viewModel.editorToken) else { return }
             Task { await viewModel.reloadAfterExternalChange() }
         }
         // Remove rows user never typed into (simulating Reminders app behavior, better UX)

@@ -1126,6 +1126,7 @@ private struct RecipeDetailColumnView: View {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
     @Binding var showRecipeDetailOnly: Bool
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    @Environment(\.openWindow) private var openWindow
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -1153,6 +1154,22 @@ private struct RecipeDetailColumnView: View {
                 #if os(macOS)
                 .navigationSubtitle(list.isFreeform ? "Freeform List" : "Checklist")
                 #endif
+                // Moves this list into a window of its own, which is the only way to have it and a
+                // recipe on screen at once (the shopping lists take over this column). Declared here
+                // rather than inside the two editors so both kinds of list offer it, and so the same
+                // editors *in* that window don't offer to re-open where they already are.
+                .toolbar {
+                    if MultiWindowSupport.isSupported {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button("Open in New Window", systemImage: "macwindow") {
+                                openWindow(id: "shopping-list-window", value: listId)
+                            }
+                            #if os(macOS)
+                            .help("Open this list in its own window")
+                            #endif
+                        }
+                    }
+                }
             } else {
                 ContentUnavailableView("No List Selected", systemImage: "checklist")
             }
@@ -1280,30 +1297,30 @@ private struct RootPresentationsModifier: ViewModifier {
         .sheet(isPresented: $showingEditLibCategoriesSheet) {
             #if os(iOS)
             NavigationStack {
-                LibraryCategoriesEditView()
+                LibraryClassifiersEditView(classifier: .category)
             }
             #else
-            LibraryCategoriesEditView()
+            LibraryClassifiersEditView(classifier: .category)
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }
         .sheet(isPresented: $showingEditLibTagsSheet) {
             #if os(iOS)
             NavigationStack {
-                LibraryTagsEditView()
+                LibraryClassifiersEditView(classifier: .tag)
             }
             #else
-            LibraryTagsEditView()
+            LibraryClassifiersEditView(classifier: .tag)
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }
         .sheet(isPresented: $showingEditLibCoursesSheet) {
             #if os(iOS)
             NavigationStack {
-                LibraryCoursesEditView()
+                LibraryClassifiersEditView(classifier: .course)
             }
             #else
-            LibraryCoursesEditView()
+            LibraryClassifiersEditView(classifier: .course)
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }

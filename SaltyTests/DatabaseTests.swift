@@ -267,8 +267,8 @@ struct DatabaseIntegrationTests {
 
         @Test func deletingCourseSetsRecipeCourseIdToNull() async throws {
             // recipe.courseId is a `references("course", onDelete: .setNull)` FK, so deleting a course must
-            // clear courseId on its recipes (not delete them). LibraryCoursesEditViewModel relies on this;
-            // it additionally bumps lastModifiedDate so the change syncs, which is app logic, not tested here.
+            // clear courseId on its recipes (not delete them). LibraryClassifierEditor.delete relies on this;
+            // it additionally bumps lastModifiedDate so the change syncs (see LibraryClassifierEditorTests).
             let db = try makeTestDatabase()
 
             try await db.write { db in
@@ -874,7 +874,7 @@ struct DatabaseIntegrationTests {
 
     // MARK: - Resolving library items by name (the import path)
 
-    /// `LibraryItemResolver` is what keeps an import from creating the duplicates the Consolidate
+    /// `LibraryClassifierResolver` is what keeps an import from creating the duplicates the Consolidate
     /// command would then have to clean up: it matches names the way the editors do rather than
     /// with the exact, case-sensitive comparison the importers used to make inline.
     @Suite struct LibraryItemResolution {
@@ -887,9 +887,9 @@ struct DatabaseIntegrationTests {
 
             let resolved = try await db.write { database in
                 try [
-                    LibraryItemResolver.resolveId(kind: .category, name: "zzz slow cooker", in: database),
-                    LibraryItemResolver.resolveId(kind: .category, name: "  Zzz Slow Cooker  ", in: database),
-                    LibraryItemResolver.resolveId(kind: .category, name: "Zzz  Slow  Cooker", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .category, name: "zzz slow cooker", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .category, name: "  Zzz Slow Cooker  ", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .category, name: "Zzz  Slow  Cooker", in: database),
                 ]
             }
 
@@ -903,8 +903,8 @@ struct DatabaseIntegrationTests {
         @Test func createsOneRowForANewNameAndReusesItAfterwards() async throws {
             let db = try makeTestDatabase()
 
-            let first = try await db.write { try LibraryItemResolver.resolveId(kind: .tag, name: " Weeknight ", in: $0) }
-            let second = try await db.write { try LibraryItemResolver.resolveId(kind: .tag, name: "WEEKNIGHT", in: $0) }
+            let first = try await db.write { try LibraryClassifierResolver.resolveId(kind: .tag, name: " Weeknight ", in: $0) }
+            let second = try await db.write { try LibraryClassifierResolver.resolveId(kind: .tag, name: "WEEKNIGHT", in: $0) }
 
             #expect(first != nil)
             #expect(first == second)
@@ -921,8 +921,8 @@ struct DatabaseIntegrationTests {
 
             let resolved = try await db.write { database in
                 try [
-                    LibraryItemResolver.resolveId(kind: .course, name: "", in: database),
-                    LibraryItemResolver.resolveId(kind: .course, name: "   \n", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .course, name: "", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .course, name: "   \n", in: database),
                 ]
             }
 
@@ -937,7 +937,7 @@ struct DatabaseIntegrationTests {
             let db = try makeTestDatabase()
             try await db.write { database in
                 for name in ["Zzz Grill", "zzz grill", " ZZZ  GRILL "] {
-                    _ = try LibraryItemResolver.resolveId(kind: .category, name: name, in: database)
+                    _ = try LibraryClassifierResolver.resolveId(kind: .category, name: name, in: database)
                 }
             }
 

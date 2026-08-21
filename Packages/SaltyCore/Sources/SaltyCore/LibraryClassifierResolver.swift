@@ -1,5 +1,5 @@
 //
-//  LibraryItemResolver.swift
+//  LibraryClassifierResolver.swift
 //  Salty
 //
 //  One place for "give me the category/course/tag called X, creating it if it doesn't exist yet".
@@ -19,7 +19,7 @@ import Foundation
 import GRDB
 import UUIDV7
 
-public enum LibraryItemResolver {
+public enum LibraryClassifierResolver {
 
     /// The id of the row named `name`, creating the row if no existing one matches.
     ///
@@ -30,7 +30,7 @@ public enum LibraryItemResolver {
     /// A newly created row stores the *trimmed* name (its capitalization is kept as given) and gets a
     /// UUIDv7 id, so it sorts by creation time like every other row the app writes -- which is what
     /// the merge's oldest-wins tie-break relies on.
-    public static func resolveId(kind: LibraryItemKind, name: String, in db: Database) throws -> String? {
+    public static func resolveId(kind: LibraryClassifier, name: String, in db: Database) throws -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -57,7 +57,7 @@ public enum LibraryItemResolver {
         return newId
     }
 
-    private static func tableName(_ kind: LibraryItemKind) -> String {
+    private static func tableName(_ kind: LibraryClassifier) -> String {
         switch kind {
         case .category: return "category"
         case .course: return "course"

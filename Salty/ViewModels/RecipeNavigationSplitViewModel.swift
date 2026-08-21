@@ -295,7 +295,7 @@ class RecipeNavigationSplitViewModel {
             let imageFilenames = try await database.read { db in
                 try Recipe
                     .select { $0.imageFilename }
-                    .where { idsToDelete.contains($0.id) }
+                    .where { $0.id.in(idsToDelete) }
                     .fetchAll(db)
             }
 
@@ -309,7 +309,7 @@ class RecipeNavigationSplitViewModel {
             // Now delete the recipes from the database
             try await database.write { db in
                 try Recipe
-                    .where { idsToDelete.contains($0.id) }
+                    .where { $0.id.in(idsToDelete) }
                     .delete()
                     .execute(db)
             }

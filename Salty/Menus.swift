@@ -163,10 +163,15 @@ struct Menus: Commands {
     @State private var selectionTracker = SelectionStateTracker()
     @State private var searchOptionsTracker = SearchOptionsTracker()
     @State private var syncService = SaltySyncService.shared
+    /// The lists behind File ▸ Open Shopping List in New Window. Commands can't reach a scene's view
+    /// model, so the menu does its own (tiny) fetch; see `ShoppingListsMenuModel`.
+    @State private var shoppingListsMenu = ShoppingListsMenuModel()
     /// Non-nil only while a window showing the recipe list is frontmost; see `SearchFieldFocusAction`.
     @FocusedValue(\.searchFieldFocusAction) private var focusSearchField
     /// Non-nil only while a window showing a recipe is frontmost; see `ChefViewOpenAction`.
     @FocusedValue(\.chefViewOpenAction) private var openChefView
+    /// Non-nil only while the web importer is frontmost; see `AddressFieldFocusAction`.
+    @FocusedValue(\.addressFieldFocusAction) private var focusAddressField
     @AppStorage("serverUse") private var serverUse = false
     
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
@@ -217,6 +222,20 @@ struct Menus: Commands {
                openWindow(id: "main-window")
            }
            .keyboardShortcut("n", modifiers: [.command, .shift])
+           // Safari's File ▸ Open Location, and in the same menu. No ellipsis: it moves focus to the
+           // address field rather than opening a dialog, exactly as Find does below.
+           //
+           // Disabled rather than hidden, and not by choice: `if focusAddressField != nil` around
+           // this item does compile, but the item then never appears at all. SwiftUI re-evaluates a
+           // command's *enabled* state when a `@FocusedValue` changes, but not the menu's structure
+           // — so the item is built once while the value is still nil and is never added back.
+           // Disabled is the HIG-preferred behaviour anyway, so this costs nothing but the looks.
+           Divider()
+           Button("Open Location") {
+               focusAddressField?()
+           }
+           .keyboardShortcut("l", modifiers: .command)
+           .disabled(focusAddressField == nil || sheetTracker.isAnySheetShown)
            #endif
            Divider()
            Button(selectionTracker.selectedRecipeCount <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
@@ -224,6 +243,21 @@ struct Menus: Commands {
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            .keyboardShortcut(.return)
+           // Opens any list in its own window without going near the sidebar — the point being to
+           // read a recipe and work on its shopping list side by side, which selecting Shopping Lists
+           // in the sidebar can't do (it replaces the recipe list). Named rather than acting on a
+           // selection for the same reason: the frontmost window is usually showing a recipe.
+           // Left out entirely where a second window is impossible (iPhone).
+           if MultiWindowSupport.isSupported {
+               Menu("Open Shopping List in New Window") {
+                   ForEach(shoppingListsMenu.shoppingLists) { list in
+                       Button(list.name) {
+                           openWindow(id: "shopping-list-window", value: list.id)
+                       }
+                   }
+               }
+               .disabled(shoppingListsMenu.shoppingLists.isEmpty)
+           }
            // Mirrors the recipe context menu, item for item — same titles, same order, same section
            // heading showing the current value. The menu bar carries it because a contextual menu
            // shouldn't be the only route to a command; unlike right-clicking a row, this one follows
@@ -358,18 +392,7 @@ struct Menus: Commands {
             }
             //Divider()
         }
-       #if os(macOS)
-       CommandGroup(before: .windowList) {
-           Button("Edit Categories") {
-               openWindow(id: "edit-categories-window")
-           }
-           Button("Edit Tags") {
-               openWindow(id: "edit-tags-window")
-           }
-           Button("Edit Courses") {
-               openWindow(id: "edit-courses-window")
-           }
-       }
-       #endif
+       // The classifier editors are single-instance `Window` scenes (SaltyApp.swift), and a Window
+       // scene adds its own item to the Window menu -- hand-rolled copies here would double them up.
   }
 }

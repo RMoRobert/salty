@@ -26,6 +26,10 @@ class ShoppingListFreeformViewModel {
     var text = ""
     var isLoaded = false
 
+    /// Identifies this editor to `ShoppingListChangeNotifier`, so the saves it announces reach every
+    /// other editor of this list and not itself. See `ShoppingListDetailViewModel.editorToken`.
+    let editorToken = UUID()
+
     @ObservationIgnored
     private var saveTask: Task<Void, Never>?
 
@@ -114,6 +118,7 @@ class ShoppingListFreeformViewModel {
         let content = text
         let id = listId
         let log = logger
+        let token = editorToken
         Task {
             do {
                 try await database.write { db in
@@ -124,6 +129,8 @@ class ShoppingListFreeformViewModel {
                         try ShoppingList.update(list).execute(db)
                     }
                 }
+                // The same list may be open in another window, holding its own copy of this text.
+                ShoppingListChangeNotifier.shared.noteEditorChange(listId: id, source: token)
             } catch {
                 log.error("Error saving shopping list \(id): \(error)")
             }

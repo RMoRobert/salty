@@ -81,7 +81,7 @@ struct CategoryEditView: View {
                 originalSelectedCategoryIDs.formIntersection(validIDs)
             }
             .sheet(isPresented: $showingEditLibraryCategoriesSheet) {
-                LibraryCategoriesEditView()
+                LibraryClassifiersEditView(classifier: .category)
             }
             .alert("New Category", isPresented: $showingNewCategoryAlert) {
                 TextField("Category Name", text: $newCategoryName)

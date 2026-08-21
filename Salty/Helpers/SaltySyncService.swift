@@ -470,7 +470,7 @@ class SaltySyncService {
             syncProgress.currentStep = "Downloading images..."
             try await syncImages()
 
-            // The server's own vocabulary can contain same-named rows; don't rebuild the local
+            // The server's own classifiers can contain same-named rows; don't rebuild the local
             // library with them. The next ordinary sync propagates the resulting deletions.
             syncProgress.currentStep = "Tidying categories, courses, and tags..."
             await consolidateDuplicateLibraryItems()
@@ -586,7 +586,7 @@ class SaltySyncService {
             }
 
             // Remove anything on the server that no longer exists locally (it was deleted from the
-            // source of truth). Recipes first, then vocab they may reference.
+            // source of truth). Recipes first, then classifiers they may reference.
             syncProgress.currentStep = "Removing stale server data..."
             let localRecipeIds = Set(localRecipes.map { $0.id })
             let orphanRecipeIds = serverRecipeIds.filter { !localRecipeIds.contains($0) }
@@ -979,7 +979,7 @@ class SaltySyncService {
         String(SyncWireDate.string(from: date).prefix(10))
     }
 
-    // MARK: - Conditional vocabulary deletes
+    // MARK: - Conditional classifier deletes
 
     /// Outcome of a conditional course/category/tag delete: a 409 means the row changed on the
     /// server after we fetched it, and carries the CURRENT row for the caller to download instead.
@@ -1141,7 +1141,7 @@ class SaltySyncService {
 
     /// Folds same-named courses/categories/tags into a single row at the end of a sync.
     ///
-    /// Vocabulary rows are reconciled by **id**, never by name (see `syncCoursesWithDeletions` and
+    /// Classifier rows are reconciled by **id**, never by name (see `syncCoursesWithDeletions` and
     /// its siblings), so two devices that each create "Vegan" -- or two installs that each ran the
     /// migration-0002 seed and got their own ids for "Breads", "Main", … -- end up with two rows
     /// that sync then replicates faithfully, forever. Nothing upstream can notice: to the server

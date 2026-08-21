@@ -14,6 +14,7 @@ import SaltyCore
 struct ShoppingListsListView: View {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
 
+    @Environment(\.openWindow) private var openWindow
     @State private var showingNameAlert = false
     @State private var nameListId: String?
     @State private var listName = ""
@@ -80,6 +81,12 @@ struct ShoppingListsListView: View {
                     if ids.count == 1, let list = viewModel.shoppingLists.first(where: { $0.id == ids.first }) {
                         listContextMenu(for: list)
                     } else if ids.count > 1 {
+                        if MultiWindowSupport.isSupported {
+                            Button("Open in New Windows", systemImage: "macwindow") {
+                                openInNewWindows(ids: ids)
+                            }
+                            Divider()
+                        }
                         Button("Delete…", systemImage: "trash", role: .destructive) {
                             confirmDelete(ids: ids)
                         }
@@ -145,6 +152,14 @@ struct ShoppingListsListView: View {
 
     @ViewBuilder
     private func listContextMenu(for list: ShoppingList) -> some View {
+        // Hidden rather than disabled where a second window can't exist at all (iPhone): a command
+        // that will never become available isn't one to leave greyed out.
+        if MultiWindowSupport.isSupported {
+            Button("Open in New Window", systemImage: "macwindow") {
+                openWindow(id: "shopping-list-window", value: list.id)
+            }
+            Divider()
+        }
         Button("Rename…", systemImage: "pencil") {
             beginRename(list)
         }
@@ -154,6 +169,14 @@ struct ShoppingListsListView: View {
         #if os(macOS)
         .keyboardShortcut(.delete, modifiers: [.command])
         #endif
+    }
+
+    /// Opens each selected list in its own window, in the order they're listed (so the windows stack
+    /// the way the rows read).
+    private func openInNewWindows(ids: Set<String>) {
+        for list in viewModel.shoppingLists where ids.contains(list.id) {
+            openWindow(id: "shopping-list-window", value: list.id)
+        }
     }
 
     private func create(isFreeform: Bool) {

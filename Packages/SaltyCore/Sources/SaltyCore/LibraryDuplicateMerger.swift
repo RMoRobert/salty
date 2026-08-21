@@ -42,7 +42,7 @@ public enum LibraryDuplicateMerger {
         in db: Database,
         rule: LibraryDuplicateFinder.SurvivorRule = .mostRecipes
     ) throws -> [LibraryDuplicateGroup] {
-        try LibraryItemKind.allCases.flatMap { kind in
+        try LibraryClassifier.allCases.flatMap { kind in
             LibraryDuplicateFinder.groups(kind: kind, items: try items(kind: kind, in: db), rule: rule)
         }
     }
@@ -59,7 +59,7 @@ public enum LibraryDuplicateMerger {
     }
 
     /// All rows of one kind with their recipe counts.
-    public static func items(kind: LibraryItemKind, in db: Database) throws -> [LibraryDuplicateItem] {
+    public static func items(kind: LibraryClassifier, in db: Database) throws -> [LibraryClassifierItem] {
         // COUNT(DISTINCT …) so a junction table that already contains a repeated (recipe, item) pair
         // doesn't inflate the count and skew which row is chosen as the survivor.
         let sql: String
@@ -87,7 +87,7 @@ public enum LibraryDuplicateMerger {
             let id: String = row["id"]
             let name: String = row["itemName"]
             let recipeCount: Int = row["recipeCount"]
-            return LibraryDuplicateItem(id: id, name: name, recipeCount: recipeCount)
+            return LibraryClassifierItem(id: id, name: name, recipeCount: recipeCount)
         }
     }
 
@@ -132,7 +132,7 @@ public enum LibraryDuplicateMerger {
 
     // MARK: - Private
 
-    private static func tableName(_ kind: LibraryItemKind) -> String {
+    private static func tableName(_ kind: LibraryClassifier) -> String {
         switch kind {
         case .category: return "category"
         case .course: return "course"
@@ -140,7 +140,7 @@ public enum LibraryDuplicateMerger {
         }
     }
 
-    private static func rowExists(kind: LibraryItemKind, id: String, in db: Database) throws -> Bool {
+    private static func rowExists(kind: LibraryClassifier, id: String, in db: Database) throws -> Bool {
         try Int.fetchOne(
             db,
             sql: #"SELECT 1 FROM "\#(tableName(kind))" WHERE "id" = ?"#,
@@ -151,7 +151,7 @@ public enum LibraryDuplicateMerger {
     /// Moves everything referencing `duplicateId` onto `survivorId`, then deletes the duplicate row.
     /// - Returns: the ids of the recipes that referenced the duplicate.
     private static func fold(
-        kind: LibraryItemKind,
+        kind: LibraryClassifier,
         duplicateId: String,
         into survivorId: String,
         in db: Database

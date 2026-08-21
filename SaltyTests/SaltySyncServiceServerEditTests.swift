@@ -8,7 +8,7 @@
 //  - Sync fires `ShoppingListChangeNotifier` for every list it writes or deletes locally, so an
 //    open checklist/freeform editor reloads instead of saving its stale in-memory copy back over
 //    the downloaded change.
-//  - Vocabulary deletes carry `If-Match` with the timestamp the delete decision was based on, and
+//  - Classifier deletes carry `If-Match` with the timestamp the delete decision was based on, and
 //    a 409 (future server: "the row changed after your fetch") downloads the current row instead
 //    of deleting. Today's server ignores the header, so behavior is unchanged until it doesn't.
 //  - The force re-sync-to-server paths mark every overwrite with `X-Salty-Force`, so a future
@@ -199,9 +199,9 @@ struct SaltySyncServiceServerEditTests {
         #expect(forced.isEmpty)
     }
 
-    // MARK: - Conditional vocabulary deletes
+    // MARK: - Conditional classifier deletes
 
-    @Test func vocabularyDeleteCarriesIfMatchTimestamp() async throws {
+    @Test func classifierDeleteCarriesIfMatchTimestamp() async throws {
         let database = try makeTestDatabase()
         let staleDate = Date().addingTimeInterval(-7200)
         let staleWire = SyncWireDate.string(from: staleDate)
@@ -232,7 +232,7 @@ struct SaltySyncServiceServerEditTests {
         #expect(localCount == 0)
     }
 
-    @Test func vocabularyDeleteConflictDownloadsCurrentRowInstead() async throws {
+    @Test func classifierDeleteConflictDownloadsCurrentRowInstead() async throws {
         let database = try makeTestDatabase()
         let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
         let currentWire = SyncWireDate.string(from: Date().addingTimeInterval(-10))
@@ -261,7 +261,7 @@ struct SaltySyncServiceServerEditTests {
 
     // MARK: - Force re-sync marks its overwrites
 
-    @Test func forceResyncToServerMarksEveryVocabularyWriteForced() async throws {
+    @Test func forceResyncToServerMarksEveryClassifierWriteForced() async throws {
         let database = try makeTestDatabase() // migration seeds give it local courses + categories
         SyncRouteStubURLProtocol.reset(routes: baseRoutes(lastSync: Date().addingTimeInterval(-3600)))
 
@@ -272,13 +272,13 @@ struct SaltySyncServiceServerEditTests {
             try await service.forceFullResyncToServer()
         }
 
-        let vocabWrites = SyncRouteStubURLProtocol.recorded.filter { req in
+        let classifierWrites = SyncRouteStubURLProtocol.recorded.filter { req in
             (req.method == "POST" || req.method == "PUT") &&
             (req.path.hasPrefix("/api/courses") || req.path.hasPrefix("/api/categories") || req.path.hasPrefix("/api/tags"))
         }
         // The migration seeds guarantee there was something to push.
-        #expect(!vocabWrites.isEmpty)
-        #expect(vocabWrites.allSatisfy { $0.headers[SaltySyncService.forceWriteHeader] == "1" })
+        #expect(!classifierWrites.isEmpty)
+        #expect(classifierWrites.allSatisfy { $0.headers[SaltySyncService.forceWriteHeader] == "1" })
     }
 }
 
@@ -304,5 +304,64 @@ struct ShoppingListChangeNotifierTests {
 
     @Test func unknownListReadsZero() {
         #expect(ShoppingListChangeNotifier.shared.changeCount(for: "never-touched-\(UUID().uuidString)") == 0)
+    }
+
+    /// A save announces itself so the *other* windows editing that list reload — the editor that made
+    /// it must be able to tell its own announcement apart, or it would reload mid-keystroke.
+    @Test func editorChangeIsOwnedOnlyByTheEditorThatMadeIt() {
+        let notifier = ShoppingListChangeNotifier.shared
+        let list = "notifier-owner-\(UUID().uuidString)"
+        let mine = UUID()
+        let theirs = UUID()
+
+        notifier.noteEditorChange(listId: list, source: mine)
+
+        #expect(notifier.changeCount(for: list) == 1)
+        #expect(notifier.isOwnChange(listId: list, source: mine))
+        #expect(!notifier.isOwnChange(listId: list, source: theirs))
+    }
+
+    /// Two windows on one list: whoever wrote last owns the change, and everyone else reloads.
+    @Test func latestEditorChangeTakesOverOwnership() {
+        let notifier = ShoppingListChangeNotifier.shared
+        let list = "notifier-handover-\(UUID().uuidString)"
+        let first = UUID()
+        let second = UUID()
+
+        notifier.noteEditorChange(listId: list, source: first)
+        notifier.noteEditorChange(listId: list, source: second)
+
+        #expect(notifier.changeCount(for: list) == 2)
+        #expect(notifier.isOwnChange(listId: list, source: second))
+        #expect(!notifier.isOwnChange(listId: list, source: first))
+    }
+
+    /// Sync and the "Add to Shopping List" sheet belong to no editor, so every open editor reloads —
+    /// including one that happened to write the list a moment earlier.
+    @Test func externalChangeBelongsToNoEditor() {
+        let notifier = ShoppingListChangeNotifier.shared
+        let list = "notifier-external-\(UUID().uuidString)"
+        let editor = UUID()
+
+        notifier.noteEditorChange(listId: list, source: editor)
+        notifier.noteExternalChange(listId: list)
+
+        #expect(notifier.changeCount(for: list) == 2)
+        #expect(!notifier.isOwnChange(listId: list, source: editor))
+    }
+
+    /// Ownership is per list for the same reason the counters are: one editor's save must not make
+    /// another list's pending change look like it was already handled.
+    @Test func ownershipIsPerList() {
+        let notifier = ShoppingListChangeNotifier.shared
+        let a = "notifier-own-a-\(UUID().uuidString)"
+        let b = "notifier-own-b-\(UUID().uuidString)"
+        let editor = UUID()
+
+        notifier.noteEditorChange(listId: a, source: editor)
+        notifier.noteExternalChange(listId: b)
+
+        #expect(notifier.isOwnChange(listId: a, source: editor))
+        #expect(!notifier.isOwnChange(listId: b, source: editor))
     }
 }

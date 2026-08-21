@@ -111,24 +111,16 @@ struct SaltyApp: App {
             Menus()
         }
         
-        // "Edit Categories" window
-        WindowGroup(id: "edit-categories-window") {
-            LibraryCategoriesEditView()
-                .frame(idealWidth: 250)
-                .navigationTitle("Categories Editor")
-        }
-        // "Edit Tags" window
-        WindowGroup(id: "edit-tags-window") {
-            LibraryTagsEditView()
-                .frame(idealWidth: 250)
-                .navigationTitle("Tags Editor")
-        }
-        // "Edit Courses" window
-        WindowGroup(id: "edit-courses-window") {
-            LibraryCoursesEditView()
-                .frame(idealWidth: 250)
-                .navigationTitle("Courses Editor")
-        }
+        // The three classifier editors (File ▸ Library; sheets on iOS). `Window` rather than
+        // `WindowGroup`: each is a single-instance editor of one library table, so a second copy of
+        // the same one is only ever a way to get two lists fighting over the same rows.
+        // (macOS only: iOS presents them as sheets from the sidebar's Library menu, and the commands
+        // that open these are themselves macOS-only -- see Menus.swift.)
+        #if os(macOS)
+        classifierEditorWindow(.category, id: "edit-categories-window")
+        classifierEditorWindow(.tag, id: "edit-tags-window")
+        classifierEditorWindow(.course, id: "edit-courses-window")
+        #endif
         // "Show Duplicate Recipes" window (File ▸ Library; a sheet on iOS)
         WindowGroup(id: "duplicate-recipes-window") {
             NavigationStack {
@@ -155,15 +147,44 @@ struct SaltyApp: App {
         // "Import from Web" window
         WindowGroup(id: "create-recipe-from-web-window") {
             CreateRecipeFromWebView()
-                .frame(idealWidth: 800)
+                .frame(idealWidth: 1200)
                 .navigationTitle("Import Recipe from Web")
         }
+        #if os(macOS)
+        // Wide enough that the browser pane clears the 500pt compact threshold, below which the
+        // address field drops out of the toolbar entirely. At the old 800 the split left each pane
+        // around 400, so the window opened collapsed every time.
+        .defaultSize(width: 1200, height: 800)
+        // Expanded rather than the default unified style: this window's toolbar carries a browser's
+        // worth of chrome -- nav buttons, an address field, and the two import actions -- and sharing
+        // one row with the traffic lights and the title left it starved for width. Expanded drops
+        // the title onto its own line and gives the toolbar the full window width beneath it.
+        .windowToolbarStyle(.expanded)
+        #endif
         // "Import from Image" window
         WindowGroup(id: "create-recipe-from-image-window") {
             CreateRecipeFromImageView()
                 .frame(idealWidth: 800)
                 .navigationTitle("Import Recipe from Image")
         }
+
+        // One shopping list in a window of its own, so it can be edited beside a recipe instead of
+        // replacing the recipe list in the main window. `for: String.self` — the list id — gives each
+        // list its own window, and makes re-opening a list that's already open bring that window
+        // forward rather than stacking a duplicate onto the same rows.
+        //
+        // Not macOS-only: iPad supports multiple scenes as well (Info.plist opts in), which is where
+        // Split View and iPadOS 26 windowing pick it up. iPhone can't, and simply never opens it —
+        // every command that would is gated on MultiWindowSupport.
+        WindowGroup(id: "shopping-list-window", for: String.self) { $listId in
+            NavigationStack {
+                ShoppingListWindowView(listId: $listId)
+            }
+            #if os(macOS)
+            .frame(minWidth: 300, idealWidth: 420, minHeight: 320, idealHeight: 640)
+            #endif
+        }
+        .defaultSize(width: 420, height: 640)
 
         #if os(macOS)
         // Standalone recipe viewer (narrow split views → open full detail in its own window)
@@ -191,6 +212,17 @@ struct SaltyApp: App {
         }
         #endif
     }
+
+    #if os(macOS)
+    /// One classifier editor window. The three differ only in which table they edit, so they share
+    /// both the scene shape and the view (see `LibraryClassifiersEditView`).
+    private func classifierEditorWindow(_ classifier: LibraryClassifier, id: String) -> some Scene {
+        Window("Edit \(classifier.pluralLabel)", id: id) {
+            LibraryClassifiersEditView(classifier: classifier)
+                .frame(minWidth: 320, idealWidth: 420, minHeight: 320, idealHeight: 520)
+        }
+    }
+    #endif
 }
 
 func isLiquidGlassAvailable() -> Bool {
