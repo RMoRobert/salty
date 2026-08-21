@@ -148,18 +148,13 @@ struct SaltyApp: App {
         WindowGroup(id: "create-recipe-from-web-window") {
             CreateRecipeFromWebView()
                 .frame(idealWidth: 1200)
-                .navigationTitle("Import Recipe from Web")
+                .navigationTitle("Web Import")
         }
         #if os(macOS)
-        // Wide enough that the browser pane clears the 500pt compact threshold, below which the
-        // address field drops out of the toolbar entirely. At the old 800 the split left each pane
-        // around 400, so the window opened collapsed every time.
         .defaultSize(width: 1200, height: 800)
-        // Expanded rather than the default unified style: this window's toolbar carries a browser's
-        // worth of chrome -- nav buttons, an address field, and the two import actions -- and sharing
-        // one row with the traffic lights and the title left it starved for width. Expanded drops
-        // the title onto its own line and gives the toolbar the full window width beneath it.
-        .windowToolbarStyle(.expanded)
+        // Experiment with `.expanded` to use full-size toolbar below titlebar or remove
+        // title with .unified(showsTitle: false) if this becomes a problem, but this seems OK:
+        .windowToolbarStyle(.unified)
         #endif
         // "Import from Image" window
         WindowGroup(id: "create-recipe-from-image-window") {

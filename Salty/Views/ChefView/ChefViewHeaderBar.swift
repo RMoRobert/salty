@@ -135,6 +135,8 @@ struct ChefViewHeaderBar: View {
         // here *and* the one nearest the screen edge, which is the worst combination — the border
         // gives it the same padded hit area its neighbours already had.
         .buttonStyle(.bordered)
+        // Avoid stretching to fill on macOS 15 (OK on 26 without this):
+        .fixedSize()
     }
 }
 

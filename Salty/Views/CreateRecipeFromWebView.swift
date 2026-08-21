@@ -12,6 +12,9 @@ struct CreateRecipeFromWebView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = CreateRecipeFromWebViewModel()
     @State private var webView: WebViewCoordinator?
+    /// Window content width, fed to the browser pane so the address field's toolbar item can size
+    /// itself to the space the row actually has. macOS only; iOS never shows that field.
+    @State private var windowContentWidth: CGFloat = 0
     
     var body: some View {
         NavigationStack {
@@ -19,12 +22,17 @@ struct CreateRecipeFromWebView: View {
             // macOS: Use HSplitView with browser and editor side by side
             HSplitView {
                 // Left side - Web Browser
-                RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onSave: { dismiss() })
+                RecipeWebBrowserView(viewModel: viewModel, webView: $webView, windowWidth: windowContentWidth, onSave: { dismiss() })
                     .frame(minWidth: 400, idealWidth: 600)
                 
                 // Right side - Recipe Editor
                 RecipeWebImportEditView(viewModel: viewModel)
                     .frame(minWidth: 400, idealWidth: 500)
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                windowContentWidth = width
             }
             #else
             // iOS/iPadOS: Use simplified layout with browser and direct editor
@@ -57,7 +65,12 @@ struct CreateRecipeFromWebView: View {
                 }
             #endif
         }
+        #if os(macOS)
+        // Short title so the unified toolbar's one shared row keeps its width for the browser chrome.
+        .navigationTitle("Web Import")
+        #else
         .navigationTitle("Import Recipe from Web")
+        #endif
         #if os(macOS)
         .windowContentBelowTitlebar()
         #endif
@@ -201,6 +214,9 @@ struct CreateRecipeFromWebView: View {
 struct RecipeWebBrowserView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     @Binding var webView: WebViewCoordinator?
+    /// See `CreateRecipeFromWebView.windowContentWidth`. Defaults to 0 (unknown) for the iOS call
+    /// site, which has no address-field toolbar item to size.
+    var windowWidth: CGFloat = 0
     @State private var urlText: String = ""
     @FocusState private var isAddressFieldFocused: Bool
     @State private var isCompactScreen: Bool = false
@@ -419,9 +435,18 @@ struct RecipeWebBrowserView: View {
         WebImportAddressField(
             text: $urlText,
             isLoading: viewModel.isLoading,
+            idealWidth: addressFieldIdealWidth,
             onSubmit: { navigateToURL() },
             onReloadOrStop: { reloadOrStop() }
         )
+    }
+
+    /// The row's other occupants -- traffic lights, nav pods, title, Scan, Save, margins -- take a
+    /// roughly fixed ~750pt, so the field gets what's left, floored at a usable 450 and capped so an
+    /// ultrawide window doesn't produce a comical quarter-screen URL. 0 (unknown width) means the
+    /// first layout pass hasn't run; start from the floor.
+    private var addressFieldIdealWidth: CGFloat {
+        windowWidth > 0 ? min(1000, max(450, windowWidth - 750)) : 450
     }
 
     private func reloadOrStop() {

@@ -26,14 +26,16 @@ import AppKit
 struct WebImportAddressField: View {
     @Binding var text: String
     let isLoading: Bool
+    /// Computed from the window width by the caller: the toolbar grants a principal item exactly its
+    /// ideal width (measured -- `maxWidth` is never consulted), so elasticity has to come from the
+    /// ideal itself tracking the space available.
+    let idealWidth: CGFloat
     let onSubmit: () -> Void
     let onReloadOrStop: () -> Void
 
     var body: some View {
         AddressFieldRepresentable(text: $text, isLoading: isLoading, onSubmit: onSubmit)
-            // The toolbar sizes this to `idealWidth`, not `maxWidth` (measured -- the field came out
-            // at exactly the old ideal), so widening means raising the ideal.
-            .frame(minWidth: 200, idealWidth: 700, maxWidth: .infinity)
+            .frame(minWidth: 200, idealWidth: idealWidth, maxWidth: .infinity)
             // Reload sits inside the field's trailing edge, Safari-style. It can overlay the bezel
             // safely because the cell insets the text's drawing rect to keep the URL from running
             // underneath it -- see `AddressFieldCell`.
@@ -61,7 +63,9 @@ struct WebImportAddressField: View {
             // ~3pt stroke plus a soft glow, so 4pt all round left the ring visibly flattened top and
             // bottom. More vertically than horizontally because the ring's ends have the bezel's own
             // capsule radius to spread into, while its edges have nothing.
-            .padding(.vertical, 6)
+            // Enough for the focus ring (which draws outside the control) without inflating the
+            // item -- at 6pt the field's glass pod stood taller than the row's other pods.
+            .padding(.vertical, 3)
             .padding(.horizontal, 4)
     }
 }
@@ -108,8 +112,12 @@ private struct AddressFieldRepresentable: NSViewRepresentable {
         let field = AddressTextField()
         field.placeholderString = "Enter URL"
         field.bezelStyle = .roundedBezel
-        field.controlSize = .large
-        field.font = .systemFont(ofSize: NSFont.systemFontSize(for: .large))
+        // Regular, not large: in the unified toolbar the field shares a row with standard-height
+        // buttons, and the large bezel stood awkwardly taller than everything beside it. (Large was
+        // a fix for selection-highlight clipping in the SwiftUI-hosted era; the owned field sizes
+        // its editor from its own metrics, so regular should hold -- watch for that regressing.)
+        field.controlSize = .regular
+        field.font = .systemFont(ofSize: NSFont.systemFontSize(for: .regular))
         // Truncate idle URLs in the middle, Safari-style; the field editor scrolls while editing.
         field.usesSingleLineMode = true
         field.lineBreakMode = .byTruncatingMiddle
