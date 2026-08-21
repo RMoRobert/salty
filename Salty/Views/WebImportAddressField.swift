@@ -229,7 +229,7 @@ private final class AddressTextField: NSTextField {
         // uniformly primary.
         if let host = URLComponents(string: fullURL)?.host,
            let hostRange = display.range(of: host) {
-            styled.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor,
+            styled.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor,
                                 range: NSRange(display.startIndex..<display.endIndex, in: display))
             styled.addAttribute(.foregroundColor, value: NSColor.labelColor,
                                 range: NSRange(hostRange, in: display))
