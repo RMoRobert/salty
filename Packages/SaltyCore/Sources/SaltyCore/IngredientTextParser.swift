@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UUIDV7
 
 /// Utility class for parsing and formatting ingredient text from bulk text editor
 public struct IngredientTextParser {
@@ -46,7 +47,7 @@ public struct IngredientTextParser {
             }
             
             let ingredient = Ingredient(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 isHeading: isHeading,
                 isMain: isMain,
                 text: line
@@ -112,7 +113,7 @@ public struct IngredientTextParser {
             let cleanLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if !cleanLine.isEmpty {
                 let ingredient = Ingredient(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     isMain: false,
                     text: cleanLine

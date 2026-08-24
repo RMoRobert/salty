@@ -9,6 +9,7 @@ import SwiftUI
 import PhotosUI
 import OSLog
 import SaltyCore
+import UUIDV7
 
 #if os(iOS)
 import VisionKit
@@ -302,7 +303,7 @@ struct ScanTextForRecipeView: View {
             // Only add if we have meaningful content
             if cleanedText.count >= 2 {
                 ingredients.append(Ingredient(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     isMain: false,
                     text: cleanedText
@@ -334,7 +335,7 @@ struct ScanTextForRecipeView: View {
                     let cleanedText = cleanDirectionText(currentDirection)
                     if cleanedText.count >= 5 {
                         directions.append(Direction(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             isHeading: false,
                             text: cleanedText
                         ))
@@ -359,7 +360,7 @@ struct ScanTextForRecipeView: View {
             let cleanedText = cleanDirectionText(currentDirection)
             if cleanedText.count >= 5 {
                 directions.append(Direction(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     text: cleanedText
                 ))

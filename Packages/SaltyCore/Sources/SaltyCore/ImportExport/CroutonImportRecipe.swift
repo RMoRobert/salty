@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UUIDV7
 
 /// Represents data from a Crouton export file (`.crumb`), which is a single JSON object per recipe.
 ///
@@ -91,16 +92,16 @@ public struct CroutonImportRecipe: Decodable, Sendable {
     public func convertToRecipe(imageData: inout Data?, tags parsedTags: inout [String]?) -> Recipe {
         var recipeNotes: [Note] = []
         if let noteText = notes?.trimmingCharacters(in: .whitespacesAndNewlines), !noteText.isEmpty {
-            recipeNotes.append(Note(id: UUID().uuidString, title: "Notes", content: noteText))
+            recipeNotes.append(Note(id: UUIDV7().uuidString, title: "Notes", content: noteText))
         }
         // Crouton's nutrition field is free text ("Calories: 331 Fat: 7.5g …"), not the labelled values
         // `NutritionInformation` expects, so it's kept verbatim as a note rather than guess-parsed.
         if let nutritionText = nutritionalInfo?.trimmingCharacters(in: .whitespacesAndNewlines), !nutritionText.isEmpty {
-            recipeNotes.append(Note(id: UUID().uuidString, title: "Nutrition", content: nutritionText))
+            recipeNotes.append(Note(id: UUIDV7().uuidString, title: "Nutrition", content: nutritionText))
         }
 
         let recipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: name,
             createdDate: Date(),
             lastModifiedDate: Date(),
@@ -147,7 +148,7 @@ public struct CroutonImportRecipe: Decodable, Sendable {
         ordered(steps ?? [], by: \.order).compactMap { step in
             let text = (step.step ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
-            return Direction(id: UUID().uuidString, isHeading: step.isSection ?? false, text: text)
+            return Direction(id: UUIDV7().uuidString, isHeading: step.isSection ?? false, text: text)
         }
     }
 
@@ -158,7 +159,7 @@ public struct CroutonImportRecipe: Decodable, Sendable {
 
             let isHeading = CroutonQuantityType.isSection(rawType: entry.quantity?.quantityType)
             return Ingredient(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 isHeading: isHeading,
                 isMain: false,
                 text: isHeading ? name : ingredientText(name: name, quantity: entry.quantity)
@@ -189,7 +190,7 @@ public struct CroutonImportRecipe: Decodable, Sendable {
     static func preparationTimes(prepMinutes: Int?, cookMinutes: Int?) -> [PreparationTime] {
         [("Prep", prepMinutes), ("Cook", cookMinutes)].compactMap { type, minutes in
             guard let minutes, minutes > 0 else { return nil }
-            return PreparationTime(id: UUID().uuidString, type: type, timeString: minutesText(minutes))
+            return PreparationTime(id: UUIDV7().uuidString, type: type, timeString: minutesText(minutes))
         }
     }
 

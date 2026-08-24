@@ -9,6 +9,7 @@ import Foundation
 import SQLiteData
 import SaltyCore
 import OSLog
+import UUIDV7
 
 struct CroutonImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
@@ -73,7 +74,7 @@ struct CroutonImportHelper: RecipeFileImporterProtocol {
                                 .fetchOne(db)
 
                             if existingRelationship == nil {
-                                let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagId)
+                                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagId)
                                 try RecipeTag.insert { recipeTag }.execute(db)
                             }
                         }

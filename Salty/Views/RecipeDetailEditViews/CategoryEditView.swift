@@ -9,6 +9,7 @@ import SwiftUI
 import SQLiteData
 import OSLog
 import SaltyCore
+import UUIDV7
 
 //struct CategoryEditView: View {
 //    @Binding var recipe: Recipe
@@ -175,7 +176,7 @@ struct CategoryEditView: View {
                     }
 
                     for categoryId in categoriesToAdd {
-                        let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipeId, categoryId: categoryId)
+                        let recipeCategory = RecipeCategory(id: UUIDV7().uuidString, recipeId: recipeId, categoryId: categoryId)
                         try RecipeCategory.insert { recipeCategory }.execute(db)
                     }
 
@@ -210,7 +211,7 @@ struct CategoryEditView: View {
             }
 
             // Create the new category
-            let newCategory = Category(id: UUID().uuidString, name: trimmedName, lastModifiedDate: Date())
+            let newCategory = Category(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
             try await database.write { db in
                 try Category.insert {
                     newCategory

@@ -831,7 +831,7 @@ class SaltySyncService {
             base: l.syncedSnapshot,
             local: l.list,
             server: s,
-            conflictCopyId: UUID().uuidString,
+            conflictCopyId: UUIDV7().uuidString,
             conflictCopyLabel: "conflicted copy from \(deviceName) \(Self.dayStamp())"
         )
 

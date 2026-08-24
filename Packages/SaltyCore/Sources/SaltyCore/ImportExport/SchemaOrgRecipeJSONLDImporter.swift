@@ -18,6 +18,7 @@ import Foundation
 import ImageIO
 import SwiftSoup
 import OSLog
+import UUIDV7
 
 // The inverse (Recipe -> JSON-LD) lives in SchemaOrgRecipeJSONLDExporter.
 // TODO: Also accept raw .json/.jsonld files as an importable type (this class currently ingests JSON-LD
@@ -145,7 +146,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         logger.info("Parsing Recipe from JSON-LD")
 
         let recipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: extractString(from: dict, key: "name") ?? "",
             createdDate: Date(),
             lastModifiedDate: Date(),
@@ -293,7 +294,7 @@ public class SchemaOrgRecipeJSONLDImporter {
                 for instruction in instructionsArray.prefix(Limits.maxArrayItems) {
                     if let text = instruction["text"] as? String {
                         directions.append(Direction(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             isHeading: false,
                             text: decodeHTMLEntities(text.trimmingCharacters(in: .whitespacesAndNewlines))
                         ))
@@ -302,7 +303,7 @@ public class SchemaOrgRecipeJSONLDImporter {
             } else if let instructionsArray = recipeInstructions as? [String] {
                 for instruction in instructionsArray.prefix(Limits.maxArrayItems) {
                     directions.append(Direction(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         isHeading: false,
                         text: decodeHTMLEntities(instruction.trimmingCharacters(in: .whitespacesAndNewlines))
                     ))
@@ -310,7 +311,7 @@ public class SchemaOrgRecipeJSONLDImporter {
             } else if let instructionString = recipeInstructions as? String {
                 // Handle single instruction string
                 directions.append(Direction(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     text: decodeHTMLEntities(instructionString.trimmingCharacters(in: .whitespacesAndNewlines))
                 ))
@@ -326,7 +327,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         if let recipeIngredients = dict["recipeIngredient"] as? [String] {
             for ingredient in recipeIngredients.prefix(Limits.maxArrayItems) {
                 ingredients.append(Ingredient(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     isMain: false,
                     text: decodeHTMLEntities(ingredient.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -344,7 +345,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         if let prepTime = dict["prepTime"] as? String {
             let timeString = formatDuration(prepTime)
             preparationTimes.append(PreparationTime(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 type: "Prep",
                 timeString: timeString
             ))
@@ -354,7 +355,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         if let cookTime = dict["cookTime"] as? String {
             let timeString = formatDuration(cookTime)
             preparationTimes.append(PreparationTime(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 type: "Cook",
                 timeString: timeString
             ))
@@ -364,7 +365,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         if let totalTime = dict["totalTime"] as? String {
             let timeString = formatDuration(totalTime)
             preparationTimes.append(PreparationTime(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 type: "Total",
                 timeString: timeString
             ))
@@ -411,7 +412,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         // Extract keywords as a note:
 //        if let keywords = dict["keywords"] as? String, !keywords.isEmpty {
 //            notes.append(Note(
-//                id: UUID().uuidString,
+//                id: UUIDV7().uuidString,
 //                title: "Keywords",
 //                content: keywords
 //            ))
@@ -425,7 +426,7 @@ public class SchemaOrgRecipeJSONLDImporter {
         // Extract cuisine as a note
 //        if let cuisine = dict["recipeCuisine"] as? String, !cuisine.isEmpty {
 //            notes.append(Note(
-//                id: UUID().uuidString,
+//                id: UUIDV7().uuidString,
 //                title: "Cuisine",
 //                content: cuisine
 //            ))

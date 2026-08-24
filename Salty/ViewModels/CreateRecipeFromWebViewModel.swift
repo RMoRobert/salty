@@ -111,7 +111,7 @@ class CreateRecipeFromWebViewModel {
                 // Then, save the category relationships
                 for categoryId in categoryIDsToSave {
                     let recipeCategory = RecipeCategory(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         recipeId: recipeToSave.id,
                         categoryId: categoryId
                     )

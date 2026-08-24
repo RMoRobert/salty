@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UUIDV7
 
 /// Utility class for parsing and formatting direction text
 public struct DirectionTextParser {
@@ -78,7 +79,7 @@ public struct DirectionTextParser {
             }
             
             let direction = Direction(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 isHeading: isHeading,
                 text: directionText
             )
@@ -152,7 +153,7 @@ public struct DirectionTextParser {
             let cleanLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if !cleanLine.isEmpty {
                 let direction = Direction(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     text: cleanLine
                 )

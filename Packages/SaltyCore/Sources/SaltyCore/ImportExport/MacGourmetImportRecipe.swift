@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UUIDV7
 
 /// Represents data from MacGourmet (.mgourmet) export file, an XML PList
 public struct MacGourmetImportRecipe: Decodable, Sendable {
@@ -212,7 +213,7 @@ public struct MacGourmetImportRecipe: Decodable, Sendable {
     /// - Returns: Recipe object with (nearly) matching data from the MacGourmetImport Recipe
     public func convertToRecipe(imageData: inout Data?, categories arrCategories: inout [String]?) -> Recipe {
         var recipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: name,
             createdDate: Date(),
             lastModifiedDate: Date(),
@@ -244,7 +245,7 @@ public struct MacGourmetImportRecipe: Decodable, Sendable {
                 // If labelText exists and is not empty, create a heading direction
                 if let labelText = mgDirection.labelText, !labelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     result.append(Direction(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         isHeading: true,
                         text: labelText
                     ))
@@ -253,7 +254,7 @@ public struct MacGourmetImportRecipe: Decodable, Sendable {
                 // Always create the main direction (unless directionText is blank)
                 if let directionText = mgDirection.directionText, !directionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     result.append(Direction(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         isHeading: false,
                         text: directionText
                     ))
@@ -285,7 +286,7 @@ public struct MacGourmetImportRecipe: Decodable, Sendable {
                 }
                 
                 let ingredient = Ingredient(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: isHeading,
                     isMain: isMain,
                     text: text
@@ -305,7 +306,7 @@ public struct MacGourmetImportRecipe: Decodable, Sendable {
                 }
                 
                 return Note(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     title: title,
                     content: note.noteText
                 )
@@ -322,7 +323,7 @@ public struct MacGourmetImportRecipe: Decodable, Sendable {
                 }
                 
                 return PreparationTime(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     type: type,
                     timeString: prepTime.timeString
                 )

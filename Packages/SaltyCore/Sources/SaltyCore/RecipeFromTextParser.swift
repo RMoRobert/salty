@@ -8,6 +8,7 @@
 import Foundation
 import NaturalLanguage
 import OSLog
+import UUIDV7
 
 public struct RecipeFromTextParser {
 
@@ -25,7 +26,7 @@ public struct RecipeFromTextParser {
             .filter { !$0.isEmpty }
         
         var recipe = Recipe(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             name: "",
             createdDate: Date(),
             lastModifiedDate: Date()
@@ -165,7 +166,7 @@ public struct RecipeFromTextParser {
             // Add as ingredient if it looks like an ingredient
             if isLikelyIngredient(line, using: tokenizer) {
                 ingredients.append(Ingredient(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     isMain: false,
                     text: cleanIngredientText(line)
@@ -182,7 +183,7 @@ public struct RecipeFromTextParser {
         for line in lines {
             if isLikelyIngredient(line, using: tokenizer) {
                 ingredients.append(Ingredient(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     isMain: false,
                     text: cleanIngredientText(line)
@@ -269,7 +270,7 @@ public struct RecipeFromTextParser {
                 // Save the previous direction if we have one
                 if !currentDirection.isEmpty {
                     directions.append(Direction(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         isHeading: false,
                         text: cleanDirectionText(currentDirection)
                     ))
@@ -293,7 +294,7 @@ public struct RecipeFromTextParser {
         // Add the last direction if we have one
         if !currentDirection.isEmpty {
             directions.append(Direction(
-                id: UUID().uuidString,
+                id: UUIDV7().uuidString,
                 isHeading: false,
                 text: cleanDirectionText(currentDirection)
             ))
@@ -310,7 +311,7 @@ public struct RecipeFromTextParser {
         for line in lines {
             if isLikelyDirection(line, using: tokenizer) {
                 directions.append(Direction(
-                    id: UUID().uuidString,
+                    id: UUIDV7().uuidString,
                     isHeading: false,
                     text: cleanDirectionText(line)
                 ))

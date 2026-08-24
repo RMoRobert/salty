@@ -66,7 +66,7 @@ public struct SaltyDirectionExport: Codable, Equatable {
     
     public func convertToDirection() -> Direction {
         return Direction(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: isHeading,
             text: text
         )
@@ -87,7 +87,7 @@ public struct SaltyIngredientExport: Codable, Equatable {
     
     public func convertToIngredient() -> Ingredient {
         return Ingredient(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: isHeading ?? false,
             isMain: isMain ?? false,
             text: text
@@ -107,7 +107,7 @@ public struct SaltyPreparationTimeExport: Codable, Equatable {
     
     public func convertToPreparationTime() -> PreparationTime {
         return PreparationTime(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             type: type,
             timeString: timeString
         )
@@ -126,7 +126,7 @@ public struct SaltyVariationExport: Codable, Equatable {
     
     public func convertToVariation() -> Variation {
         return Variation(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             variationName: variationName,
             text: text
         )

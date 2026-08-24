@@ -6,6 +6,7 @@
 //
 
 import SaltyCore
+import UUIDV7
 #if os(macOS)
 
 import SwiftUI
@@ -192,7 +193,7 @@ struct VariationsEditView: View {
     
     private func addVariationAfter(_ index: Int) {
         let newVariation = Variation(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             variationName: "",
             text: ""
         )
@@ -230,7 +231,7 @@ struct VariationsEditView: View {
     
     private func addNewVariation() {
         let newVariation = Variation(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             variationName: "",
             text: ""
         )

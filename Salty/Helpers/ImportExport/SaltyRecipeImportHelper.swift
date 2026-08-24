@@ -9,6 +9,7 @@ import Foundation
 import SQLiteData
 import OSLog
 import SaltyCore
+import UUIDV7
 
 struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
@@ -91,7 +92,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
 
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
-                                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
+                                    let recipeCategory = RecipeCategory(id: UUIDV7().uuidString, recipeId: recipe.id, categoryId: categoryId)
                                     try RecipeCategory.insert {
                                         recipeCategory
                                     }.execute(db)
@@ -116,7 +117,7 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
 
                                 if existingRelationship == nil {
                                     // Create relationship only if it doesn't already exist
-                                    let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagId)
+                                    let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagId)
                                     try RecipeTag.insert{ recipeTag }.execute(db)
                                 }
                             }
