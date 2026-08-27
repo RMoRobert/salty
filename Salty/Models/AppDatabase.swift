@@ -22,6 +22,10 @@ func appDatabase() throws -> any DatabaseWriter {
     let database: any DatabaseWriter
     var configuration = Configuration()
     configuration.foreignKeysEnabled = true
+    // Wait out a competing writer (e.g., other app pointed at the same shared folder)
+    // instead of failing fast with SQLITE_BUSY (GRDB's default busyMode is .immediateError).
+    // Users should try to avoid in first place, but this helps with many outright failures.
+    configuration.busyMode = .timeout(5)
     configuration.prepareDatabase { db in
 #if DEBUG
         db.trace(options: .profile) {

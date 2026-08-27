@@ -382,11 +382,17 @@ public extension SaltyRecipeExport {
         // Directions
         if !directions.isEmpty {
             text += "\nDirections:\n"
-            for (index, direction) in directions.enumerated() {
+            // Numbered by counting only real steps, so a section heading doesn't consume a number --
+            // the same prefix-count-of-non-headings convention RecipeDetailView and ChefStep use, and
+            // what the KMP app's plain-text export produces. Numbering by array index (as this did)
+            // made every heading skip a number: "1, 2, [Sauce], 4".
+            var stepNumber = 0
+            for direction in directions {
                 if direction.isHeading == true {
                     text += "\n\(direction.text)\n"
                 } else {
-                    text += "\(index + 1). \(direction.text)\n"
+                    stepNumber += 1
+                    text += "\(stepNumber). \(direction.text)\n"
                 }
             }
         }
