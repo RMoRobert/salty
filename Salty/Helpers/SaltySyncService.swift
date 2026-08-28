@@ -466,6 +466,13 @@ class SaltySyncService {
                 syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
             }
 
+            // Every recipe here came from the server moments ago, so the two sides agree by
+            // construction. Recording that stops the next ordinary sync from reading the whole restored
+            // library as never-agreed and uploading all of it straight back (SHARED-V0005).
+            try await database.write { db in
+                try RecipeAgreementStore.markAllAgreed(in: db)
+            }
+
             // Images: local files were wiped, so this only downloads (nothing to upload).
             syncProgress.currentStep = "Downloading images..."
             try await syncImages()
@@ -614,6 +621,14 @@ class SaltySyncService {
             // image metadata, the server never wins here; local images upload to fill any gaps.
             syncProgress.currentStep = "Uploading images..."
             try await syncImages()
+
+            // The server now mirrors this library exactly, so every local row is agreed by
+            // construction. Recording that (SHARED-V0005) stops the next ordinary sync from
+            // re-uploading every never-agreed row — and from resurrecting a recipe deleted elsewhere
+            // between this push and that sync.
+            try await database.write { db in
+                try RecipeAgreementStore.markAllAgreed(in: db)
+            }
 
             try await completeSyncOnServer()
             lastSyncDate = Date()
@@ -1482,7 +1497,40 @@ class SaltySyncService {
     private func syncRecipesWithDeletions(deviceInfo: DeviceInfo) async throws {
         // 1. Full manifest (every server recipe's id + lastModifiedDate). This is the COMPLETE set the
         //    deletion logic reconciles against — never the delta below.
-        let manifest = try await fetchManifest()
+        let fullManifest = try await fetchManifest()
+
+        // 1a. Deletions made here, pushed as recorded facts rather than inferred from absence as in earlier
+        //     versions. Without this, a second device/app sharing the same file can tell only "never downloaded", but
+        //     if the recipe was edited on a third device since that  watermark, this will incorrectly revive that recipe.
+        //
+        //     An edit still beats a delete, and manifest is fetched first so the tombstones
+        //     can be checked against it before anything is pushed.
+        var tombstones = Set(try await database.read { db in try RecipeTombstoneWriter.pending(in: db) })
+        if !tombstones.isEmpty {
+            let manifestById = Dictionary(fullManifest.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+            let editedSinceDeleted = tombstones.filter { id in
+                guard !deviceInfo.isFirstSync, let watermark = deviceInfo.lastSyncDate,
+                      let entry = manifestById[id], let serverDate = entry.lastModifiedDate else { return false }
+                return serverDate.roundedToWireMillis > watermark
+            }
+
+            if !editedSinceDeleted.isEmpty {
+                logger.info("Dropping \(editedSinceDeleted.count) tombstone(s): the server copy changed after the delete")
+                let toClear = Array(editedSinceDeleted)
+                try await database.write { db in try RecipeTombstoneWriter.clear(toClear, in: db) }
+                tombstones.subtract(editedSinceDeleted)
+            }
+
+            if !tombstones.isEmpty {
+                logger.info("Pushing \(tombstones.count) recorded deletion(s) to the server")
+                try await deleteRecipesOnServer(recipeIds: Array(tombstones))
+                let pushed = Array(tombstones)
+                try await database.write { db in try RecipeTombstoneWriter.clear(pushed, in: db) }
+            }
+        }
+
+        // Anything just deleted on the server must not then be reconciled as if it were still there.
+        let manifest = fullManifest.filter { !tombstones.contains($0.id) }
 
         // 2. Only the changed bodies (the modifiedSince delta), paged. First sync / no lastSync date
         //    → fetch everything (still paged).
@@ -1502,8 +1550,20 @@ class SaltySyncService {
         // from "yyyy-MM-dd HH:mm:ss.SSS") and the server Date (decoded by ISO8601DateFormatter from
         // "...SSS'Z'") can land on adjacent Doubles for the SAME millisecond, so a strict > / < made the
         // reconciler re-upload/re-download every recipe on every sync. roundedToWireMillis normalizes both.
+        // SHARED-V0005's agreement bookkeeping. See RecipeAgreementStore for why the column is not a
+        // property on `Recipe`.
+        let (tracksAgreement, syncedStamps) = try await database.read { db -> (Bool, [String: Date]) in
+            (try RecipeAgreementStore.isAvailable(in: db), try RecipeAgreementStore.stamps(in: db))
+        }
+
         let localEntries = localRecipes.map {
-            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate.roundedToWireMillis)
+            RecipeSyncReconciler.Entry(
+                id: $0.id,
+                lastModified: $0.lastModifiedDate.roundedToWireMillis,
+                // Rounded like lastModified, and it is load-bearing: the reconciler compares the two
+                // for equality, and rounding only one side makes an UNCHANGED row read as edited.
+                syncedModified: syncedStamps[$0.id]?.roundedToWireMillis
+            )
         }
         let serverEntries = manifest.map {
             RecipeSyncReconciler.Entry(id: $0.id, lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis)
@@ -1512,7 +1572,8 @@ class SaltySyncService {
             local: localEntries,
             server: serverEntries,
             isFirstSync: deviceInfo.isFirstSync,
-            lastSyncDate: deviceInfo.lastSyncDate
+            lastSyncDate: deviceInfo.lastSyncDate,
+            tracksAgreement: tracksAgreement
         )
 
         logger.info("Sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server (manifest \(manifest.count), delta \(deltaRecipes.count))")
@@ -1543,7 +1604,9 @@ class SaltySyncService {
 
         // 7. Deletions — local deletes are guarded against empty-response wipes using the COMPLETE
         //    manifest count, and batched in one transaction.
-        if serverResponseAllowsLocalDeletions(serverItemCount: manifest.count, pendingLocalDeletions: plan.toDeleteLocally.count, entity: "recipe") {
+        // Judged against the FULL manifest: filtering our own tombstones out of it must not make the
+        // server look emptier than it is and trip the mass-deletion guard.
+        if serverResponseAllowsLocalDeletions(serverItemCount: fullManifest.count, pendingLocalDeletions: plan.toDeleteLocally.count, entity: "recipe") {
             for recipeId in plan.toDeleteLocally {
                 logger.info("Deleting recipe \(recipeId) locally (was deleted on another device)")
                 if let recipe = localRecipesById[recipeId], let filename = recipe.imageFilename {
@@ -1568,7 +1631,28 @@ class SaltySyncService {
             logger.info("Deletion sync: \(plan.toDeleteLocally.count) deleted locally, \(plan.toDeleteOnServer.count) deleted on server")
         }
 
-        // 8. "Last made on" dates, which the body plan above is blind to by design.
+        // 8. Record what this pass agreed on, so the next one needn't guess (SHARED-V0005). Three groups
+        //    mean the same thing afterwards — the server's copy matches this row as it stands: what went
+        //    up, what came down, and what was already identical on both sides. Anything just deleted
+        //    locally is excluded, and so is anything the delete guard held back, since those are still
+        //    local-only and carry whatever stamp they already had.
+        if tracksAgreement {
+            let manifestIds = Set(manifest.map { $0.id })
+            var agreed = Set(localRecipes.map { $0.id }).intersection(manifestIds)
+            agreed.formUnion(plan.toUpload)
+            agreed.formUnion(plan.toDownload)
+            agreed.subtract(plan.toDeleteLocally)
+
+            // A `let` snapshot: the write closure runs off this actor and cannot capture a var.
+            let agreedIds = Array(agreed)
+            if !agreedIds.isEmpty {
+                try await database.write { db in
+                    try RecipeAgreementStore.markAgreed(agreedIds, in: db)
+                }
+            }
+        }
+
+        // 9. "Last made on" dates, which the body plan above is blind to by design.
         try await syncPreparedDates(manifest: manifest, plan: plan)
     }
 
@@ -1767,7 +1851,7 @@ class SaltySyncService {
                     }
                     
                     let rc = RecipeCategory(
-                        id: "\(recipe.id)_\(categoryId)",
+                        id: SaltyId.new(),
                         recipeId: recipe.id,
                         categoryId: categoryId
                     )
@@ -1795,7 +1879,7 @@ class SaltySyncService {
                     }
                     
                     let rt = RecipeTag(
-                        id: "\(recipe.id)_\(tagId)",
+                        id: SaltyId.new(),
                         recipeId: recipe.id,
                         tagId: tagId
                     )

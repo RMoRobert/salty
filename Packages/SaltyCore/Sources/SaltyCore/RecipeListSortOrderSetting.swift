@@ -62,6 +62,8 @@ public enum RecipeListSortDirection: String, Codable, CaseIterable {
 public enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
     case name
     case ingredients
+    /// Narrower sibling of `.ingredients`: only the lines flagged as main ingredients.
+    case mainIngredients
     case introduction
     case category
     case course
@@ -72,6 +74,7 @@ public enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
     // Compile-time constants for UserDefaults keys (required for @AppStorage)
     public static let nameKey = "searchOptionName"
     public static let ingredientsKey = "searchOptionIngredients"
+    public static let mainIngredientsKey = "searchOptionMainIngredients"
     public static let introductionKey = "searchOptionIntroduction"
     public static let categoryKey = "searchOptionCategory"
     public static let courseKey = "searchOptionCourse"
@@ -85,6 +88,8 @@ public enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
             return "Name"
         case .ingredients:
             return "Ingredients"
+        case .mainIngredients:
+            return "Main Ingredients"
         case .introduction:
             return "Introduction"
         case .category:
@@ -107,6 +112,8 @@ public enum RecipeListSearchOptions: String, Codable, CaseIterable, Hashable {
             return Self.nameKey
         case .ingredients:
             return Self.ingredientsKey
+        case .mainIngredients:
+            return Self.mainIngredientsKey
         case .introduction:
             return Self.introductionKey
         case .category:

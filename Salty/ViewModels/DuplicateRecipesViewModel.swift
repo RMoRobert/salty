@@ -98,6 +98,10 @@ final class DuplicateRecipesViewModel {
             }
             try await database.write { db in
                 try Recipe.where { $0.id.in(ids) }.delete().execute(db)
+                // Tombstoned like any other deletion: consolidating duplicates is still a deletion, and
+                // without this the copies come back on the next sync from a peer. See
+                // RecipeTombstoneWriter.
+                try RecipeTombstoneWriter.recordDeletions(Array(ids), in: db)
             }
             selectedRecipeIDs.subtract(ids)
             deleteCandidateIDs.removeAll()

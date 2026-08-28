@@ -306,12 +306,15 @@ class RecipeNavigationSplitViewModel {
                 }
             }
 
-            // Now delete the recipes from the database
+            // Now delete the recipes from the database, recording a tombstone for each in the SAME
+            // transaction so a peer sharing this library can tell "deleted here" from "not yet
+            // downloaded". See RecipeTombstoneWriter.
             try await database.write { db in
                 try Recipe
                     .where { $0.id.in(idsToDelete) }
                     .delete()
                     .execute(db)
+                try RecipeTombstoneWriter.recordDeletions(Array(idsToDelete), in: db)
             }
 
             selectedRecipeIDs.removeAll()
@@ -337,12 +340,13 @@ class RecipeNavigationSplitViewModel {
                 }
             }
 
-            // Now delete the recipe from the database
+            // Now delete the recipe from the database, with its tombstone. See the bulk path above.
             try await database.write { db in
                 try Recipe
                     .where { $0.id.eq(id) }
                     .delete()
                     .execute(db)
+                try RecipeTombstoneWriter.recordDeletion(id, in: db)
             }
         } catch {
             logger.error("Error deleting recipe \(id): \(error)")

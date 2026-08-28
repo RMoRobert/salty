@@ -126,4 +126,95 @@ struct RecipeSyncReconcilerTests {
     private func e2(_ id: String, _ d: Date) -> RecipeSyncReconciler.Entry {
         RecipeSyncReconciler.Entry(id: id, lastModified: d)
     }
+
+    // MARK: - SHARED-V0005: agreement bookkeeping replaces the local-only guess
+
+    /// A local entry that HAS been agreed with the server.
+    private func agreed(_ id: String, _ t: Double, synced: Double? = nil) -> RecipeSyncReconciler.Entry {
+        RecipeSyncReconciler.Entry(id: id, lastModified: date(t), syncedModified: date(synced ?? t))
+    }
+
+    private func tracked(
+        local: [RecipeSyncReconciler.Entry],
+        server: [RecipeSyncReconciler.Entry],
+        lastSyncDate: Date?
+    ) -> RecipeSyncReconciler.Plan {
+        RecipeSyncReconciler.plan(
+            local: local, server: server, isFirstSync: false, lastSyncDate: lastSyncDate, tracksAgreement: true
+        )
+    }
+
+    /// The bug the column exists for. A recipe imported from a file exported years ago carries an
+    /// ancient `lastModifiedDate`, so the watermark rule reads it as "existed before the last sync,
+    /// gone on the server" and DELETES it. It has simply never been to the server.
+    @Test func anOldRowThatWasNeverAgreedIsUploadedNotDeleted() {
+        let plan = tracked(local: [e("imported", 1)], server: [], lastSyncDate: date(1_000_000))
+        #expect(plan.toUpload == ["imported"])
+        #expect(plan.toDeleteLocally.isEmpty)
+    }
+
+    /// The other half: a row that WAS agreed and is now absent really was deleted there.
+    @Test func aRowThatWasAgreedAndIsNowAbsentIsDeletedLocally() {
+        let plan = tracked(local: [agreed("gone", 100)], server: [], lastSyncDate: date(1_000_000))
+        #expect(plan.toDeleteLocally == ["gone"])
+        #expect(plan.toUpload.isEmpty)
+    }
+
+    /// Delete-vs-edit is a genuine conflict, and Salty resolves it the same way everywhere: the edit
+    /// wins. A row agreed at 100 and edited to 200 while another device deleted it must come back WITH
+    /// the edit, not be destroyed — the same principle as the tombstone push dropping a tombstone whose
+    /// server copy was edited, seen from the other side.
+    @Test func aRowEditedSinceTheAgreementIsUploadedEvenThoughTheServerDeletedIt() {
+        let plan = tracked(local: [agreed("edited", 200, synced: 100)], server: [], lastSyncDate: date(1_000_000))
+        #expect(plan.toUpload == ["edited"])
+        #expect(plan.toDeleteLocally.isEmpty)
+    }
+
+    /// Any difference counts as an edit, including a stamp somehow LATER than the row — a clock that
+    /// ran backwards must err toward upload, the non-destructive direction.
+    @Test func aStampThatDisagreesInEitherDirectionReadsAsEdited() {
+        #expect(tracked(local: [agreed("back", 50, synced: 100)], server: [], lastSyncDate: nil).toUpload == ["back"])
+    }
+
+    /// No clock is consulted for this decision any more, so the answer must not move when the watermark
+    /// does — including when there is none, and when the clocks disagree wildly.
+    @Test func theOutcomeDoesNotDependOnTheWatermark() {
+        for watermark: Date? in [nil, date(0), date(50), date(100), date(999_999_999)] {
+            #expect(tracked(local: [e("new", 100)], server: [], lastSyncDate: watermark).toUpload == ["new"])
+            #expect(tracked(local: [agreed("old", 100)], server: [], lastSyncDate: watermark).toDeleteLocally == ["old"])
+        }
+    }
+
+    /// Rows on both sides are unaffected: newest-wins is genuine conflict resolution, not an inference,
+    /// and this change deliberately leaves it alone.
+    @Test func rowsOnBothSidesStillResolveByNewestWins() {
+        let plan = tracked(
+            local: [agreed("local-newer", 200, synced: 100), agreed("server-newer", 100)],
+            server: [e("local-newer", 100), e("server-newer", 200)],
+            lastSyncDate: date(150)
+        )
+        #expect(plan.toUpload == ["local-newer"])
+        #expect(plan.toDownload == ["server-newer"])
+        #expect(plan.toDeleteLocally.isEmpty)
+    }
+
+    /// A first sync still uploads everything: there is no watermark to have disagreed with, and
+    /// deletion inference is off entirely.
+    @Test func aFirstSyncIsUnaffected() {
+        let plan = RecipeSyncReconciler.plan(
+            local: [agreed("a", 100), e("b", 100)], server: [],
+            isFirstSync: true, lastSyncDate: nil, tracksAgreement: true
+        )
+        #expect(Set(plan.toUpload) == ["a", "b"])
+        #expect(plan.toDeleteLocally.isEmpty)
+    }
+
+    /// A library that has not yet run SHARED-V0005 keeps the old rule exactly, since every entry then
+    /// carries a nil stamp and the caller passes tracksAgreement: false.
+    @Test func aLibraryWithoutTheColumnKeepsTheOldRule() {
+        #expect(RecipeSyncReconciler.plan(local: [e("old", 50)], server: [],
+                                          isFirstSync: false, lastSyncDate: date(150)).toDeleteLocally == ["old"])
+        #expect(RecipeSyncReconciler.plan(local: [e("new", 200)], server: [],
+                                          isFirstSync: false, lastSyncDate: date(150)).toUpload == ["new"])
+    }
 }

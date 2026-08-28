@@ -947,6 +947,28 @@ public let saltySharedMigrations: [SaltySharedMigration] = [
         if !exists {
             try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "lastModifiedPreparedDate" DATETIME"#)
         }
+    },
+    // The value of `lastModifiedDate` this row carried the last time this library and the server agreed
+    // about it. NULL means "never agreed", and that distinction is the whole point: it lets sync distinguish
+    // recipe that is new here from one the server has deleted, without comparing any clock. See
+    // `RecipeSyncReconciler.plan(tracksAgreement:)`.
+    //
+    // Deliberately *not* backfilled from `lastModifiedDate` on existing rows to avoid assumptions that might
+    // wrongly delete a local recipe (at the cost that a recipe deleted on another device is uploaded again once,
+    // at least until all sever and client DB recipes get this data).
+    //
+    // Not added to the `Recipe` struct on purpose: it is owned by the sync pass, like `syncedRevision`
+    // on `shoppingList`, and a body save must never write it. Read and written with raw SQL in
+    // SaltySyncService. Mirror: Salty.NET's `SaltySchema.SharedMigrations` and SaltyKMP's
+    // `SHARED_MIGRATIONS`, with the SAME id ("SHARED-V0005").
+    SaltySharedMigration(id: "SHARED-V0005") { db in
+        let exists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM pragma_table_info('recipe') WHERE name = 'syncedModifiedDate'"
+        ) ?? 0 > 0
+        if !exists {
+            try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "syncedModifiedDate" DATETIME"#)
+        }
     }
 ]
 

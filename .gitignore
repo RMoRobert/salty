@@ -100,3 +100,7 @@ OLDVIEWS
 AGENTS.md
 CLAUDE.md
 FEATURE_PLANS.md
+
+# Machine-local path to the shared conformance corpus (salty-contract/corpus).
+# Read by SaltyTests/ContractCorpus.swift; see salty-contract/runners/README.md.
+.salty-contract-path

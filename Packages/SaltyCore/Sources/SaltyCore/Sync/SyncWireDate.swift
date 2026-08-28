@@ -38,6 +38,17 @@ public enum SyncWireDate {
             "yyyy-MM-dd'T'HH:mm:ss",        // no timezone
             "yyyy-MM-dd HH:mm:ss.SSS",      // GRDB default (space-separated)
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", // microseconds
+            // A space-separated value carrying a redundant `Z`. These are real: alpha-era rows have
+            // them, and Salty.NET's `SaltyDates` strips one on the way in for the same reason. Without
+            // these two the value parsed to nil, and a nil timestamp loses every comparison in the
+            // reconciler. Pinned by corpus DATE-PARSE-003.
+            "yyyy-MM-dd HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd HH:mm:ss'Z'",
+            // Second precision, space-separated: what SQL `CURRENT_TIMESTAMP` writes, and SaltyKMP's
+            // Schema.sq uses it as the DEFAULT for `createdDate` and `lastModifiedDate`. Last in the
+            // list because DateFormatter can match a prefix, and this pattern is a prefix of every
+            // fractional form above. Pinned by corpus DATE-PARSE-004.
+            "yyyy-MM-dd HH:mm:ss",
         ] {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
