@@ -259,6 +259,39 @@ struct SaltySyncServiceServerEditTests {
         #expect(localName == "Renamed on web")
     }
 
+    // MARK: - SYNC-016: neither empty side is a mass deletion
+
+    /// The direction that was missing: an empty library must not be read as "every one of these was
+    /// deleted here" and pushed at the server.
+    ///
+    /// A library is empty for the same kinds of reason a server list is — restored from a backup that
+    /// predates the recipes, recreated at the old path after being moved, or opened before iCloud
+    /// finished bringing it down. This direction loses the shared copy rather than one device's, and
+    /// the workflow that reaches it most directly is replacing a device by deleting the local library
+    /// and pulling the server's copy back with an ordinary sync.
+    @Test func anEmptyLibraryDoesNotAskTheServerToDeleteEveryRecipe() async throws {
+        let database = try makeTestDatabase() // seeds classifiers; no recipes
+        let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
+
+        // Routed BEFORE baseRoutes, which stubs the manifest as empty: the matcher takes the first hit.
+        var routes: [SyncRouteStubURLProtocol.Route] = [
+            .init(method: "GET", path: "/api/recipes/sync/manifest",
+                  body: #"[{"id": "r-only-on-server", "lastModifiedDate": "\#(staleWire)"}]"#)
+        ]
+        routes.append(contentsOf: baseRoutes(lastSync: Date().addingTimeInterval(-3600)))
+        SyncRouteStubURLProtocol.reset(routes: routes)
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.syncNow(force: true)
+        }
+
+        let deletes = SyncRouteStubURLProtocol.recorded.filter { $0.path == "/api/recipes/sync/delete" }
+        #expect(deletes.isEmpty, "an empty library cannot vouch for a mass deletion on the server")
+    }
+
     // MARK: - Force re-sync marks its overwrites
 
     @Test func forceResyncToServerMarksEveryClassifierWriteForced() async throws {

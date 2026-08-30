@@ -78,10 +78,20 @@ class SaltySyncService {
         set { UserDefaults.standard.set(newValue, forKey: "serverUsername") }
     }
     
-    /// Password for server authentication (stored securely in Keychain)
-    var serverPassword: String {
-        get { credentials.password() }
-        set { credentials.setPassword(newValue) }
+    /// The per-device sync token the server issued when this device enrolled (stored in the Keychain).
+    ///
+    /// This is the app's only lasting credential, and it is deliberately weaker than the password it
+    /// replaces: the server accepts it on the sync routes and nowhere else, so a copy lifted off this
+    /// device can read and write recipes but cannot change the account password or revoke any other
+    /// device. `nil` means this device is not enrolled and a sync must ask for the password once.
+    private var deviceToken: String? {
+        get { credentials.deviceToken() }
+        set {
+            credentials.setDeviceToken(newValue)
+            // Keep the observable mirror in step here rather than at each call site, so no future path
+            // can change the token and leave the UI showing the old state.
+            isEnrolled = !(newValue ?? "").isEmpty
+        }
     }
 
     /// Cached JWT token (stored securely in Keychain)
@@ -96,9 +106,33 @@ class SaltySyncService {
         set { UserDefaults.standard.set(newValue, forKey: "serverTokenExpiration") }
     }
     
-    /// Whether we have valid credentials configured
+    /// Whether this device holds a sync token, and so can sync without asking the user for anything.
+    ///
+    /// Stored rather than computed from the keychain on demand, for two reasons. It is read from SwiftUI
+    /// `body` -- once per keystroke while the password field has focus -- and a keychain round trip per
+    /// render is waste. More importantly it has to be *observable*: computing it through
+    /// `@ObservationIgnored` storage would leave Settings showing the disconnected form after a
+    /// successful connect, until some unrelated state change happened to redraw it. The keychain remains
+    /// the source of truth; this mirrors it, maintained by the `deviceToken` setter.
+    private(set) var isEnrolled: Bool
+
+    /// Whether a password saved by a pre-enrolment build is still waiting to be spent on enrolment.
+    /// Same reasoning as `isEnrolled`: read from `body`, and has to change visibly when it's consumed.
+    private(set) var hasUnspentSavedPassword: Bool
+
+    /// Whether a sync can authenticate unattended.
+    ///
+    /// True once enrolled, and also while a password saved by a pre-enrolment build is still sitting in
+    /// the keychain -- that password is spent enrolling this device on the next sync and then deleted, so
+    /// upgrading users are never prompted. See `enrollUsingSavedPassword()`.
     var hasCredentials: Bool {
-        !serverUsername.isEmpty && !serverPassword.isEmpty
+        isEnrolled || (!serverUsername.isEmpty && hasUnspentSavedPassword)
+    }
+
+    /// Erases a migrated legacy password, keeping the observable mirror in step.
+    private func discardSavedPassword() {
+        credentials.setPassword("")
+        hasUnspentSavedPassword = false
     }
     
     /// Whether the current token is valid (exists and not expired)
@@ -138,6 +172,9 @@ class SaltySyncService {
     init(session: URLSession = .shared, credentials: any SyncCredentialStore = KeychainHelper.shared) {
         self.session = session
         self.credentials = credentials
+        // The only two keychain reads on this path: everything afterwards works off these mirrors.
+        isEnrolled = !(credentials.deviceToken() ?? "").isEmpty
+        hasUnspentSavedPassword = !credentials.password().isEmpty
         // Restore the last sync time from a previous run. Assignment in `init` doesn't fire `didSet`, so
         // this doesn't write the value straight back.
         lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncDateKey) as? Date
@@ -145,71 +182,242 @@ class SaltySyncService {
     
     // MARK: - Authentication Methods
     
-    /// Login to the server and get a JWT token
-    func login() async throws {
-        guard !serverUsername.isEmpty, !serverPassword.isEmpty else {
+    /// The server's reply to both `/api/auth/login` and `/api/auth/token`.
+    ///
+    /// `deviceToken` is present exactly once, in the login that enrols this device, and only because we
+    /// asked by sending a `deviceId`. Every later exchange omits it.
+    private struct AuthResponse: Decodable {
+        let token: String
+        let username: String
+        /// Milliseconds. Now ~90 minutes, down from 8 days -- which is precisely why the device token
+        /// exists: re-minting has to be silent, because it now happens constantly.
+        let expiresIn: Int
+        let deviceToken: String?
+    }
+
+    /// Enrols this device: the one and only time the password is needed.
+    ///
+    /// Sends the password with this device's `deviceId`, and the server returns a long-lived sync token
+    /// alongside the usual JWT. The password is used for this single request and never written anywhere
+    /// -- not to the keychain, not to a stored property. From here on `mintJwtFromDeviceToken()` keeps
+    /// the app authenticated on its own.
+    ///
+    /// The `deviceId` deliberately reuses the one the sync protocol already registers under: the server
+    /// keys tokens on (user, deviceId), so enrolling under a fresh id would list this device twice on the
+    /// server's devices page and strand its sync history on the old row.
+    func enroll(username: String, password: String) async throws {
+        let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty, !password.isEmpty else {
             throw SyncError.authenticationFailed("Username and password are required")
         }
-        
+
         guard let url = URL(string: "\(serverUrl)/api/auth/login") else {
             throw SyncError.authenticationFailed("Invalid server URL")
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let credentials = ["username": serverUsername, "password": serverPassword]
-        request.httpBody = try JSONEncoder().encode(credentials)
-        
-        logger.info("Attempting login for user: \(self.serverUsername)")
-        
+
+        struct EnrolmentRequest: Encodable {
+            let username: String
+            let password: String
+            let deviceId: String
+            let deviceName: String
+        }
+        request.httpBody = try JSONEncoder().encode(
+            EnrolmentRequest(username: username, password: password,
+                             deviceId: deviceId, deviceName: deviceName)
+        )
+
+        logger.info("Enrolling device for user: \(username)")
+
         let (data, response) = try await session.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.authenticationFailed("Invalid response from server")
         }
-        
+
         if httpResponse.statusCode == 401 {
             throw SyncError.authenticationFailed("Invalid username or password")
         }
-        
+
         guard (200...299).contains(httpResponse.statusCode) else {
-            logger.error("Login failed HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+            logger.error("Enrolment failed HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
             throw SyncError.authenticationFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
         }
-        
-        // Parse response
-        struct AuthResponse: Codable {
-            let token: String
-            let username: String
-            let expiresIn: Int  // milliseconds
-        }
-        
+
         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-        
-        // Store token and calculate expiration
-        jwtToken = authResponse.token
-        tokenExpirationDate = Date().addingTimeInterval(Double(authResponse.expiresIn) / 1000.0)
-        
-        logger.info("Login successful for user: \(authResponse.username), token expires in \(authResponse.expiresIn / 1000 / 60 / 60) hours")
-    }
-    
-    /// Ensure we have a valid token, logging in if necessary
-    private func ensureAuthenticated() async throws {
-        if !hasValidToken {
-            logger.info("Token expired or missing, logging in...")
-            try await login()
+
+        // A server predating device tokens answers a login unchanged, ignoring the deviceId it doesn't
+        // know about. Accepting that would leave the app with a 90-minute JWT and no way to renew it,
+        // so it's a setup failure with a message that names the actual fix rather than a mystery
+        // re-prompt every 90 minutes.
+        guard let issuedDeviceToken = authResponse.deviceToken, !issuedDeviceToken.isEmpty else {
+            logger.error("Server accepted the login but issued no device token")
+            throw SyncError.enrolmentUnsupported
         }
+
+        serverUsername = authResponse.username
+        deviceToken = issuedDeviceToken
+        storeJwt(authResponse)
+
+        // Nothing else in the app writes this key any more; clearing it here is what makes the upgrade
+        // from a password-saving build a one-way trip.
+        discardSavedPassword()
+
+        logger.info("Device enrolled for user: \(authResponse.username)")
     }
-    
-    /// Clear stored authentication data
-    func logout() {
+
+    /// Trades this device's sync token for a fresh JWT -- the only authentication call the app makes
+    /// after enrolment, and the reason it never needs the password again.
+    ///
+    /// A 401 here is meaningful rather than transient: the token was revoked from the server's devices
+    /// page, or the account password changed (which signs every device out). Either way the token is
+    /// dead, so it's deleted and the caller is told to enrol again.
+    private func mintJwtFromDeviceToken() async throws {
+        guard let token = deviceToken, !token.isEmpty else {
+            throw SyncError.enrolmentRequired
+        }
+        guard let url = URL(string: "\(serverUrl)/api/auth/token") else {
+            throw SyncError.authenticationFailed("Invalid server URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.authenticationFailed("Invalid response from server")
+        }
+
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            logger.warning("Device token rejected (HTTP \(httpResponse.statusCode)); clearing it")
+            deviceToken = nil
+            jwtToken = nil
+            tokenExpirationDate = nil
+            throw SyncError.enrolmentRequired
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            // Anything else -- server down, proxy in the way -- leaves the token alone: it is very
+            // probably still good, and discarding it would cost the user a password prompt for what is
+            // really a network problem.
+            logger.error("Token exchange failed HTTP \(httpResponse.statusCode)")
+            throw SyncError.authenticationFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
+        }
+
+        storeJwt(try JSONDecoder().decode(AuthResponse.self, from: data))
+        logger.info("Minted a fresh JWT from the device token")
+    }
+
+    /// Spends a password left by a pre-enrolment build to enrol this device, once.
+    ///
+    /// Existing installs upgrade without ever seeing the prompt: the password they already saved is
+    /// good for exactly one more login, which is the one that enrols them. `enroll` deletes it on
+    /// success. A failure leaves it in place so the next sync can retry.
+    private func enrollUsingSavedPassword() async throws {
+        let saved = credentials.password()
+        guard !saved.isEmpty, !serverUsername.isEmpty else { throw SyncError.enrolmentRequired }
+        logger.info("Migrating a saved password into a device token")
+        try await enroll(username: serverUsername, password: saved)
+    }
+
+    /// Records a freshly minted JWT and when it expires.
+    private func storeJwt(_ response: AuthResponse) {
+        jwtToken = response.token
+        tokenExpirationDate = Date().addingTimeInterval(Double(response.expiresIn) / 1000.0)
+    }
+
+    /// Ensure we have a valid token, minting a new one if necessary.
+    ///
+    /// Internal rather than private so the auth paths can be tested directly: driving them through a
+    /// whole `syncNow()` would need a migrated database and a dozen stubbed routes to assert one
+    /// credential decision.
+    func ensureAuthenticated() async throws {
+        if hasValidToken { return }
+
+        if isEnrolled {
+            logger.info("Token expired or missing, exchanging the device token...")
+            try await mintJwtFromDeviceToken()
+            return
+        }
+
+        // Not enrolled. Either this install predates device tokens and still has a saved password to
+        // spend, or the user has to be asked for one.
+        try await enrollUsingSavedPassword()
+    }
+
+    /// What `signOut()` managed to do, so the UI can say something useful when it fell short.
+    enum ForgetOutcome {
+        /// The token is dead server-side as well as gone from here.
+        case revokedOnServer
+        /// The server couldn't be told, so the token may still be live there. Forgetting still
+        /// happened locally -- refusing to sign out because the network is down would be worse.
+        case localOnly
+    }
+
+    /// Forgets this device: revokes its token on the server, then discards it and the JWT here, so the
+    /// next sync asks for the password again.
+    ///
+    /// The revoke is attempted first, because it needs the credential this is about to destroy. Local
+    /// state is cleared regardless of how it goes: a user who asked to sign out has signed out, and
+    /// leaving them connected because a server was unreachable would be the wrong way to fail.
+    ///
+    /// There is deliberately no "clear just the JWT" counterpart any more. It used to be a useful
+    /// troubleshooting button when a JWT lasted 8 days and re-minting cost a password prompt; now one
+    /// expires every 90 minutes and is replaced silently, so clearing it by hand does nothing a user
+    /// could observe.
+    @discardableResult
+    func signOut() async -> ForgetOutcome {
+        let outcome = await revokeDeviceTokenOnServer()
+        deviceToken = nil
         jwtToken = nil
         tokenExpirationDate = nil
-        logger.info("Logged out, cleared JWT token")
+        discardSavedPassword()
+        logger.info("Forgot this device (server revoke: \(outcome == .revokedOnServer ? "done" : "unreachable"))")
+        return outcome
     }
-    
+
+    /// Asks the server to revoke this device's own token.
+    ///
+    /// `/api/auth/token/revoke` takes no device id -- it can only revoke whichever device presented the
+    /// token, which is why a sync credential is allowed to call it at all while the devices routes stay
+    /// behind a password. Revoking oneself is de-escalation; revoking anyone else is not.
+    ///
+    /// Never throws: this runs on the way out, and no failure here should be able to strand the user on
+    /// a device they've asked to sign out of.
+    private func revokeDeviceTokenOnServer() async -> ForgetOutcome {
+        guard let token = deviceToken, !token.isEmpty,
+              let url = URL(string: "\(serverUrl)/api/auth/token/revoke") else {
+            return .localOnly
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // Well under URLSession's 60s default: signing out must not appear to hang because the server
+        // is off, and the local half of the job succeeds either way.
+        request.timeoutInterval = 15
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return .localOnly }
+            // 401 means the token was already dead -- revoked from the devices page, or invalidated by
+            // a password change. The point of the call is met, so don't alarm the user about it.
+            if (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 401 {
+                return .revokedOnServer
+            }
+            logger.warning("Server refused the self-revoke (HTTP \(httpResponse.statusCode))")
+            return .localOnly
+        } catch {
+            logger.warning("Couldn't reach the server to revoke this device: \(error.localizedDescription)")
+            return .localOnly
+        }
+    }
+
     /// Add authorization header to a request
     private func addAuthHeader(to request: inout URLRequest) {
         if let token = jwtToken {
@@ -651,8 +859,28 @@ class SaltySyncService {
     /// NOTE: this only catches a fully-empty response; detecting a *partial* response would require
     /// the server to also report its expected total count.
     private func serverResponseAllowsLocalDeletions(serverItemCount: Int, pendingLocalDeletions: Int, entity: String) -> Bool {
-        if serverItemCount == 0 && pendingLocalDeletions > 0 {
+        if !RecipeSyncReconciler.allowsDeletions(sideCount: serverItemCount, pendingDeletions: pendingLocalDeletions) {
             logger.error("Skipping \(pendingLocalDeletions) local \(entity) deletion(s): the server returned an empty list, which likely indicates an incomplete response rather than real deletions.")
+            return false
+        }
+        return true
+    }
+
+    /// The mirror of `serverResponseAllowsLocalDeletions`, and the half that was missing: guards bulk
+    /// deletions **on the server** against an empty local collection.
+    ///
+    /// Deletion inference is symmetric — "present there, absent here, unchanged since the last sync"
+    /// deletes on the server — so an empty library with a live watermark asked the server to drop
+    /// everything it had, and nothing stopped it. A library is empty for the same kinds of reason a
+    /// server list is: restored from a backup that predates the recipes, recreated at the old path
+    /// after being moved, or opened before iCloud/Nextcloud finished bringing it down. This direction
+    /// loses the shared copy rather than one device's.
+    ///
+    /// Nothing legitimate is blocked: a recipe deleted on purpose travels as a tombstone on its own
+    /// path, and emptying a collection outright is what "Delete Server, Push from Local" is for. See SYNC-016.
+    private func localLibraryAllowsServerDeletions(localItemCount: Int, pendingServerDeletions: Int, entity: String) -> Bool {
+        if !RecipeSyncReconciler.allowsDeletions(sideCount: localItemCount, pendingDeletions: pendingServerDeletions) {
+            logger.error("Skipping \(pendingServerDeletions) server \(entity) deletion(s): this library is empty, which likely indicates a restored or not-yet-downloaded library rather than real deletions. Use \"Delete Server, Push from Local\" if you meant to clear it.")
             return false
         }
         return true
@@ -760,20 +988,39 @@ class SaltySyncService {
             }
         }
 
+        // Server-only rows are classified before any of them is applied, because the delete direction
+        // needs its total up front to be guarded the way the local direction above is (SYNC-016).
+        //
+        // Server-only row: new to us, or deleted here. No tombstones for lists, so the watermark
+        // decides — except a failed If-Match delete proves the row changed, and change wins.
+        var serverOnlyDownloads: [ServerShoppingList] = []
+        var serverOnlyDeletes: [ServerShoppingList] = []
         for s in serverLists where !localIds.contains(s.id) {
-            try Task.checkCancellation()
-            // Server-only row: new to us, or deleted here. No tombstones for lists, so the watermark
-            // decides — except a failed If-Match delete proves the row changed, and change wins.
             let serverDate = (s.lastModifiedDate ?? .distantPast).roundedToWireMillis
             if deviceInfo.isFirstSync || deviceInfo.lastSyncDate == nil || serverDate > deviceInfo.lastSyncDate! {
-                try await downloadShoppingList(s)
+                serverOnlyDownloads.append(s)
             } else {
-                switch try await deleteShoppingListOnServer(id: s.id, expectedRevision: s.revision) {
-                case .deleted:
-                    logger.info("Deleted shopping list \(s.id) on server (was deleted locally)")
-                case .conflict(let current):
-                    try await downloadShoppingList(current)
-                }
+                serverOnlyDeletes.append(s)
+            }
+        }
+
+        if !localLibraryAllowsServerDeletions(
+            localItemCount: localRows.count, pendingServerDeletions: serverOnlyDeletes.count, entity: "shopping list") {
+            serverOnlyDeletes = []
+        }
+
+        for s in serverOnlyDownloads {
+            try Task.checkCancellation()
+            try await downloadShoppingList(s)
+        }
+
+        for s in serverOnlyDeletes {
+            try Task.checkCancellation()
+            switch try await deleteShoppingListOnServer(id: s.id, expectedRevision: s.revision) {
+            case .deleted:
+                logger.info("Deleted shopping list \(s.id) on server (was deleted locally)")
+            case .conflict(let current):
+                try await downloadShoppingList(current)
             }
         }
     }
@@ -1152,7 +1399,9 @@ class SaltySyncService {
         
         // Delete on server — conditional on the timestamp we based the decision on, so a row that
         // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
-        for serverCourse in toDeleteOnServer {
+        let mayDeleteCourseOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localCourses.count, pendingServerDeletions: toDeleteOnServer.count, entity: "course")
+        for serverCourse in mayDeleteCourseOnServer ? toDeleteOnServer : [] {
             switch try await deleteLibraryItemOnServer(
                 ServerCourse.self,
                 endpoint: "/api/courses/\(serverCourse.id)",
@@ -1340,7 +1589,9 @@ class SaltySyncService {
         
         // Delete on server — conditional on the timestamp we based the decision on, so a row that
         // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
-        for serverCategory in toDeleteOnServer {
+        let mayDeleteCategoryOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localCategories.count, pendingServerDeletions: toDeleteOnServer.count, entity: "category")
+        for serverCategory in mayDeleteCategoryOnServer ? toDeleteOnServer : [] {
             switch try await deleteLibraryItemOnServer(
                 ServerCategory.self,
                 endpoint: "/api/categories/\(serverCategory.id)",
@@ -1485,7 +1736,9 @@ class SaltySyncService {
         
         // Delete on server — conditional on the timestamp we based the decision on, so a row that
         // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
-        for serverTag in toDeleteOnServer {
+        let mayDeleteTagOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localTags.count, pendingServerDeletions: toDeleteOnServer.count, entity: "tag")
+        for serverTag in mayDeleteTagOnServer ? toDeleteOnServer : [] {
             switch try await deleteLibraryItemOnServer(
                 ServerTag.self,
                 endpoint: "/api/tags/\(serverTag.id)",
@@ -1562,8 +1815,26 @@ class SaltySyncService {
         }
         
         logger.info("Device info from server: isFirstSync=\(isFirstSync), lastSyncDate=\(lastSyncDate?.description ?? "nil")")
-        
-        return DeviceInfo(deviceId: deviceId, lastSyncDate: lastSyncDate, isFirstSync: isFirstSync)
+
+        // A device with no lastSyncDate has never FINISHED a sync, whatever the flag says — and since
+        // device sync tokens landed, the flag says otherwise. Enrolment issues the token into the same
+        // device_sync row that carries the watermark, so the row already exists by the time this call
+        // is made, and the server's "is this device new?" test is only whether the row is there.
+        //
+        // Normalised HERE, at the one place the server's answer is parsed, rather than at each of the
+        // half-dozen places that branch on it — the branches that upload are harmless either way, and
+        // the ones that delete are not, so the two must not be able to drift apart.
+        //
+        // Not cosmetic. isFirstSync is what suppresses deletion inference (SYNC-006), and a stamp
+        // records agreement with "the server" — a device that has never synced with THIS one has no
+        // basis to assume the stamps in a shared library refer to it. Trusting them deletes every
+        // stamped, unmodified row the server does not have. SYNC-008's tie-breaker settles the
+        // direction: losing a recipe is worse than resurrecting one.
+        return DeviceInfo(
+            deviceId: deviceId,
+            lastSyncDate: lastSyncDate,
+            isFirstSync: isFirstSync || lastSyncDate == nil
+        )
     }
     
     /// Mark sync as complete on server. Internal (not private) so its non-2xx throw is unit-testable.
@@ -1714,7 +1985,10 @@ class SaltySyncService {
         }
 
         // Delete recipes on server that were deleted locally.
-        if !plan.toDeleteOnServer.isEmpty {
+        // And the mirror: an empty library must not ask the server to delete everything it has.
+        let mayDeleteRecipesOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localEntries.count, pendingServerDeletions: plan.toDeleteOnServer.count, entity: "recipe")
+        if !plan.toDeleteOnServer.isEmpty && mayDeleteRecipesOnServer {
             logger.info("Deleting \(plan.toDeleteOnServer.count) recipe(s) on server (were deleted locally)")
             try await deleteRecipesOnServer(recipeIds: plan.toDeleteOnServer)
         }
@@ -2496,6 +2770,13 @@ enum SyncError: LocalizedError {
     /// treats it as "already up to date", never as a failure (and it must not clear auto-sync's
     /// pending-changes state the way a real success does).
     case throttled
+    /// This device holds no usable sync token, so the password is needed once to enrol it. Thrown
+    /// both on a first sync and when a token has been revoked from the server's devices page or
+    /// invalidated by a password change. User-initiated syncs answer it by prompting; auto-sync
+    /// answers it by standing down, since there is nobody to ask.
+    case enrolmentRequired
+    /// The server authenticated the user but issued no device token, meaning it predates the scheme.
+    case enrolmentUnsupported
 
     var errorDescription: String? {
         switch self {
@@ -2506,7 +2787,11 @@ enum SyncError: LocalizedError {
         case .serverNotConfigured:
             return "Server URL is not configured. Please set it in Settings."
         case .credentialsNotConfigured:
-            return "Username and password are not configured. Please set them in Settings."
+            return "Sync is not set up on this device yet. Enter your username and password to connect it."
+        case .enrolmentRequired:
+            return "This device needs to be connected to the server again. Enter your username and password to reconnect it."
+        case .enrolmentUnsupported:
+            return "This server is too old to connect devices for sync. Please update Salty Server, then try again."
         case .authenticationFailed(let message):
             return "Authentication failed: \(message)"
         case .networkError(let message):
@@ -2546,7 +2831,7 @@ extension SyncError {
         }
         switch status {
         case 401:
-            return "The server rejected your saved username or password (HTTP 401)."
+            return "The server rejected your username or password (HTTP 401)."
         case 403:
             return "Access to the server was forbidden (HTTP 403). Check firewall or IP restrictions, and verify your username and password."
         case 404:

@@ -68,6 +68,28 @@ public enum RecipeSyncReconciler {
     /// reads as "existed before the last sync, gone on the server" and is destroyed.
     ///
     /// Mirror: `SyncReconciler.CreatePlan(tracksAgreement:)` in Salty.NET and `SyncReconciler` in SaltyKMP.
+    /// SYNC-016. Whether deletions inferred from a side's absence may be applied, given how many rows
+    /// that side actually returned.
+    ///
+    /// The plan says what the timestamps and stamps *imply*; this says whether the evidence behind an
+    /// inferred deletion is worth acting on. It is not when the side the absence was observed on came
+    /// back completely empty — a server list that is `[]` because a proxy answered, or a library that
+    /// is empty because it was restored from an older backup or opened mid-download. "Everything is
+    /// missing" is far more often a bad fetch than a real mass deletion.
+    ///
+    /// Lives here, on the pure type, so both directions and all three clients consult one predicate:
+    /// the local half existed for a long time while the server half did not, which is the kind of
+    /// drift a shared function prevents and a dozen separate call sites do not. Applying it stays the
+    /// caller's job — see SYNC-016 — and the caller is what must also report the refusal.
+    ///
+    /// Emptiness, not proportion: one row left and inference proceeds normally.
+    ///
+    /// Mirror: `SyncReconciler.allowsDeletions` in SaltyKMP and `SyncReconciler.AllowsDeletions` in
+    /// Salty.NET. Pinned by corpus GUARD-001..GUARD-006.
+    public static func allowsDeletions(sideCount: Int, pendingDeletions: Int) -> Bool {
+        !(sideCount == 0 && pendingDeletions > 0)
+    }
+
     public static func plan(
         local: [Entry],
         server: [Entry],

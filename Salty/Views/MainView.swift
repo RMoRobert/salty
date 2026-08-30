@@ -21,6 +21,13 @@ struct MainView: View {
     @State private var showingImportConfirm = false
 
     @State private var autoSync = AutoSyncCoordinator.shared
+
+    // Raised when a user-initiated sync stopped because this device isn't connected to the server yet.
+    // Hosted here rather than at each trigger so pull-to-refresh, the "Last synced" footer and the Sync
+    // Now menu command all get the same prompt -- the same one Settings uses, so the app asks for a
+    // password in exactly one voice.
+    @State private var manualSync = ManualSyncRunner.shared
+    @State private var syncService = SaltySyncService.shared
     
 
     var body: some View {
@@ -37,6 +44,11 @@ struct MainView: View {
                 }
             }
             .animation(.snappy, value: autoSync.showFailureBanner)
+            .syncPasswordPrompt(isPresented: $manualSync.needsEnrolment,
+                                username: syncService.serverUsername) { password in
+                // Connect, then finish the sync the user actually asked for.
+                Task { await manualSync.connectAndSync(password: password) }
+            }
             .onOpenURL { handleIncomingURL($0) }
             .alert("Import Recipe", isPresented: $showingImportConfirm) {
                 Button("Cancel", role: .cancel) { importConfirmURL = nil }

@@ -157,8 +157,15 @@ final class KeychainHelper: Sendable {
     
     /// Keys used for Salty Sever sync authentication
     enum Key: String, CaseIterable {
+        /// Only ever read now, never written: pre-enrolment builds saved the password here, and
+        /// `SaltySyncService` spends it once to enrol this device before deleting it. See
+        /// `enrollUsingSavedPasswordIfPresent()`.
         case serverPassword = "salty.server.password"
         case jwtToken = "salty.server.jwtToken"
+        /// The per-device sync token (`salty_…`) the server issues at enrolment. Long-lived and the
+        /// only credential the app keeps: it can sync, and deliberately nothing else -- it cannot
+        /// change a password or revoke another device.
+        case deviceToken = "salty.server.deviceToken"
     }
     
     /// Save the server password
@@ -189,11 +196,27 @@ final class KeychainHelper: Sendable {
     func getJwtToken() -> String? {
         return getString(forKey: Key.jwtToken.rawValue)
     }
-    
+
+    /// Save the device sync token. Passing nil or "" deletes it, which is how a device is un-enrolled.
+    @discardableResult
+    func saveDeviceToken(_ token: String?) -> Bool {
+        if let token, !token.isEmpty {
+            return save(token, forKey: Key.deviceToken.rawValue)
+        } else {
+            return delete(forKey: Key.deviceToken.rawValue)
+        }
+    }
+
+    /// Get the device sync token
+    func getDeviceToken() -> String? {
+        return getString(forKey: Key.deviceToken.rawValue)
+    }
+
     /// Clear all authentication data
     func clearAuthData() {
         delete(forKey: Key.serverPassword.rawValue)
         delete(forKey: Key.jwtToken.rawValue)
+        delete(forKey: Key.deviceToken.rawValue)
         logger.info("Cleared all authentication data from keychain")
     }
 

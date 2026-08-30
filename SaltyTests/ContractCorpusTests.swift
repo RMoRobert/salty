@@ -173,6 +173,9 @@ struct ContractCorpusTests {
         case "reconcile":
             try assertReconcile(c)
 
+        case "deletion_guard":
+            assertDeletionGuard(c)
+
         default:
             Issue.record("""
                 Unmapped corpus op '\(c.op)' in \(c.id).
@@ -225,6 +228,22 @@ struct ContractCorpusTests {
         }
 
         #expect(mismatches.isEmpty, "\(c.because)\n  \(mismatches.joined(separator: "\n  "))")
+    }
+
+    /// SYNC-016: whether deletions inferred from a side's absence may be applied at all.
+    ///
+    /// The predicate only. That a client consults it on BOTH directions of EVERY collection is wiring
+    /// rather than a value, so it cannot be seen from here and each client pins it with its own tests.
+    /// What this stops is the three drifting on the rule itself — which is what happened when the local
+    /// half existed and the server half did not.
+    private func assertDeletionGuard(_ c: CorpusCase) {
+        let allows = RecipeSyncReconciler.allowsDeletions(
+            sideCount: Int(c.input["side_count"]?.int64Value ?? 0),
+            pendingDeletions: Int(c.input["pending_deletions"]?.int64Value ?? 0)
+        )
+        let expected = c.expect["allows"].map { if case .bool(let b) = $0 { return b } else { return false } } ?? false
+
+        #expect(allows == expected, "\(c.because)")
     }
 
     private func assertReconcile(_ c: CorpusCase) throws {
