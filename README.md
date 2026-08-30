@@ -1,5 +1,6 @@
 # Salty
-Salty&trade; is a recipe management app for macOS, iOS, and iPadOS. Salty works on macOS and iOS (iPhone and iPad). This app was born out of a desire to substantially replace my longstanding use of the MacGourmet Deluxe application on Mac, as the company behind it app seems to have vanished, and some problems with the apparently abandoned application are becoming apparent. Salty is *not* a clone but rather a modern re-thinking of recipe management for macOS. I have tried several alternatives, but found them uninspriring or mobile-focused and difficult to use on desktop. Salty aims to work well on macOS while also offering mobile compatibility without compromising the desktop experience.
+Salty&trade; is a recipe management app for macOS, iOS, and iPadOS. Salty works on macOS and iOS (iPhone and iPad). This app was born out of a desire to substantially replace my longstanding use of the MacGourmet Deluxe application on Mac, as the company behind it app seems to have vanished, and some problems with the abandoned application were becoming apparent (and it will not work once Rosetta 2 is removed from macOS).
+Salty is *not* a clone but rather a modern re-thinking of recipe management for macOS. I have tried several alternatives, but found them uninspriring or mobile-focused and difficult to use on desktop. Salty aims to work well on macOS while also offering mobile compatibility without compromising the desktop experience.
 
 If you are an end user, keep in mind that this app is simply something I work on in my free time. I can make no guarantees, although I am not aware of any major problems. I have written it for my personal use, shared it as-is, and plan to continue development as my time allows.
 
@@ -7,17 +8,21 @@ Given my history with MacGourmet and my desire to import as much recipe data as 
 
 ## Local-First
 
-Salty is a *local first* recipe manager: the database is, by default, created and stored on-device. (On macOS, find it inside the folder labeled "Salty" inside your ~/Library/Containers folder, as by default for all sandboxed apps; on iOS, data is by default similarly stored in your application's container, though it is not readily user-accessible.) The app's Settings window allows changing to a custom location. This works well on macOS; on iOS, it seems to occasionally require re-selecting to re-gain access. You may use your own cloud storage provider to sync between devices if necessary (though again, particularly on iOS, this is more difficult). Exercise caution, depending on your provider -- do not access the database simultaneously from multiple devices. We will look into more straightforward cloud sync options in the future, perhaps including iCloud sync, but wanted to focus on traditional local storage first.
+Salty is a *local first* recipe manager: the database is, by default, created and stored on-device. (On macOS, find it inside the folder labeled "Salty" inside your ~/Library/Containers folder, as by default for all sandboxed apps; on iOS, data is by default similarly stored in your application's container, though it is not readily user-accessible.) The app's Settings window allows changing to a custom location. This works well on macOS; on iOS, it seems to occasionally require re-selecting to re-gain access. You may use your own cloud storage provider to sync between devices if necessary (though again, particularly on iOS, this is more difficult). Exercise caution, depending on your provider: do not access the database simultaneously from multiple devices, as the
+bulk of the storage is an SQLite database that does not generally work well with multiple
+devices trying to write at the same time.
 
-**UPDATE**: A Self-hosted sync option is now available by running the `server` component in [Salty KMP](https://github.com/RMoRobert/saltykmp) (also includes an experimental Kotlin Multiplatform/Compose Multiplatform app for Android, desktop/JVM, and iOS, but the apps are not recommended for production use at the moment and are unlikely to replace the existing macOS or iOS apps).
+I may look into more straightforward (cloud?) sync options in the future, perhaps including iCloud sync, but wanted to focus on traditional local storage first. The `server` component in [Salty KMP](https://github.com/RMoRobert/saltykmp) (also includes an experimental Kotlin Multiplatform/Compose Multiplatform app for Android, desktop/JVM, and iOS, but the apps are not recommended for production use at the moment and are unlikely to replace the existing macOS or iOS apps) offers a way to self-host a sync server, locally or in the cloud, but is somewhat experimental (though I am using it myself).
 
 # Technical Details 
 
-Salty is written in Swift, making primary use of SwiftUI for the interface and GRDB (via SQLiteData) for persistence, ultimately making use of SQLite.
+Salty is written in Swift, making primary use of SwiftUI for the interface and GRDB (via SQLiteData) for persistence, ultimately making use of SQLite. Additional regular file
+system storage inside this same directory is used for image storage (except thumbnails,
+which are small enough to live in the database).
 
 ### Building and Targets
 
-Saltly is typically built using the latest XCode on the latest or nearly latest macOS (excluding betas), currently XCode 26 on macOS Sequoia (15) or Tahoe (26). Salty should run and build on, at least, macOS 15 or 26 and iOS 18 or 26.
+Saltly is typically built using the latest XCode on the latest or nearly latest macOS (excluding betas), currently XCode 26 on macOS Tahoe (26). Salty should run and build on, at least, macOS 15 or 26 and iOS 18 or 26.
 
 # License
 
