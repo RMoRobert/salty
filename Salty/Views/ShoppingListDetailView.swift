@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 /// Reminders-style checklist for one shopping list: tap-to-check items, inline text editing, and
 /// heading rows for grouping by store/category/aisle. The parent recreates this view per list via
@@ -110,8 +111,17 @@ struct ShoppingListDetailView: View {
             viewModel.removeEmptyItems()
             viewModel.flush()
         }
-        // Reminders behavior: a row the user never typed into vanishes the moment focus leaves it,
-        // whether that's a tap into another row, Return, or dismissing the keyboard.
+        // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, a sync
+        // download, or this same list being edited in another window) end up in the database, not in
+        // the in-memory items. Pick them up rather than saving over them.
+        .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
+            // Our own saves announce themselves too, for the sake of the other windows; reloading
+            // one here would only interrupt whoever is typing.
+            guard !ShoppingListChangeNotifier.shared.isOwnChange(listId: viewModel.listId,
+                                                                 source: viewModel.editorToken) else { return }
+            Task { await viewModel.reloadAfterExternalChange() }
+        }
+        // Remove rows user never typed into (simulating Reminders app behavior, better UX)
         .onChange(of: focusedItemId) { previousId, _ in
             guard let previousId else { return }
             withAnimation {

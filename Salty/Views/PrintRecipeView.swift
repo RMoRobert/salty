@@ -8,6 +8,7 @@
 import SwiftUI
 import WebKit
 import OSLog
+import SaltyCore
 
 // Resolves when the page is actually ready to print: web fonts loaded and every image decoded.
 // Replaces fixed-delay timers, which raced layout/image decode and produced clipped or blank output.

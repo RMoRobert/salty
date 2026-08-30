@@ -5,8 +5,9 @@ Fleshed-out, actionable plans for larger features. Written against the current a
 junction pattern, `RecipeToHtml`/`HTMLExportOptions`, and the shared-DB story with SaltyKMP).
 
 **Status:** Meal Planner, Cookbook, and Smart Lists are *not* implemented — those sections are
-plans. **Shopping Lists are built and synced end to end** (Swift client, SaltyKMP client, and Salty
-Server). That section is history and rationale, not a plan.
+plans. **Chef View v1 is built** (all three phases); its section is now history plus the v2
+backlog. **Shopping Lists are built and synced end to end** (Swift client, SaltyKMP client, and
+Salty Server). That section is history and rationale, not a plan.
 
 ## Cross-cutting concerns (read once, applies to all of them)
 
@@ -382,6 +383,166 @@ naturally. Ship flat first; the JSON shape should be forward-compatible with nes
 
 ---
 
+## Feature 4 — Chef View — BUILT (v1, all three phases)
+
+**As built, and where it differs from the plan below:**
+
+- Files: `SaltyCore/ChefStep.swift` + `ChefViewDisplayStyle.swift`; `Salty/Views/ChefView/`
+  (`ChefView`, `ChefViewHeaderBar`, `ChefViewIngredientsPane`, `ChefViewDirectionsList`,
+  `ChefViewFocusStepView`, `ChefViewControlsBar`, `ChefViewTextSize`, `ChefViewWindowView`);
+  `ChefViewModel` + `ChefViewSessionStore`; `ChefSessionState` + `ChefViewLaunch`;
+  `ScreenSleepBlocker`, `ChefViewOpenAction`, `RecipeLastPreparedWriter`. Tests:
+  `ChefStepTests`, `ChefViewModelTests`.
+- **Menu command uses a focused scene value** (`ChefViewOpenAction`, mirroring
+  `SearchFieldFocusAction`), *not* the NotificationCenter pattern the plan named: a notification
+  fires in every open window at once, and this command has to mean "the recipe in front of me".
+  ⇧⌘C, in the View menu next to Sort By.
+- **No string catalog.** The plan called for manual symbol keys in `Localizable.xcstrings`; the
+  app has no catalog and every user-facing string is a literal, so Chef View matches. Adding one
+  is a separate, app-wide job.
+- **Toolbar icon:** `rectangle.stack.badge.play`, from Rob's finalists. One-line swap in
+  `RecipeDetailView` if `play` / `frying.pan` reads better in practice.
+- **Step identity is the index into `recipe.directions`**, not `Direction.id` — imported ids
+  aren't guaranteed unique within a recipe. Blank direction rows are dropped rather than rendered
+  as an empty giant step.
+- **"Next" completes the step it leaves; "Previous" un-completes the one it lands on** — so
+  working through with the bottom bar alone leaves the check-offs right, and stepping back and
+  forth doesn't mark the whole recipe done. Next never moves or swaps out: it stays in place and
+  disables once the last step is checked off (`ChefViewModel.canAdvance`), because buttons
+  shouldn't relocate under hands that have learned where they are.
+- **"Made It!" is a quiet link, not a prominent button** ("Mark as Prepared Today", `.link` style
+  on macOS as the detail view's "Scale…" does). Always available — you may not check off every
+  step — but never competing with Next.
+- **Text size is a discrete slider in a popover**, not the inline A−/A+ pair first built: one drag
+  crosses the whole range (six taps to reach TV sizes was too many), `step: 1` keeps it on the
+  fixed ladder of sizes, and the flanking A's stay tappable for single steps. The popover exists
+  because an iPhone header bar has no room for a draggable slider inline.
+- At compact width the bottom bar's chevrons drop their titles; everything in both bars is
+  `fixedSize`, or a tight bar compresses button titles until they wrap one letter per line.
+- Chef View is reachable from `RecipeDetailView` only, so the `webPreviews` alternate detail view
+  (`RecipeDetailWebView`) has no entry point.
+- `RecipeNavigationSplitViewModel.setLastMade` now delegates to the shared
+  `RecipeLastPreparedWriter`, which "Made It!" also uses.
+
+The original plan follows.
+
+A full-screen, large-print view for actually cooking from a recipe: legible from across the
+kitchen (and, via AirPlay mirroring, from a TV — this is the "Chef View + AirPlay first" step
+of the Apple TV direction). **Pure presentation — no new tables, no migrations, no sync**, so
+the cross-cutting migration/sync concerns above don't apply. Session state is in-memory only.
+
+Naming: **Chef View** (decided 2026-08, over "Cook Mode"/"Cook View"). Three reasons:
+MacGourmet called this exact feature "Chef View" and Salty ships a MacGourmet importer, so
+migrating users already know the name; "view" is truthful ("this recipe, shown differently")
+where "mode" implies app-wide state; and it stays clear of the `Cook*` prefix the Cookbook
+feature already owns (`ChefView` vs `CookbookView` — unambiguous in menus and code). For
+context, competitors converge on the generic term: Mela "Cook Mode", Crouton "Step by Step
+Mode", plus "Cook(ing) Mode" in Paprika/NYT/Samsung Food — another point for a distinctive name.
+
+### Decisions taken (2026-08)
+
+1. **Default display: continuous list with a current-step highlight.** All steps stay visible
+   in one large-print list; the *current* step is full-contrast and slightly larger, completed
+   steps dim, upcoming steps remain fully readable. Tap any step to make it current;
+   auto-scroll keeps it comfortably placed. Rationale: strict one-step-at-a-time views get in
+   the way more than they help ("what did step 4 say?"), but a current-step concept preserves
+   most of the focus benefit.
+2. **Focus mode (one giant step at a time) is a toggle *inside* Chef View**, not a
+   Settings item: huge left/right tap zones + swipe for prev/next, "Step 3 of 9" progress.
+   Best for TV mirroring and messy hands. Last-used mode persists via
+   `@AppStorage("chefViewDisplayStyle")` (a `RawRepresentable` enum in SaltyCore, per the
+   `RecipeHtmlTheme` pattern).
+3. **Progress survives within the app session, not across relaunch.** Checked ingredients,
+   completed steps, and current step live in an in-memory, app-level store keyed by recipe id
+   — you can leave Chef View, glance at another recipe, and come back. No DB writes, no
+   staleness/expiry questions. Persist-across-relaunch can be revisited if interrupted cooks
+   prove common.
+4. **Timers are v2**, not v1 (see below).
+5. **macOS presents as a dedicated window** (new `WindowGroup` scene, like
+   `recipe-detail-window`), so the Chef View window can go full-screen on an external display/TV
+   while the main app stays usable. iOS/iPadOS uses `fullScreenCover` (the
+   `CreateRecipeFromWebView` precedent, `#if !os(macOS)`) — presented locally from
+   `RecipeDetailView` rather than `RootPresentationsModifier`, because the detail view owns
+   the live ingredient-scale state the cover needs, and local presentation makes Chef View
+   available from every context that hosts a detail view (split-view column, macOS
+   recipe-detail window) for free. `RootPresentationsModifier` stays reserved for
+   root-launched sheets.
+
+### Layout (adaptive, wide-screen first)
+
+- **Regular width / landscape:** two panes — ingredients pinned left (~1/3, scrollable,
+  checkable), directions right. This is the iPad-landscape / TV composition.
+- **Compact width:** directions full-screen; ingredients one gesture away (bottom drawer or
+  segmented flip — ingredients matter early, directions dominate mid-cook).
+- Visual language matches `RecipeDetailView`: `.fontDesign(.rounded)`, high contrast, works
+  in light/dark. Headings (`isHeading`) render as section headers in both panes; step numbers
+  reuse the existing prefix-count-of-non-headings convention.
+
+### v1 features
+
+- **Entry points:** prominent "Chef View" toolbar button on the recipe detail view; macOS
+  menu command + shortcut via the existing `NotificationCenter` pattern
+  (`RecipeNavigationSplitViewModel` notification names + `Menus.swift`).
+  **Icon:** the button always carries its text label (per AGENTS.md), so the icon is
+  reinforcement, not the sole signal. Rob's preference: `play` (outline) or
+  `rectangle.stack.badge.play` ("stack of steps, play" — a nice semantic fit); other
+  candidates `frying.pan` (unambiguous cooking, best for icon-only contexts) and
+  `play.fill`/`play.circle`. SF Symbols has **no chef's hat** — that would need a custom
+  symbol asset (possible later refinement, and the best identity match for the name).
+  Try the finalists rendered in the actual toolbar during phase 1 and pick visually.
+- **Keep screen awake** while Chef View is open — new capability for the app.
+  `UIApplication.shared.isIdleTimerDisabled` on iOS (set on appear, *always* cleared on
+  disappear; the one justified UIKit touch), `ProcessInfo.beginActivity(.idleDisplaySleepDisabled)`
+  on macOS.
+- **Check-off** for ingredients *and* steps — large tap targets, `checkmark.circle.fill`
+  convention from `ShoppingListDetailView`.
+- **Text-size stepper (A / A)** in-view: overrides `\.dynamicTypeSize` on the Cook subtree
+  (stepping into the accessibility sizes) rather than hard-coding point sizes — default
+  Dynamic Type tops out below 10-foot legibility. Persisted as `chefViewTextSize`. This is
+  the app's first deliberate text-size override; it stays inside the semantic-font system,
+  which is the escape hatch AGENTS.md's "prefer Dynamic Type" rule intends.
+- **Scaling passthrough:** entering Chef View with ingredient scaling active carries
+  `ingredientScalePercent` in; quantities render via the existing
+  `IngredientScaler.displayParts(for:scaleFactor:)` with the same footnote treatment. (The
+  macOS window receives `recipeId` + scale percent as its Codable window value.)
+- **"Made it!"** on completion (last step / finish screen) → existing
+  `setLastMade(_:forRecipeIds:)`.
+
+### Architecture
+
+- `Salty/Views/ChefView/`: `ChefView` (adaptive shell), `ChefViewIngredientsPane`,
+  `ChefViewDirectionsList` (continuous), `ChefViewFocusStepView`, `ChefViewControlsBar`.
+- `ChefViewModel` (`@Observable @MainActor`, in ViewModels — follows the
+  `RecipeDetailView` → `RecipeDetailViewModel` convention): current step, next/prev that
+  skip `isHeading` rows, "Step X of Y" counting, check-off sets, display mode, completion.
+  **Unit tests in SaltyTests** for step navigation/numbering around headings — this logic is
+  exactly the kind that regresses silently.
+- `ChefViewSessionStore` (`@Observable @MainActor`, app-level `@State` in `SaltyApp`,
+  injected via `.environment`): `recipeId → session state` map implementing decision 3; also
+  what lets the macOS window and a re-entered iOS cover share progress.
+- User-facing strings as manual symbol keys in `Localizable.xcstrings`.
+
+### v2 candidates (deliberately out of v1)
+
+- **Tappable step timers** — detect durations in step text (regex precedents:
+  `RecipeFromTextParser.swift`, `SchemaOrgRecipeJSONLDExporter.swift`), render as chips that
+  start countdowns with local notifications. Own chunk of work: timer state, notification
+  permission, multiple concurrent timers.
+- **True external-display scene** — non-mirrored AirPlay where the TV shows Chef View while
+  the phone shows something else. Plain mirroring works free in v1; this is also the bridge
+  toward the phone-driven tvOS app direction.
+- Voice / hands-free step advance.
+
+### Phasing
+
+1. Shell + presentation (iOS cover, macOS window, entry points), continuous layout with
+   current-step highlight, keep-awake, session store.
+2. Focus mode + in-view mode toggle; text-size stepper.
+3. Check-off, scaling passthrough, "Made it!", polish (auto-scroll behavior, compact
+   ingredients drawer).
+
+---
+
 ## Shopping Lists — BUILT (sync not yet enabled)
 
 Unlike the three features above, this one exists. Recorded here because the sync decisions were
@@ -559,7 +720,10 @@ this section now applies only to recipes and the vocab tables.
 
 ---
 
-## Suggested build order across all three
+## Suggested build order
+
+**Chef View is orthogonal** — no schema, no sync, no query-engine dependency — so it can ship
+before, between, or in parallel with any of the three below. Among the schema-bearing features:
 
 1. **Smart Lists / Advanced Search** first — it deepens the query engine that everything else
    benefits from, has the strongest existing foundation, and the sidebar slot is already stubbed.

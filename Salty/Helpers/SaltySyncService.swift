@@ -11,10 +11,9 @@ import Foundation
 import SQLiteData
 import OSLog
 import UUIDV7
+import SaltyCore
 #if canImport(UIKit)
-import UIKit
-#elseif canImport(AppKit)
-import AppKit
+import UIKit   // sole use: UIDevice.current.name in `deviceName` (macOS uses Foundation's Host)
 #endif
 
 // MARK: - Sync Service
@@ -30,6 +29,11 @@ class SaltySyncService {
     /// (e.g. a `URLProtocol`-backed session) and exercise the error paths without a live server.
     @ObservationIgnored
     private let session: URLSession
+
+    /// Storage for the server password and JWT. Defaults to the keychain; injectable so tests can run
+    /// against an in-memory store instead of the developer's own keychain.
+    @ObservationIgnored
+    private let credentials: any SyncCredentialStore
 
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
@@ -74,16 +78,26 @@ class SaltySyncService {
         set { UserDefaults.standard.set(newValue, forKey: "serverUsername") }
     }
     
-    /// Password for server authentication (stored securely in Keychain)
-    var serverPassword: String {
-        get { KeychainHelper.shared.getPassword() }
-        set { KeychainHelper.shared.savePassword(newValue) }
+    /// The per-device sync token the server issued when this device enrolled (stored in the Keychain).
+    ///
+    /// This is the app's only lasting credential, and it is deliberately weaker than the password it
+    /// replaces: the server accepts it on the sync routes and nowhere else, so a copy lifted off this
+    /// device can read and write recipes but cannot change the account password or revoke any other
+    /// device. `nil` means this device is not enrolled and a sync must ask for the password once.
+    private var deviceToken: String? {
+        get { credentials.deviceToken() }
+        set {
+            credentials.setDeviceToken(newValue)
+            // Keep the observable mirror in step here rather than at each call site, so no future path
+            // can change the token and leave the UI showing the old state.
+            isEnrolled = !(newValue ?? "").isEmpty
+        }
     }
-    
+
     /// Cached JWT token (stored securely in Keychain)
     private var jwtToken: String? {
-        get { KeychainHelper.shared.getJwtToken() }
-        set { KeychainHelper.shared.saveJwtToken(newValue) }
+        get { credentials.jwtToken() }
+        set { credentials.setJwtToken(newValue) }
     }
     
     /// Token expiration date (stored in UserDefaults - not sensitive)
@@ -92,9 +106,33 @@ class SaltySyncService {
         set { UserDefaults.standard.set(newValue, forKey: "serverTokenExpiration") }
     }
     
-    /// Whether we have valid credentials configured
+    /// Whether this device holds a sync token, and so can sync without asking the user for anything.
+    ///
+    /// Stored rather than computed from the keychain on demand, for two reasons. It is read from SwiftUI
+    /// `body` -- once per keystroke while the password field has focus -- and a keychain round trip per
+    /// render is waste. More importantly it has to be *observable*: computing it through
+    /// `@ObservationIgnored` storage would leave Settings showing the disconnected form after a
+    /// successful connect, until some unrelated state change happened to redraw it. The keychain remains
+    /// the source of truth; this mirrors it, maintained by the `deviceToken` setter.
+    private(set) var isEnrolled: Bool
+
+    /// Whether a password saved by a pre-enrolment build is still waiting to be spent on enrolment.
+    /// Same reasoning as `isEnrolled`: read from `body`, and has to change visibly when it's consumed.
+    private(set) var hasUnspentSavedPassword: Bool
+
+    /// Whether a sync can authenticate unattended.
+    ///
+    /// True once enrolled, and also while a password saved by a pre-enrolment build is still sitting in
+    /// the keychain -- that password is spent enrolling this device on the next sync and then deleted, so
+    /// upgrading users are never prompted. See `enrollUsingSavedPassword()`.
     var hasCredentials: Bool {
-        !serverUsername.isEmpty && !serverPassword.isEmpty
+        isEnrolled || (!serverUsername.isEmpty && hasUnspentSavedPassword)
+    }
+
+    /// Erases a migrated legacy password, keeping the observable mirror in step.
+    private func discardSavedPassword() {
+        credentials.setPassword("")
+        hasUnspentSavedPassword = false
     }
     
     /// Whether the current token is valid (exists and not expired)
@@ -129,9 +167,14 @@ class SaltySyncService {
         #endif
     }
     
-    /// `session` defaults to `.shared` for the app singleton; tests inject a stubbed session.
-    init(session: URLSession = .shared) {
+    /// `session` defaults to `.shared` and `credentials` to the keychain, as the app singleton needs;
+    /// tests inject a stubbed session and an in-memory credential store.
+    init(session: URLSession = .shared, credentials: any SyncCredentialStore = KeychainHelper.shared) {
         self.session = session
+        self.credentials = credentials
+        // The only two keychain reads on this path: everything afterwards works off these mirrors.
+        isEnrolled = !(credentials.deviceToken() ?? "").isEmpty
+        hasUnspentSavedPassword = !credentials.password().isEmpty
         // Restore the last sync time from a previous run. Assignment in `init` doesn't fire `didSet`, so
         // this doesn't write the value straight back.
         lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncDateKey) as? Date
@@ -139,71 +182,242 @@ class SaltySyncService {
     
     // MARK: - Authentication Methods
     
-    /// Login to the server and get a JWT token
-    func login() async throws {
-        guard !serverUsername.isEmpty, !serverPassword.isEmpty else {
+    /// The server's reply to both `/api/auth/login` and `/api/auth/token`.
+    ///
+    /// `deviceToken` is present exactly once, in the login that enrols this device, and only because we
+    /// asked by sending a `deviceId`. Every later exchange omits it.
+    private struct AuthResponse: Decodable {
+        let token: String
+        let username: String
+        /// Milliseconds. Now ~90 minutes, down from 8 days -- which is precisely why the device token
+        /// exists: re-minting has to be silent, because it now happens constantly.
+        let expiresIn: Int
+        let deviceToken: String?
+    }
+
+    /// Enrols this device: the one and only time the password is needed.
+    ///
+    /// Sends the password with this device's `deviceId`, and the server returns a long-lived sync token
+    /// alongside the usual JWT. The password is used for this single request and never written anywhere
+    /// -- not to the keychain, not to a stored property. From here on `mintJwtFromDeviceToken()` keeps
+    /// the app authenticated on its own.
+    ///
+    /// The `deviceId` deliberately reuses the one the sync protocol already registers under: the server
+    /// keys tokens on (user, deviceId), so enrolling under a fresh id would list this device twice on the
+    /// server's devices page and strand its sync history on the old row.
+    func enroll(username: String, password: String) async throws {
+        let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty, !password.isEmpty else {
             throw SyncError.authenticationFailed("Username and password are required")
         }
-        
+
         guard let url = URL(string: "\(serverUrl)/api/auth/login") else {
             throw SyncError.authenticationFailed("Invalid server URL")
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let credentials = ["username": serverUsername, "password": serverPassword]
-        request.httpBody = try JSONEncoder().encode(credentials)
-        
-        logger.info("Attempting login for user: \(self.serverUsername)")
-        
+
+        struct EnrolmentRequest: Encodable {
+            let username: String
+            let password: String
+            let deviceId: String
+            let deviceName: String
+        }
+        request.httpBody = try JSONEncoder().encode(
+            EnrolmentRequest(username: username, password: password,
+                             deviceId: deviceId, deviceName: deviceName)
+        )
+
+        logger.info("Enrolling device for user: \(username)")
+
         let (data, response) = try await session.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.authenticationFailed("Invalid response from server")
         }
-        
+
         if httpResponse.statusCode == 401 {
             throw SyncError.authenticationFailed("Invalid username or password")
         }
-        
+
         guard (200...299).contains(httpResponse.statusCode) else {
-            logger.error("Login failed HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+            logger.error("Enrolment failed HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
             throw SyncError.authenticationFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
         }
-        
-        // Parse response
-        struct AuthResponse: Codable {
-            let token: String
-            let username: String
-            let expiresIn: Int  // milliseconds
-        }
-        
+
         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-        
-        // Store token and calculate expiration
-        jwtToken = authResponse.token
-        tokenExpirationDate = Date().addingTimeInterval(Double(authResponse.expiresIn) / 1000.0)
-        
-        logger.info("Login successful for user: \(authResponse.username), token expires in \(authResponse.expiresIn / 1000 / 60 / 60) hours")
-    }
-    
-    /// Ensure we have a valid token, logging in if necessary
-    private func ensureAuthenticated() async throws {
-        if !hasValidToken {
-            logger.info("Token expired or missing, logging in...")
-            try await login()
+
+        // A server predating device tokens answers a login unchanged, ignoring the deviceId it doesn't
+        // know about. Accepting that would leave the app with a 90-minute JWT and no way to renew it,
+        // so it's a setup failure with a message that names the actual fix rather than a mystery
+        // re-prompt every 90 minutes.
+        guard let issuedDeviceToken = authResponse.deviceToken, !issuedDeviceToken.isEmpty else {
+            logger.error("Server accepted the login but issued no device token")
+            throw SyncError.enrolmentUnsupported
         }
+
+        serverUsername = authResponse.username
+        deviceToken = issuedDeviceToken
+        storeJwt(authResponse)
+
+        // Nothing else in the app writes this key any more; clearing it here is what makes the upgrade
+        // from a password-saving build a one-way trip.
+        discardSavedPassword()
+
+        logger.info("Device enrolled for user: \(authResponse.username)")
     }
-    
-    /// Clear stored authentication data
-    func logout() {
+
+    /// Trades this device's sync token for a fresh JWT -- the only authentication call the app makes
+    /// after enrolment, and the reason it never needs the password again.
+    ///
+    /// A 401 here is meaningful rather than transient: the token was revoked from the server's devices
+    /// page, or the account password changed (which signs every device out). Either way the token is
+    /// dead, so it's deleted and the caller is told to enrol again.
+    private func mintJwtFromDeviceToken() async throws {
+        guard let token = deviceToken, !token.isEmpty else {
+            throw SyncError.enrolmentRequired
+        }
+        guard let url = URL(string: "\(serverUrl)/api/auth/token") else {
+            throw SyncError.authenticationFailed("Invalid server URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.authenticationFailed("Invalid response from server")
+        }
+
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            logger.warning("Device token rejected (HTTP \(httpResponse.statusCode)); clearing it")
+            deviceToken = nil
+            jwtToken = nil
+            tokenExpirationDate = nil
+            throw SyncError.enrolmentRequired
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            // Anything else -- server down, proxy in the way -- leaves the token alone: it is very
+            // probably still good, and discarding it would cost the user a password prompt for what is
+            // really a network problem.
+            logger.error("Token exchange failed HTTP \(httpResponse.statusCode)")
+            throw SyncError.authenticationFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
+        }
+
+        storeJwt(try JSONDecoder().decode(AuthResponse.self, from: data))
+        logger.info("Minted a fresh JWT from the device token")
+    }
+
+    /// Spends a password left by a pre-enrolment build to enrol this device, once.
+    ///
+    /// Existing installs upgrade without ever seeing the prompt: the password they already saved is
+    /// good for exactly one more login, which is the one that enrols them. `enroll` deletes it on
+    /// success. A failure leaves it in place so the next sync can retry.
+    private func enrollUsingSavedPassword() async throws {
+        let saved = credentials.password()
+        guard !saved.isEmpty, !serverUsername.isEmpty else { throw SyncError.enrolmentRequired }
+        logger.info("Migrating a saved password into a device token")
+        try await enroll(username: serverUsername, password: saved)
+    }
+
+    /// Records a freshly minted JWT and when it expires.
+    private func storeJwt(_ response: AuthResponse) {
+        jwtToken = response.token
+        tokenExpirationDate = Date().addingTimeInterval(Double(response.expiresIn) / 1000.0)
+    }
+
+    /// Ensure we have a valid token, minting a new one if necessary.
+    ///
+    /// Internal rather than private so the auth paths can be tested directly: driving them through a
+    /// whole `syncNow()` would need a migrated database and a dozen stubbed routes to assert one
+    /// credential decision.
+    func ensureAuthenticated() async throws {
+        if hasValidToken { return }
+
+        if isEnrolled {
+            logger.info("Token expired or missing, exchanging the device token...")
+            try await mintJwtFromDeviceToken()
+            return
+        }
+
+        // Not enrolled. Either this install predates device tokens and still has a saved password to
+        // spend, or the user has to be asked for one.
+        try await enrollUsingSavedPassword()
+    }
+
+    /// What `signOut()` managed to do, so the UI can say something useful when it fell short.
+    enum ForgetOutcome {
+        /// The token is dead server-side as well as gone from here.
+        case revokedOnServer
+        /// The server couldn't be told, so the token may still be live there. Forgetting still
+        /// happened locally -- refusing to sign out because the network is down would be worse.
+        case localOnly
+    }
+
+    /// Forgets this device: revokes its token on the server, then discards it and the JWT here, so the
+    /// next sync asks for the password again.
+    ///
+    /// The revoke is attempted first, because it needs the credential this is about to destroy. Local
+    /// state is cleared regardless of how it goes: a user who asked to sign out has signed out, and
+    /// leaving them connected because a server was unreachable would be the wrong way to fail.
+    ///
+    /// There is deliberately no "clear just the JWT" counterpart any more. It used to be a useful
+    /// troubleshooting button when a JWT lasted 8 days and re-minting cost a password prompt; now one
+    /// expires every 90 minutes and is replaced silently, so clearing it by hand does nothing a user
+    /// could observe.
+    @discardableResult
+    func signOut() async -> ForgetOutcome {
+        let outcome = await revokeDeviceTokenOnServer()
+        deviceToken = nil
         jwtToken = nil
         tokenExpirationDate = nil
-        logger.info("Logged out, cleared JWT token")
+        discardSavedPassword()
+        logger.info("Forgot this device (server revoke: \(outcome == .revokedOnServer ? "done" : "unreachable"))")
+        return outcome
     }
-    
+
+    /// Asks the server to revoke this device's own token.
+    ///
+    /// `/api/auth/token/revoke` takes no device id -- it can only revoke whichever device presented the
+    /// token, which is why a sync credential is allowed to call it at all while the devices routes stay
+    /// behind a password. Revoking oneself is de-escalation; revoking anyone else is not.
+    ///
+    /// Never throws: this runs on the way out, and no failure here should be able to strand the user on
+    /// a device they've asked to sign out of.
+    private func revokeDeviceTokenOnServer() async -> ForgetOutcome {
+        guard let token = deviceToken, !token.isEmpty,
+              let url = URL(string: "\(serverUrl)/api/auth/token/revoke") else {
+            return .localOnly
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // Well under URLSession's 60s default: signing out must not appear to hang because the server
+        // is off, and the local half of the job succeeds either way.
+        request.timeoutInterval = 15
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return .localOnly }
+            // 401 means the token was already dead -- revoked from the devices page, or invalidated by
+            // a password change. The point of the call is met, so don't alarm the user about it.
+            if (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 401 {
+                return .revokedOnServer
+            }
+            logger.warning("Server refused the self-revoke (HTTP \(httpResponse.statusCode))")
+            return .localOnly
+        } catch {
+            logger.warning("Couldn't reach the server to revoke this device: \(error.localizedDescription)")
+            return .localOnly
+        }
+    }
+
     /// Add authorization header to a request
     private func addAuthHeader(to request: inout URLRequest) {
         if let token = jwtToken {
@@ -409,8 +623,9 @@ class SaltySyncService {
 
             // Wipe the local database + local image files.
             syncProgress.currentStep = "Clearing local data..."
-            let oldImageFilenames = try await database.read { db in
-                try Recipe.fetchAll(db).compactMap { $0.imageFilename }
+            let (oldImageFilenames, oldShoppingListIds) = try await database.read { db in
+                (try Recipe.fetchAll(db).compactMap { $0.imageFilename },
+                 try ShoppingList.fetchAll(db).map { $0.id })
             }
             try await database.write { db in
                 try RecipeCategory.delete().execute(db)
@@ -444,6 +659,11 @@ class SaltySyncService {
                     try ShoppingList.insert { row }.execute(db)
                 }
             }
+            // Every list was replaced (or removed) wholesale; any open editor must reload rather
+            // than save its pre-wipe content back.
+            for id in Set(oldShoppingListIds).union(shoppingListRows.map { $0.id }) {
+                ShoppingListChangeNotifier.shared.noteExternalChange(listId: id)
+            }
             syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count + serverShoppingLists.count
 
             // Download recipes (marking them downloaded so syncImages pulls their images).
@@ -454,11 +674,19 @@ class SaltySyncService {
                 syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
             }
 
+            // Every recipe here came from the server moments ago, so the two sides agree by
+            // construction. Recording that stops the next ordinary sync from reading the whole restored
+            // library as never-agreed and uploading all of it straight back (SHARED-V0005).
+            try await database.write { db in
+                try RecipeAgreementStore.markAllAgreed(in: db)
+                try ClassifierAgreementStore.markAllAgreed(in: db)
+            }
+
             // Images: local files were wiped, so this only downloads (nothing to upload).
             syncProgress.currentStep = "Downloading images..."
             try await syncImages()
 
-            // The server's own vocabulary can contain same-named rows; don't rebuild the local
+            // The server's own classifiers can contain same-named rows; don't rebuild the local
             // library with them. The next ordinary sync propagates the resulting deletions.
             syncProgress.currentStep = "Tidying categories, courses, and tags..."
             await consolidateDuplicateLibraryItems()
@@ -521,27 +749,28 @@ class SaltySyncService {
             let serverShoppingListsById = Dictionary(serverShoppingLists.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
 
             // Push courses/categories/tags first. Recipes link them by id, which must already exist
-            // server-side. Update items the server already has, create the rest.
+            // server-side. Update items the server already has, create the rest. `force` marks these
+            // as deliberate mirror-this-device overwrites (see `forceWriteHeader`).
             syncProgress.currentStep = "Uploading to server..."
             for c in localCourses {
                 if serverCourseIds.contains(c.id) {
-                    try await putToServer(c, endpoint: "/api/courses/\(c.id)")
+                    try await putToServer(c, endpoint: "/api/courses/\(c.id)", force: true)
                 } else {
-                    try await postToServer(c, endpoint: "/api/courses")
+                    try await postToServer(c, endpoint: "/api/courses", force: true)
                 }
             }
             for c in localCategories {
                 if serverCategoryIds.contains(c.id) {
-                    try await putToServer(c, endpoint: "/api/categories/\(c.id)")
+                    try await putToServer(c, endpoint: "/api/categories/\(c.id)", force: true)
                 } else {
-                    try await postToServer(c, endpoint: "/api/categories")
+                    try await postToServer(c, endpoint: "/api/categories", force: true)
                 }
             }
             for t in localTags {
                 if serverTagIds.contains(t.id) {
-                    try await putToServer(t, endpoint: "/api/tags/\(t.id)")
+                    try await putToServer(t, endpoint: "/api/tags/\(t.id)", force: true)
                 } else {
-                    try await postToServer(t, endpoint: "/api/tags")
+                    try await postToServer(t, endpoint: "/api/tags", force: true)
                 }
             }
             for l in localShoppingLists {
@@ -567,13 +796,13 @@ class SaltySyncService {
             // Push recipes (uploadRecipe overwrites existing or creates new as needed).
             syncProgress.currentStep = "Uploading recipes..."
             for recipe in localRecipes {
-                try await uploadRecipe(recipe)
+                try await uploadRecipe(recipe, force: true)
                 syncProgress.itemsUploaded += 1
                 syncProgress.uploadedRecipeIds.insert(recipe.id)
             }
 
             // Remove anything on the server that no longer exists locally (it was deleted from the
-            // source of truth). Recipes first, then vocab they may reference.
+            // source of truth). Recipes first, then classifiers they may reference.
             syncProgress.currentStep = "Removing stale server data..."
             let localRecipeIds = Set(localRecipes.map { $0.id })
             let orphanRecipeIds = serverRecipeIds.filter { !localRecipeIds.contains($0) }
@@ -602,6 +831,15 @@ class SaltySyncService {
             syncProgress.currentStep = "Uploading images..."
             try await syncImages()
 
+            // The server now mirrors this library exactly, so every local row is agreed by
+            // construction. Recording that (SHARED-V0005) stops the next ordinary sync from
+            // re-uploading every never-agreed row — and from resurrecting a recipe deleted elsewhere
+            // between this push and that sync.
+            try await database.write { db in
+                try RecipeAgreementStore.markAllAgreed(in: db)
+                try ClassifierAgreementStore.markAllAgreed(in: db)
+            }
+
             try await completeSyncOnServer()
             lastSyncDate = Date()
             syncProgress.currentStep = "Full re-sync complete!"
@@ -621,8 +859,28 @@ class SaltySyncService {
     /// NOTE: this only catches a fully-empty response; detecting a *partial* response would require
     /// the server to also report its expected total count.
     private func serverResponseAllowsLocalDeletions(serverItemCount: Int, pendingLocalDeletions: Int, entity: String) -> Bool {
-        if serverItemCount == 0 && pendingLocalDeletions > 0 {
+        if !RecipeSyncReconciler.allowsDeletions(sideCount: serverItemCount, pendingDeletions: pendingLocalDeletions) {
             logger.error("Skipping \(pendingLocalDeletions) local \(entity) deletion(s): the server returned an empty list, which likely indicates an incomplete response rather than real deletions.")
+            return false
+        }
+        return true
+    }
+
+    /// The mirror of `serverResponseAllowsLocalDeletions`, and the half that was missing: guards bulk
+    /// deletions **on the server** against an empty local collection.
+    ///
+    /// Deletion inference is symmetric — "present there, absent here, unchanged since the last sync"
+    /// deletes on the server — so an empty library with a live watermark asked the server to drop
+    /// everything it had, and nothing stopped it. A library is empty for the same kinds of reason a
+    /// server list is: restored from a backup that predates the recipes, recreated at the old path
+    /// after being moved, or opened before iCloud/Nextcloud finished bringing it down. This direction
+    /// loses the shared copy rather than one device's.
+    ///
+    /// Nothing legitimate is blocked: a recipe deleted on purpose travels as a tombstone on its own
+    /// path, and emptying a collection outright is what "Delete Server, Push from Local" is for. See SYNC-016.
+    private func localLibraryAllowsServerDeletions(localItemCount: Int, pendingServerDeletions: Int, entity: String) -> Bool {
+        if !RecipeSyncReconciler.allowsDeletions(sideCount: localItemCount, pendingDeletions: pendingServerDeletions) {
+            logger.error("Skipping \(pendingServerDeletions) server \(entity) deletion(s): this library is empty, which likely indicates a restored or not-yet-downloaded library rather than real deletions. Use \"Delete Server, Push from Local\" if you meant to clear it.")
             return false
         }
         return true
@@ -720,25 +978,49 @@ class SaltySyncService {
                     try ShoppingList.where { $0.id.eq(id) }.delete().execute(db)
                 }
             }
+            for id in toDeleteLocally {
+                // An open editor for a deleted list should show it empty, not keep a ghost copy
+                // whose edits would silently persist nowhere.
+                ShoppingListChangeNotifier.shared.noteExternalChange(listId: id)
+            }
             if !toDeleteLocally.isEmpty {
                 logger.info("Deleted \(toDeleteLocally.count) shopping list(s) locally (were deleted on server)")
             }
         }
 
+        // Server-only rows are classified before any of them is applied, because the delete direction
+        // needs its total up front to be guarded the way the local direction above is (SYNC-016).
+        //
+        // Server-only row: new to us, or deleted here. No tombstones for lists, so the watermark
+        // decides — except a failed If-Match delete proves the row changed, and change wins.
+        var serverOnlyDownloads: [ServerShoppingList] = []
+        var serverOnlyDeletes: [ServerShoppingList] = []
         for s in serverLists where !localIds.contains(s.id) {
-            try Task.checkCancellation()
-            // Server-only row: new to us, or deleted here. No tombstones for lists, so the watermark
-            // decides — except a failed If-Match delete proves the row changed, and change wins.
             let serverDate = (s.lastModifiedDate ?? .distantPast).roundedToWireMillis
             if deviceInfo.isFirstSync || deviceInfo.lastSyncDate == nil || serverDate > deviceInfo.lastSyncDate! {
-                try await downloadShoppingList(s)
+                serverOnlyDownloads.append(s)
             } else {
-                switch try await deleteShoppingListOnServer(id: s.id, expectedRevision: s.revision) {
-                case .deleted:
-                    logger.info("Deleted shopping list \(s.id) on server (was deleted locally)")
-                case .conflict(let current):
-                    try await downloadShoppingList(current)
-                }
+                serverOnlyDeletes.append(s)
+            }
+        }
+
+        if !localLibraryAllowsServerDeletions(
+            localItemCount: localRows.count, pendingServerDeletions: serverOnlyDeletes.count, entity: "shopping list") {
+            serverOnlyDeletes = []
+        }
+
+        for s in serverOnlyDownloads {
+            try Task.checkCancellation()
+            try await downloadShoppingList(s)
+        }
+
+        for s in serverOnlyDeletes {
+            try Task.checkCancellation()
+            switch try await deleteShoppingListOnServer(id: s.id, expectedRevision: s.revision) {
+            case .deleted:
+                logger.info("Deleted shopping list \(s.id) on server (was deleted locally)")
+            case .conflict(let current):
+                try await downloadShoppingList(current)
             }
         }
     }
@@ -813,7 +1095,7 @@ class SaltySyncService {
             base: l.syncedSnapshot,
             local: l.list,
             server: s,
-            conflictCopyId: UUID().uuidString,
+            conflictCopyId: UUIDV7().uuidString,
             conflictCopyLabel: "conflicted copy from \(deviceName) \(Self.dayStamp())"
         )
 
@@ -859,6 +1141,9 @@ class SaltySyncService {
             try ShoppingList.upsert { row }.execute(db)
         }
         syncProgress.itemsDownloaded += 1
+        // The list may be open in a checklist/freeform editor, which holds its content in memory —
+        // without this, its next keystroke would save the pre-download content right back.
+        ShoppingListChangeNotifier.shared.noteExternalChange(listId: server.id)
     }
 
     /// Records the server agreement after a successful *upload* without touching the row's contents:
@@ -958,20 +1243,65 @@ class SaltySyncService {
         String(SyncWireDate.string(from: date).prefix(10))
     }
 
+    // MARK: - Conditional classifier deletes
+
+    /// Outcome of a conditional course/category/tag delete: a 409 means the row changed on the
+    /// server after we fetched it, and carries the CURRENT row for the caller to download instead.
+    private enum LibraryDeleteOutcome<Item: Decodable> {
+        case deleted
+        case conflict(current: Item)
+    }
+
+    /// DELETEs one course/category/tag, conditional on [expectedLastModified] via `If-Match`
+    /// carrying the wire timestamp string. Today's server ignores the header and deletes
+    /// unconditionally, so behavior is unchanged; a future server (planned alongside web editing)
+    /// compares it against the stored stamp and answers 409 + the current row on mismatch — the
+    /// same edit-beats-delete contract shopping lists already have via If-Match revisions. Sent
+    /// only by the regular sync path: the force re-sync-to-server deletes stay unconditional,
+    /// because there the local library is deliberately the source of truth.
+    /// 404 counts as deleted: the goal state is already true.
+    private func deleteLibraryItemOnServer<Item: Decodable>(
+        _ type: Item.Type, endpoint: String, expectedLastModified: Date?
+    ) async throws -> LibraryDeleteOutcome<Item> {
+        let url = try makeURL(endpoint: endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        addAuthHeader(to: &request)
+        if let expectedLastModified {
+            request.setValue(Self.wireDateString(expectedLastModified), forHTTPHeaderField: "If-Match")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.uploadFailed("No HTTP response for DELETE \(endpoint)")
+        }
+        if httpResponse.statusCode == 409 {
+            return .conflict(current: try makeWireDecoder().decode(Item.self, from: data))
+        }
+        guard (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 else {
+            throw SyncError.uploadFailed("DELETE to \(endpoint) failed: \(SyncError.httpMessage(status: httpResponse.statusCode, body: data))")
+        }
+        return .deleted
+    }
+
     // MARK: - Course Sync
 
     private func syncCoursesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
-        let localCourses = try await database.read { db in
-            try Course.fetchAll(db)
+        // Agreement-tracked (SHARED-V0006), exactly like recipes: a row that exists here and not on
+        // the server is classified by its recorded stamp, never by comparing clocks to the watermark.
+        let (localCourses, tracksAgreement, syncedStamps) = try await database.read { db -> ([Course], Bool, [String: Date]) in
+            (try Course.fetchAll(db),
+             try ClassifierAgreementStore.isAvailable(.course, in: db),
+             try ClassifierAgreementStore.stamps(.course, in: db))
         }
         
         // uniquingKeysWith (not uniqueKeysWithValues) so a duplicate id in the server response
         // can't trap/crash the sync; keep the last occurrence.
         let serverCoursesById = Dictionary(serverCourses.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localCourseIds = Set(localCourses.map { $0.id })
-        
-        var toDeleteOnServer: [String] = []
+
+        var toDeleteOnServer: [ServerCourse] = []
         var toDeleteLocally: [String] = []
         
         // Process each local course
@@ -996,7 +1326,20 @@ class SaltySyncService {
                 if deviceInfo.isFirstSync {
                     try await postToServer(localCourse, endpoint: "/api/courses")
                     syncProgress.itemsUploaded += 1
+                } else if tracksAgreement {
+                    // Recorded fact, not a clock comparison. No stamp means it has never been to the
+                    // server, so it is new here; a stamp that no longer matches means it was edited here
+                    // after the server last had it, and an edit beats a delete everywhere in Salty. Only
+                    // a stamp that still matches proves the server had exactly this row and removed it.
+                    let localDate = (localCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                    if let stamp = syncedStamps[localCourse.id], stamp.roundedToWireMillis == localDate {
+                        toDeleteLocally.append(localCourse.id)
+                    } else {
+                        try await postToServer(localCourse, endpoint: "/api/courses")
+                        syncProgress.itemsUploaded += 1
+                    }
                 } else if let lastSync = deviceInfo.lastSyncDate {
+                    // Pre-V0006 library: the old watermark guess, until this file is migrated.
                     let localDate = (localCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localCourse, endpoint: "/api/courses")
@@ -1029,7 +1372,7 @@ class SaltySyncService {
                         }
                         syncProgress.itemsDownloaded += 1
                     } else {
-                        toDeleteOnServer.append(serverCourse.id)
+                        toDeleteOnServer.append(serverCourse)
                     }
                 } else {
                     let course = Course(id: serverCourse.id, name: serverCourse.name ?? "", lastModifiedDate: serverCourse.lastModifiedDate ?? Date())
@@ -1054,18 +1397,47 @@ class SaltySyncService {
             }
         }
         
-        // Delete on server
-        for id in toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/courses/\(id)")
-            logger.info("Deleted course \(id) on server (was deleted locally)")
+        // Delete on server — conditional on the timestamp we based the decision on, so a row that
+        // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
+        let mayDeleteCourseOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localCourses.count, pendingServerDeletions: toDeleteOnServer.count, entity: "course")
+        for serverCourse in mayDeleteCourseOnServer ? toDeleteOnServer : [] {
+            switch try await deleteLibraryItemOnServer(
+                ServerCourse.self,
+                endpoint: "/api/courses/\(serverCourse.id)",
+                expectedLastModified: serverCourse.lastModifiedDate
+            ) {
+            case .deleted:
+                logger.info("Deleted course \(serverCourse.id) on server (was deleted locally)")
+            case .conflict(let current):
+                let course = Course(id: current.id, name: current.name ?? "", lastModifiedDate: current.lastModifiedDate ?? Date())
+                try await database.write { db in
+                    try Course.upsert { course }.execute(db)
+                }
+                syncProgress.itemsDownloaded += 1
+                logger.info("Course \(current.id) changed on server after our fetch; downloaded instead of deleting")
+            }
         }
+        // Record what this pass agreed on (SHARED-V0006): everything the server also holds, plus what
+        // this pass moved in either direction, minus anything just deleted here — the same three groups
+        // the recipe pass stamps, for the same reason.
+        if tracksAgreement {
+            var agreed = Set(localCourses.map { $0.id }).intersection(serverCoursesById.keys)
+            agreed.formUnion(serverCoursesById.keys.filter { !localCourseIds.contains($0) })
+            agreed.subtract(toDeleteLocally)
+            let stampIds = Array(agreed)
+            try await database.write { db in
+                try ClassifierAgreementStore.markAgreed(.course, stampIds, in: db)
+            }
+        }
+
     }
     
     // MARK: - Duplicate library items
 
     /// Folds same-named courses/categories/tags into a single row at the end of a sync.
     ///
-    /// Vocabulary rows are reconciled by **id**, never by name (see `syncCoursesWithDeletions` and
+    /// Classifier rows are reconciled by **id**, never by name (see `syncCoursesWithDeletions` and
     /// its siblings), so two devices that each create "Vegan" -- or two installs that each ran the
     /// migration-0002 seed and got their own ids for "Breads", "Main", … -- end up with two rows
     /// that sync then replicates faithfully, forever. Nothing upstream can notice: to the server
@@ -1108,14 +1480,18 @@ class SaltySyncService {
 
     private func syncCategoriesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
-        let localCategories = try await database.read { db in
-            try Category.fetchAll(db)
+        // Agreement-tracked (SHARED-V0006), exactly like recipes: a row that exists here and not on
+        // the server is classified by its recorded stamp, never by comparing clocks to the watermark.
+        let (localCategories, tracksAgreement, syncedStamps) = try await database.read { db -> ([Category], Bool, [String: Date]) in
+            (try Category.fetchAll(db),
+             try ClassifierAgreementStore.isAvailable(.category, in: db),
+             try ClassifierAgreementStore.stamps(.category, in: db))
         }
         
         let serverCategoriesById = Dictionary(serverCategories.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localCategoryIds = Set(localCategories.map { $0.id })
-        
-        var toDeleteOnServer: [String] = []
+
+        var toDeleteOnServer: [ServerCategory] = []
         var toDeleteLocally: [String] = []
         
         // Process each local category
@@ -1140,7 +1516,20 @@ class SaltySyncService {
                 if deviceInfo.isFirstSync {
                     try await postToServer(localCategory, endpoint: "/api/categories")
                     syncProgress.itemsUploaded += 1
+                } else if tracksAgreement {
+                    // Recorded fact, not a clock comparison. No stamp means it has never been to the
+                    // server, so it is new here; a stamp that no longer matches means it was edited here
+                    // after the server last had it, and an edit beats a delete everywhere in Salty. Only
+                    // a stamp that still matches proves the server had exactly this row and removed it.
+                    let localDate = (localCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                    if let stamp = syncedStamps[localCategory.id], stamp.roundedToWireMillis == localDate {
+                        toDeleteLocally.append(localCategory.id)
+                    } else {
+                        try await postToServer(localCategory, endpoint: "/api/categories")
+                        syncProgress.itemsUploaded += 1
+                    }
                 } else if let lastSync = deviceInfo.lastSyncDate {
+                    // Pre-V0006 library: the old watermark guess, until this file is migrated.
                     let localDate = (localCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localCategory, endpoint: "/api/categories")
@@ -1173,7 +1562,7 @@ class SaltySyncService {
                         }
                         syncProgress.itemsDownloaded += 1
                     } else {
-                        toDeleteOnServer.append(serverCategory.id)
+                        toDeleteOnServer.append(serverCategory)
                     }
                 } else {
                     let category = Category(id: serverCategory.id, name: serverCategory.name ?? "", lastModifiedDate: serverCategory.lastModifiedDate ?? Date())
@@ -1198,25 +1587,58 @@ class SaltySyncService {
             }
         }
         
-        // Delete on server
-        for id in toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/categories/\(id)")
-            logger.info("Deleted category \(id) on server (was deleted locally)")
+        // Delete on server — conditional on the timestamp we based the decision on, so a row that
+        // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
+        let mayDeleteCategoryOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localCategories.count, pendingServerDeletions: toDeleteOnServer.count, entity: "category")
+        for serverCategory in mayDeleteCategoryOnServer ? toDeleteOnServer : [] {
+            switch try await deleteLibraryItemOnServer(
+                ServerCategory.self,
+                endpoint: "/api/categories/\(serverCategory.id)",
+                expectedLastModified: serverCategory.lastModifiedDate
+            ) {
+            case .deleted:
+                logger.info("Deleted category \(serverCategory.id) on server (was deleted locally)")
+            case .conflict(let current):
+                let category = Category(id: current.id, name: current.name ?? "", lastModifiedDate: current.lastModifiedDate ?? Date())
+                try await database.write { db in
+                    try Category.upsert { category }.execute(db)
+                }
+                syncProgress.itemsDownloaded += 1
+                logger.info("Category \(current.id) changed on server after our fetch; downloaded instead of deleting")
+            }
         }
+        // Record what this pass agreed on (SHARED-V0006): everything the server also holds, plus what
+        // this pass moved in either direction, minus anything just deleted here — the same three groups
+        // the recipe pass stamps, for the same reason.
+        if tracksAgreement {
+            var agreed = Set(localCategories.map { $0.id }).intersection(serverCategoriesById.keys)
+            agreed.formUnion(serverCategoriesById.keys.filter { !localCategoryIds.contains($0) })
+            agreed.subtract(toDeleteLocally)
+            let stampIds = Array(agreed)
+            try await database.write { db in
+                try ClassifierAgreementStore.markAgreed(.category, stampIds, in: db)
+            }
+        }
+
     }
     
     // MARK: - Tag Sync
     
     private func syncTagsWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
-        let localTags = try await database.read { db in
-            try Tag.fetchAll(db)
+        // Agreement-tracked (SHARED-V0006), exactly like recipes: a row that exists here and not on
+        // the server is classified by its recorded stamp, never by comparing clocks to the watermark.
+        let (localTags, tracksAgreement, syncedStamps) = try await database.read { db -> ([Tag], Bool, [String: Date]) in
+            (try Tag.fetchAll(db),
+             try ClassifierAgreementStore.isAvailable(.tag, in: db),
+             try ClassifierAgreementStore.stamps(.tag, in: db))
         }
         
         let serverTagsById = Dictionary(serverTags.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         let localTagIds = Set(localTags.map { $0.id })
-        
-        var toDeleteOnServer: [String] = []
+
+        var toDeleteOnServer: [ServerTag] = []
         var toDeleteLocally: [String] = []
         
         // Process each local tag
@@ -1241,7 +1663,20 @@ class SaltySyncService {
                 if deviceInfo.isFirstSync {
                     try await postToServer(localTag, endpoint: "/api/tags")
                     syncProgress.itemsUploaded += 1
+                } else if tracksAgreement {
+                    // Recorded fact, not a clock comparison. No stamp means it has never been to the
+                    // server, so it is new here; a stamp that no longer matches means it was edited here
+                    // after the server last had it, and an edit beats a delete everywhere in Salty. Only
+                    // a stamp that still matches proves the server had exactly this row and removed it.
+                    let localDate = (localTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                    if let stamp = syncedStamps[localTag.id], stamp.roundedToWireMillis == localDate {
+                        toDeleteLocally.append(localTag.id)
+                    } else {
+                        try await postToServer(localTag, endpoint: "/api/tags")
+                        syncProgress.itemsUploaded += 1
+                    }
                 } else if let lastSync = deviceInfo.lastSyncDate {
+                    // Pre-V0006 library: the old watermark guess, until this file is migrated.
                     let localDate = (localTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localTag, endpoint: "/api/tags")
@@ -1274,7 +1709,7 @@ class SaltySyncService {
                         }
                         syncProgress.itemsDownloaded += 1
                     } else {
-                        toDeleteOnServer.append(serverTag.id)
+                        toDeleteOnServer.append(serverTag)
                     }
                 } else {
                     let tag = Tag(id: serverTag.id, name: serverTag.name ?? "", lastModifiedDate: serverTag.lastModifiedDate ?? Date())
@@ -1299,11 +1734,40 @@ class SaltySyncService {
             }
         }
         
-        // Delete on server
-        for id in toDeleteOnServer {
-            try await deleteOnServer(endpoint: "/api/tags/\(id)")
-            logger.info("Deleted tag \(id) on server (was deleted locally)")
+        // Delete on server — conditional on the timestamp we based the decision on, so a row that
+        // changed after our fetch (e.g. a web rename racing this sync) is downloaded, not deleted.
+        let mayDeleteTagOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localTags.count, pendingServerDeletions: toDeleteOnServer.count, entity: "tag")
+        for serverTag in mayDeleteTagOnServer ? toDeleteOnServer : [] {
+            switch try await deleteLibraryItemOnServer(
+                ServerTag.self,
+                endpoint: "/api/tags/\(serverTag.id)",
+                expectedLastModified: serverTag.lastModifiedDate
+            ) {
+            case .deleted:
+                logger.info("Deleted tag \(serverTag.id) on server (was deleted locally)")
+            case .conflict(let current):
+                let tag = Tag(id: current.id, name: current.name ?? "", lastModifiedDate: current.lastModifiedDate ?? Date())
+                try await database.write { db in
+                    try Tag.upsert { tag }.execute(db)
+                }
+                syncProgress.itemsDownloaded += 1
+                logger.info("Tag \(current.id) changed on server after our fetch; downloaded instead of deleting")
+            }
         }
+        // Record what this pass agreed on (SHARED-V0006): everything the server also holds, plus what
+        // this pass moved in either direction, minus anything just deleted here — the same three groups
+        // the recipe pass stamps, for the same reason.
+        if tracksAgreement {
+            var agreed = Set(localTags.map { $0.id }).intersection(serverTagsById.keys)
+            agreed.formUnion(serverTagsById.keys.filter { !localTagIds.contains($0) })
+            agreed.subtract(toDeleteLocally)
+            let stampIds = Array(agreed)
+            try await database.write { db in
+                try ClassifierAgreementStore.markAgreed(.tag, stampIds, in: db)
+            }
+        }
+
     }
     
     // MARK: - Device-based Recipe Sync with Deletion Detection
@@ -1351,8 +1815,26 @@ class SaltySyncService {
         }
         
         logger.info("Device info from server: isFirstSync=\(isFirstSync), lastSyncDate=\(lastSyncDate?.description ?? "nil")")
-        
-        return DeviceInfo(deviceId: deviceId, lastSyncDate: lastSyncDate, isFirstSync: isFirstSync)
+
+        // A device with no lastSyncDate has never FINISHED a sync, whatever the flag says — and since
+        // device sync tokens landed, the flag says otherwise. Enrolment issues the token into the same
+        // device_sync row that carries the watermark, so the row already exists by the time this call
+        // is made, and the server's "is this device new?" test is only whether the row is there.
+        //
+        // Normalised HERE, at the one place the server's answer is parsed, rather than at each of the
+        // half-dozen places that branch on it — the branches that upload are harmless either way, and
+        // the ones that delete are not, so the two must not be able to drift apart.
+        //
+        // Not cosmetic. isFirstSync is what suppresses deletion inference (SYNC-006), and a stamp
+        // records agreement with "the server" — a device that has never synced with THIS one has no
+        // basis to assume the stamps in a shared library refer to it. Trusting them deletes every
+        // stamped, unmodified row the server does not have. SYNC-008's tie-breaker settles the
+        // direction: losing a recipe is worse than resurrecting one.
+        return DeviceInfo(
+            deviceId: deviceId,
+            lastSyncDate: lastSyncDate,
+            isFirstSync: isFirstSync || lastSyncDate == nil
+        )
     }
     
     /// Mark sync as complete on server. Internal (not private) so its non-2xx throw is unit-testable.
@@ -1378,7 +1860,40 @@ class SaltySyncService {
     private func syncRecipesWithDeletions(deviceInfo: DeviceInfo) async throws {
         // 1. Full manifest (every server recipe's id + lastModifiedDate). This is the COMPLETE set the
         //    deletion logic reconciles against — never the delta below.
-        let manifest = try await fetchManifest()
+        let fullManifest = try await fetchManifest()
+
+        // 1a. Deletions made here, pushed as recorded facts rather than inferred from absence as in earlier
+        //     versions. Without this, a second device/app sharing the same file can tell only "never downloaded", but
+        //     if the recipe was edited on a third device since that  watermark, this will incorrectly revive that recipe.
+        //
+        //     An edit still beats a delete, and manifest is fetched first so the tombstones
+        //     can be checked against it before anything is pushed.
+        var tombstones = Set(try await database.read { db in try RecipeTombstoneWriter.pending(in: db) })
+        if !tombstones.isEmpty {
+            let manifestById = Dictionary(fullManifest.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+            let editedSinceDeleted = tombstones.filter { id in
+                guard !deviceInfo.isFirstSync, let watermark = deviceInfo.lastSyncDate,
+                      let entry = manifestById[id], let serverDate = entry.lastModifiedDate else { return false }
+                return serverDate.roundedToWireMillis > watermark
+            }
+
+            if !editedSinceDeleted.isEmpty {
+                logger.info("Dropping \(editedSinceDeleted.count) tombstone(s): the server copy changed after the delete")
+                let toClear = Array(editedSinceDeleted)
+                try await database.write { db in try RecipeTombstoneWriter.clear(toClear, in: db) }
+                tombstones.subtract(editedSinceDeleted)
+            }
+
+            if !tombstones.isEmpty {
+                logger.info("Pushing \(tombstones.count) recorded deletion(s) to the server")
+                try await deleteRecipesOnServer(recipeIds: Array(tombstones))
+                let pushed = Array(tombstones)
+                try await database.write { db in try RecipeTombstoneWriter.clear(pushed, in: db) }
+            }
+        }
+
+        // Anything just deleted on the server must not then be reconciled as if it were still there.
+        let manifest = fullManifest.filter { !tombstones.contains($0.id) }
 
         // 2. Only the changed bodies (the modifiedSince delta), paged. First sync / no lastSync date
         //    → fetch everything (still paged).
@@ -1398,8 +1913,20 @@ class SaltySyncService {
         // from "yyyy-MM-dd HH:mm:ss.SSS") and the server Date (decoded by ISO8601DateFormatter from
         // "...SSS'Z'") can land on adjacent Doubles for the SAME millisecond, so a strict > / < made the
         // reconciler re-upload/re-download every recipe on every sync. roundedToWireMillis normalizes both.
+        // SHARED-V0005's agreement bookkeeping. See RecipeAgreementStore for why the column is not a
+        // property on `Recipe`.
+        let (tracksAgreement, syncedStamps) = try await database.read { db -> (Bool, [String: Date]) in
+            (try RecipeAgreementStore.isAvailable(in: db), try RecipeAgreementStore.stamps(in: db))
+        }
+
         let localEntries = localRecipes.map {
-            RecipeSyncReconciler.Entry(id: $0.id, lastModified: $0.lastModifiedDate.roundedToWireMillis)
+            RecipeSyncReconciler.Entry(
+                id: $0.id,
+                lastModified: $0.lastModifiedDate.roundedToWireMillis,
+                // Rounded like lastModified, and it is load-bearing: the reconciler compares the two
+                // for equality, and rounding only one side makes an UNCHANGED row read as edited.
+                syncedModified: syncedStamps[$0.id]?.roundedToWireMillis
+            )
         }
         let serverEntries = manifest.map {
             RecipeSyncReconciler.Entry(id: $0.id, lastModified: ($0.lastModifiedDate ?? Date.distantPast).roundedToWireMillis)
@@ -1408,7 +1935,8 @@ class SaltySyncService {
             local: localEntries,
             server: serverEntries,
             isFirstSync: deviceInfo.isFirstSync,
-            lastSyncDate: deviceInfo.lastSyncDate
+            lastSyncDate: deviceInfo.lastSyncDate,
+            tracksAgreement: tracksAgreement
         )
 
         logger.info("Sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server (manifest \(manifest.count), delta \(deltaRecipes.count))")
@@ -1439,7 +1967,9 @@ class SaltySyncService {
 
         // 7. Deletions — local deletes are guarded against empty-response wipes using the COMPLETE
         //    manifest count, and batched in one transaction.
-        if serverResponseAllowsLocalDeletions(serverItemCount: manifest.count, pendingLocalDeletions: plan.toDeleteLocally.count, entity: "recipe") {
+        // Judged against the FULL manifest: filtering our own tombstones out of it must not make the
+        // server look emptier than it is and trip the mass-deletion guard.
+        if serverResponseAllowsLocalDeletions(serverItemCount: fullManifest.count, pendingLocalDeletions: plan.toDeleteLocally.count, entity: "recipe") {
             for recipeId in plan.toDeleteLocally {
                 logger.info("Deleting recipe \(recipeId) locally (was deleted on another device)")
                 if let recipe = localRecipesById[recipeId], let filename = recipe.imageFilename {
@@ -1455,7 +1985,10 @@ class SaltySyncService {
         }
 
         // Delete recipes on server that were deleted locally.
-        if !plan.toDeleteOnServer.isEmpty {
+        // And the mirror: an empty library must not ask the server to delete everything it has.
+        let mayDeleteRecipesOnServer = localLibraryAllowsServerDeletions(
+            localItemCount: localEntries.count, pendingServerDeletions: plan.toDeleteOnServer.count, entity: "recipe")
+        if !plan.toDeleteOnServer.isEmpty && mayDeleteRecipesOnServer {
             logger.info("Deleting \(plan.toDeleteOnServer.count) recipe(s) on server (were deleted locally)")
             try await deleteRecipesOnServer(recipeIds: plan.toDeleteOnServer)
         }
@@ -1464,7 +1997,28 @@ class SaltySyncService {
             logger.info("Deletion sync: \(plan.toDeleteLocally.count) deleted locally, \(plan.toDeleteOnServer.count) deleted on server")
         }
 
-        // 8. "Last made on" dates, which the body plan above is blind to by design.
+        // 8. Record what this pass agreed on, so the next one needn't guess (SHARED-V0005). Three groups
+        //    mean the same thing afterwards — the server's copy matches this row as it stands: what went
+        //    up, what came down, and what was already identical on both sides. Anything just deleted
+        //    locally is excluded, and so is anything the delete guard held back, since those are still
+        //    local-only and carry whatever stamp they already had.
+        if tracksAgreement {
+            let manifestIds = Set(manifest.map { $0.id })
+            var agreed = Set(localRecipes.map { $0.id }).intersection(manifestIds)
+            agreed.formUnion(plan.toUpload)
+            agreed.formUnion(plan.toDownload)
+            agreed.subtract(plan.toDeleteLocally)
+
+            // A `let` snapshot: the write closure runs off this actor and cannot capture a var.
+            let agreedIds = Array(agreed)
+            if !agreedIds.isEmpty {
+                try await database.write { db in
+                    try RecipeAgreementStore.markAgreed(agreedIds, in: db)
+                }
+            }
+        }
+
+        // 9. "Last made on" dates, which the body plan above is blind to by design.
         try await syncPreparedDates(manifest: manifest, plan: plan)
     }
 
@@ -1568,7 +2122,7 @@ class SaltySyncService {
         SyncWireDate.date(from: dateStr)
     }
     
-    private func uploadRecipe(_ recipe: Recipe) async throws {
+    private func uploadRecipe(_ recipe: Recipe, force: Bool = false) async throws {
         // Convert to server format
         var serverRecipe = ServerRecipe.from(recipe)
         
@@ -1589,9 +2143,9 @@ class SaltySyncService {
         let exists = try await checkExists(endpoint: "/api/recipes/\(recipe.id)")
         
         if exists {
-            try await putToServer(serverRecipe, endpoint: "/api/recipes/\(recipe.id)")
+            try await putToServer(serverRecipe, endpoint: "/api/recipes/\(recipe.id)", force: force)
         } else {
-            try await postToServer(serverRecipe, endpoint: "/api/recipes")
+            try await postToServer(serverRecipe, endpoint: "/api/recipes", force: force)
         }
         
         logger.info("Uploaded recipe: \(recipe.name) with \(categoryIds.count) categories (IDs: \(categoryIds)) and \(tagIds.count) tags (IDs: \(tagIds))")
@@ -1663,12 +2217,13 @@ class SaltySyncService {
                     }
                     
                     let rc = RecipeCategory(
-                        id: "\(recipe.id)_\(categoryId)",
+                        id: SaltyId.new(),
                         recipeId: recipe.id,
                         categoryId: categoryId
                     )
-                    try RecipeCategory.insert { rc }.execute(db)
-                    logger.debug("Inserted RecipeCategory: recipe=\(recipe.id), category=\(categoryId)")
+                    if try RecipeCategory.insertIfAbsent(rc, in: db) {
+                        logger.debug("Inserted RecipeCategory: recipe=\(recipe.id), category=\(categoryId)")
+                    }
                 }
             }
             
@@ -1691,12 +2246,13 @@ class SaltySyncService {
                     }
                     
                     let rt = RecipeTag(
-                        id: "\(recipe.id)_\(tagId)",
+                        id: SaltyId.new(),
                         recipeId: recipe.id,
                         tagId: tagId
                     )
-                    try RecipeTag.insert { rt }.execute(db)
-                    logger.debug("Inserted RecipeTag: recipe=\(recipe.id), tag=\(tagId)")
+                    if try RecipeTag.insertIfAbsent(rt, in: db) {
+                        logger.debug("Inserted RecipeTag: recipe=\(recipe.id), tag=\(tagId)")
+                    }
                 }
             }
         }
@@ -1795,12 +2351,14 @@ class SaltySyncService {
         let boundary = UUID().uuidString
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        // Prepare image data (converts HEIC to JPEG if needed)
-        let prepared = prepareImageForUpload(imageData)
+        // Prepare image data (converts HEIC to JPEG if needed). Awaited rather than called directly:
+        // this class is @MainActor, and a large photo's decode/re-encode would otherwise run on the
+        // main thread. See SyncImagePreparer.
+        let prepared = await SyncImagePreparer.prepare(imageData)
 
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.\(prepared.extension)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.\(prepared.fileExtension)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: \(prepared.mimeType)\r\n\r\n".data(using: .utf8)!)
         body.append(prepared.data)
         body.append("\r\n".data(using: .utf8)!)
@@ -1826,144 +2384,6 @@ class SaltySyncService {
             logger.error("Image upload failed with status \(httpResponse.statusCode): \(errorBody)")
             throw SyncError.uploadFailed("Image upload failed (HTTP \(httpResponse.statusCode))")
         }
-    }
-    
-    /// Detects image type from file header bytes and returns converted data if needed
-    private func prepareImageForUpload(_ data: Data) -> (data: Data, mimeType: String, extension: String) {
-        guard data.count >= 8 else {
-            return (data, "image/jpeg", "jpg")
-        }
-        
-        let bytes = [UInt8](data.prefix(8))
-        
-        // PNG: 89 50 4E 47 0D 0A 1A 0A
-        if bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
-            return (data, "image/png", "png")
-        }
-        
-        // JPEG: FF D8 FF
-        if bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
-            return (data, "image/jpeg", "jpg")
-        }
-        
-        // GIF: 47 49 46 38
-        if bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38 {
-            return (data, "image/gif", "gif")
-        }
-        
-        // WebP: 52 49 46 46 ... 57 45 42 50 - convert to JPEG for broader compatibility
-        if bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 {
-            if let jpegData = convertToJPEG(data) {
-                logger.debug("Converted WebP image to JPEG")
-                return (jpegData, "image/jpeg", "jpg")
-            }
-            // If conversion fails, send as WebP
-            return (data, "image/webp", "webp")
-        }
-        
-        // HEIC/HEIF: Check for 'ftyp' box - convert to JPEG
-        if data.count >= 12 {
-            let ftypBytes = [UInt8](data[4..<8])
-            if ftypBytes[0] == 0x66 && ftypBytes[1] == 0x74 && ftypBytes[2] == 0x79 && ftypBytes[3] == 0x70 {
-                // Get the brand to log what type of HEIC it is
-                let brandBytes = [UInt8](data[8..<12])
-                let brand = String(bytes: brandBytes, encoding: .ascii) ?? "unknown"
-                logger.debug("Detected HEIC/HEIF image with brand: \(brand)")
-                
-                // Convert HEIC to PNG for Salty Server compatibility
-                if let pngData = convertToPNG(data) {
-                    logger.info("Converted HEIC image to PNG (\(data.count) bytes -> \(pngData.count) bytes)")
-                    return (pngData, "image/png", "png")
-                } else {
-                    logger.error("Failed to convert HEIC image to PNG - image may not display on server")
-                }
-            }
-        }
-        
-        // Unknown format - try to convert to JPEG
-        let hexHeader = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
-        logger.debug("Unknown image format, header: \(hexHeader), attempting JPEG conversion")
-        
-        if let jpegData = convertToJPEG(data) {
-            logger.info("Converted unknown format to JPEG (\(data.count) bytes -> \(jpegData.count) bytes)")
-            return (jpegData, "image/jpeg", "jpg")
-        }
-        
-        // Fallback: send as-is - but log a warning since this may not work
-        logger.warning("Could not convert image to JPEG, sending original data (\(data.count) bytes) - may not display correctly")
-        return (data, "application/octet-stream", "bin")
-    }
-    
-    /// Converts image data to JPEG format
-    private func convertToJPEG(_ data: Data) -> Data? {
-        #if canImport(UIKit)
-        guard let image = UIImage(data: data) else {
-            logger.warning("UIImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let jpegData = image.jpegData(compressionQuality: 0.9) else {
-            logger.warning("Failed to convert UIImage to JPEG")
-            return nil
-        }
-        return jpegData
-        #elseif canImport(AppKit)
-        guard let image = NSImage(data: data) else {
-            logger.warning("NSImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let tiffData = image.tiffRepresentation else {
-            logger.warning("Failed to get TIFF representation from NSImage")
-            return nil
-        }
-        guard let bitmap = NSBitmapImageRep(data: tiffData) else {
-            logger.warning("Failed to create NSBitmapImageRep from TIFF data")
-            return nil
-        }
-        guard let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
-            logger.warning("Failed to create JPEG representation from bitmap")
-            return nil
-        }
-        return jpegData
-        #else
-        logger.warning("No image conversion available on this platform")
-        return nil
-        #endif
-    }
-    
-    /// Converts image data to PNG format
-    private func convertToPNG(_ data: Data) -> Data? {
-        #if canImport(UIKit)
-        guard let image = UIImage(data: data) else {
-            logger.warning("UIImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let pngData = image.pngData() else {
-            logger.warning("Failed to convert UIImage to PNG")
-            return nil
-        }
-        return pngData
-        #elseif canImport(AppKit)
-        guard let image = NSImage(data: data) else {
-            logger.warning("NSImage failed to load image data (\(data.count) bytes)")
-            return nil
-        }
-        guard let tiffData = image.tiffRepresentation else {
-            logger.warning("Failed to get TIFF representation from NSImage")
-            return nil
-        }
-        guard let bitmap = NSBitmapImageRep(data: tiffData) else {
-            logger.warning("Failed to create NSBitmapImageRep from TIFF data")
-            return nil
-        }
-        guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
-            logger.warning("Failed to create PNG representation from bitmap")
-            return nil
-        }
-        return pngData
-        #else
-        logger.warning("No image conversion available on this platform")
-        return nil
-        #endif
     }
     
     /// Percent-encodes a server-supplied image filename as a SINGLE path component: unlike
@@ -2013,7 +2433,13 @@ class SaltySyncService {
         logger.debug("Downloaded image '\(filename)': \(data.count) bytes")
 
         // Save image locally and update recipe (filename + thumbnail + image timestamp together).
-        if let result = RecipeImageManager.shared.saveImage(data, for: recipeId) {
+        // Detached for the same reason the upload path awaits SyncImagePreparer: saveImage writes the
+        // file AND renders a 300x300 thumbnail, and this class is @MainActor, so doing it inline held
+        // the main thread for every downloaded photo. RecipeImageManager is already Sendable.
+        let saved = await Task.detached(priority: .userInitiated) {
+            RecipeImageManager.shared.saveImage(data, for: recipeId)
+        }.value
+        if let result = saved {
             logger.debug("Saved image as '\(result.filename)' with \(result.thumbnailData.count) byte thumbnail")
             try await database.write { db in
                 try db.execute(sql: """
@@ -2207,11 +2633,18 @@ class SaltySyncService {
         return decoder
     }
 
-    private func postToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
+    /// Header sent by the force re-sync-to-server paths on every overwrite. The server doesn't read
+    /// it yet; it exists so a future server-side "reject writes with an older lastModifiedDate"
+    /// guard (planned for web editing) has a way to recognize a deliberate mirror-this-device push
+    /// and accept it anyway. Harmless today — unknown headers are ignored.
+    nonisolated static let forceWriteHeader = "X-Salty-Force"
+
+    private func postToServer<T: Encodable>(_ object: T, endpoint: String, force: Bool = false) async throws {
         let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if force { request.setValue("1", forHTTPHeaderField: Self.forceWriteHeader) }
         addAuthHeader(to: &request)
 
         let encoder = makeWireEncoder()
@@ -2227,11 +2660,12 @@ class SaltySyncService {
         }
     }
     
-    private func putToServer<T: Encodable>(_ object: T, endpoint: String) async throws {
+    private func putToServer<T: Encodable>(_ object: T, endpoint: String, force: Bool = false) async throws {
         let url = try makeURL(endpoint: endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if force { request.setValue("1", forHTTPHeaderField: Self.forceWriteHeader) }
         addAuthHeader(to: &request)
 
         let encoder = makeWireEncoder()
@@ -2292,57 +2726,6 @@ class SaltySyncService {
 
 }
 
-/// Canonical conversion between a `Date` and the Salty Server wire timestamp
-/// (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'` — UTC, millisecond precision). Centralized so the encode and decode
-/// paths can never drift: a past drift (`JSONEncoder`'s `.iso8601` strategy dropping fractional seconds)
-/// floored uploads to whole seconds while the local copy and the server's echo kept milliseconds, so the
-/// reconciler saw local as newer and re-uploaded every recipe on every sync. Pairs with
-/// `Date.roundedToWireMillis`, which compares instants at this same millisecond resolution. `internal`
-/// (not `private`) so the round-trip can be unit-tested.
-enum SyncWireDate {
-    /// Serializes to the wire format the server expects (millisecond fractional seconds, trailing `Z`).
-    static func string(from date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
-    }
-
-    /// Parses a server timestamp, tolerating the format variants the server and GRDB are known to emit:
-    /// ISO-8601 with then without fractional seconds, a `T`-separated value lacking a timezone, GRDB's
-    /// space-separated local format, and a microsecond-precision variant. Order matters — the canonical
-    /// `.SSS'Z'` form is tried first.
-    static func date(from string: String) -> Date? {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = iso.date(from: string) { return date }
-        iso.formatOptions = [.withInternetDateTime]
-        if let date = iso.date(from: string) { return date }
-
-        for format in [
-            "yyyy-MM-dd'T'HH:mm:ss",        // no timezone
-            "yyyy-MM-dd HH:mm:ss.SSS",      // GRDB default (space-separated)
-            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", // microseconds
-        ] {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(identifier: "UTC")
-            formatter.dateFormat = format
-            if let date = formatter.date(from: string) { return date }
-        }
-        return nil
-    }
-}
-
-extension Date {
-    /// Rounded to whole milliseconds — the resolution of the sync wire format (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`).
-    /// The local `Date` (decoded by SQLiteData from `"yyyy-MM-dd HH:mm:ss.SSS"`) and the server `Date`
-    /// (decoded by `ISO8601DateFormatter`) can differ by sub-microsecond amounts for the SAME wall-clock
-    /// millisecond, so comparing them with `>` / `<` made sync re-upload/re-download everything forever.
-    /// Normalizing both sides to whole milliseconds before comparison makes equal instants compare equal.
-    var roundedToWireMillis: Date {
-        Date(timeIntervalSinceReferenceDate: (timeIntervalSinceReferenceDate * 1000).rounded() / 1000)
-    }
-}
 
 // MARK: - Sync Progress
 
@@ -2387,6 +2770,13 @@ enum SyncError: LocalizedError {
     /// treats it as "already up to date", never as a failure (and it must not clear auto-sync's
     /// pending-changes state the way a real success does).
     case throttled
+    /// This device holds no usable sync token, so the password is needed once to enrol it. Thrown
+    /// both on a first sync and when a token has been revoked from the server's devices page or
+    /// invalidated by a password change. User-initiated syncs answer it by prompting; auto-sync
+    /// answers it by standing down, since there is nobody to ask.
+    case enrolmentRequired
+    /// The server authenticated the user but issued no device token, meaning it predates the scheme.
+    case enrolmentUnsupported
 
     var errorDescription: String? {
         switch self {
@@ -2397,7 +2787,11 @@ enum SyncError: LocalizedError {
         case .serverNotConfigured:
             return "Server URL is not configured. Please set it in Settings."
         case .credentialsNotConfigured:
-            return "Username and password are not configured. Please set them in Settings."
+            return "Sync is not set up on this device yet. Enter your username and password to connect it."
+        case .enrolmentRequired:
+            return "This device needs to be connected to the server again. Enter your username and password to reconnect it."
+        case .enrolmentUnsupported:
+            return "This server is too old to connect devices for sync. Please update Salty Server, then try again."
         case .authenticationFailed(let message):
             return "Authentication failed: \(message)"
         case .networkError(let message):
@@ -2437,7 +2831,7 @@ extension SyncError {
         }
         switch status {
         case 401:
-            return "The server rejected your saved username or password (HTTP 401)."
+            return "The server rejected your username or password (HTTP 401)."
         case 403:
             return "Access to the server was forbidden (HTTP 403). Check firewall or IP restrictions, and verify your username and password."
         case 404:
@@ -2478,7 +2872,7 @@ func friendlySyncMessage(_ error: Error) -> String {
     // Checked first: a cancelled request is a `URLError` whose default wording ("Couldn't reach the
     // server") would blame the network for something the user chose to do.
     if SyncError.isCancellation(error) {
-        return "Sync was cancelled. Anything already transferred was kept — sync again to finish the rest."
+        return "Sync was cancelled. (Anything already transferred was kept; sync again to finish the rest.)"
     }
     switch error {
     case let urlError as URLError:
@@ -2499,389 +2893,3 @@ func friendlySyncMessage(_ error: Error) -> String {
     }
 }
 
-// MARK: - Server DTOs (Data Transfer Objects)
-
-/// Matches Spring Boot Recipe model
-/// Lightweight entry from GET /api/recipes/sync/manifest: a recipe's id + last-modified timestamp,
-/// used to reconcile existence/deletions without downloading full bodies.
-struct ServerRecipeManifestEntry: Codable {
-    var id: String
-    var lastModifiedDate: Date?
-    // Image filename + image timestamp let the client reconcile image transfer independently of the body.
-    var imageFilename: String?
-    var lastModifiedImageDate: Date?
-    // Likewise the "last made on" value + its stamp, so the prepared-date pass settles a recipe straight
-    // from the manifest instead of fetching bodies to compare one field.
-    var lastPrepared: Date?
-    var lastModifiedPreparedDate: Date?
-}
-
-struct ServerRecipe: Codable {
-    var id: String
-    var name: String
-    var createdDate: Date?
-    var lastModifiedDate: Date?
-    var lastPrepared: Date?
-    // Bumped only when lastPrepared changes; the server merges the pair by this stamp on every upsert,
-    // so the two must always travel together (see RecipeRepository.upsert in salty_kmp).
-    var lastModifiedPreparedDate: Date?
-    var source: String?
-    var sourceDetails: String?
-    var introduction: String?
-    var difficulty: Int?
-    var rating: Int?
-    var imageFilename: String?
-    var lastModifiedImageDate: Date?
-    var isFavorite: Bool?
-    var wantToMake: Bool?
-    var yield: String?
-    var servings: Int?
-    var courseId: String?  // Using course.id from server
-    var directions: [ServerDirection]?
-    var ingredients: [ServerIngredient]?
-    var notes: [ServerNote]?
-    var variations: [ServerVariation]?
-    var preparationTimes: [ServerPreparationTime]?
-    var nutrition: ServerNutrition?
-    
-    // Server sends course as nested object, we need to extract ID
-    var course: ServerCourse?
-    
-    // Category and tag relationships
-    var categoryIds: [String]?
-    var tagIds: [String]?
-    
-    enum CodingKeys: String, CodingKey {
-        case id, name, createdDate, lastModifiedDate, lastPrepared, lastModifiedPreparedDate
-        case source, sourceDetails, introduction
-        case difficulty, rating, imageFilename, lastModifiedImageDate
-        case isFavorite, wantToMake, yield, servings
-        case courseId, course
-        case directions, ingredients, notes, variations
-        case preparationTimes, nutrition
-        case categoryIds, tagIds
-    }
-    
-    static func from(_ recipe: Recipe) -> ServerRecipe {
-        return ServerRecipe(
-            id: recipe.id,
-            name: recipe.name,
-            createdDate: recipe.createdDate,
-            lastModifiedDate: recipe.lastModifiedDate,
-            lastPrepared: recipe.lastPrepared,
-            lastModifiedPreparedDate: recipe.lastModifiedPreparedDate,
-            source: recipe.source,
-            sourceDetails: recipe.sourceDetails,
-            introduction: recipe.introduction,
-            difficulty: recipe.difficulty.rawValue,
-            rating: recipe.rating.rawValue,
-            imageFilename: recipe.imageFilename,
-            lastModifiedImageDate: recipe.lastModifiedImageDate,
-            isFavorite: recipe.isFavorite,
-            wantToMake: recipe.wantToMake,
-            yield: recipe.yield,
-            servings: recipe.servings,
-            courseId: recipe.courseId,
-            directions: recipe.directions.map { ServerDirection.from($0) },
-            ingredients: recipe.ingredients.map { ServerIngredient.from($0) },
-            notes: recipe.notes.map { ServerNote.from($0) },
-            variations: recipe.variations.map { ServerVariation.from($0) },
-            preparationTimes: recipe.preparationTimes.map { ServerPreparationTime.from($0) },
-            nutrition: recipe.nutrition.map { ServerNutrition.from($0) }
-        )
-    }
-    
-    func toLocalRecipe() -> Recipe {
-        return Recipe(
-            id: id,
-            name: name,
-            createdDate: createdDate ?? Date(),
-            lastModifiedDate: lastModifiedDate ?? Date(),
-            lastPrepared: lastPrepared,
-            lastModifiedPreparedDate: lastModifiedPreparedDate,
-            source: source ?? "",
-            sourceDetails: sourceDetails ?? "",
-            introduction: introduction ?? "",
-            difficulty: Difficulty(rawValue: difficulty ?? 0) ?? .notSet,
-            rating: Rating(rawValue: rating ?? 0) ?? .notSet,
-            imageFilename: imageFilename,
-            imageThumbnailData: nil, // Will be set when image is downloaded
-            lastModifiedImageDate: lastModifiedImageDate,
-            isFavorite: isFavorite ?? false,
-            wantToMake: wantToMake ?? false,
-            yield: yield ?? "",
-            servings: servings,
-            courseId: course?.id ?? courseId,
-            directions: directions?.map { $0.toLocal() } ?? [],
-            ingredients: ingredients?.map { $0.toLocal() } ?? [],
-            notes: notes?.map { $0.toLocal() } ?? [],
-            variations: variations?.map { $0.toLocal() } ?? [],
-            preparationTimes: preparationTimes?.map { $0.toLocal() } ?? [],
-            nutrition: nutrition?.toLocal()
-        )
-    }
-}
-
-struct ServerDirection: Codable {
-    var id: String
-    var isHeading: Bool?
-    var text: String
-    
-    static func from(_ direction: Direction) -> ServerDirection {
-        ServerDirection(id: direction.id, isHeading: direction.isHeading, text: direction.text)
-    }
-    
-    func toLocal() -> Direction {
-        Direction(id: id, isHeading: isHeading, text: text)
-    }
-}
-
-struct ServerIngredient: Codable {
-    var id: String
-    var isHeading: Bool?
-    var isMain: Bool?
-    var text: String
-    
-    static func from(_ ingredient: Ingredient) -> ServerIngredient {
-        ServerIngredient(id: ingredient.id, isHeading: ingredient.isHeading, isMain: ingredient.isMain, text: ingredient.text)
-    }
-    
-    func toLocal() -> Ingredient {
-        Ingredient(id: id, isHeading: isHeading ?? false, isMain: isMain ?? false, text: text)
-    }
-}
-
-struct ServerNote: Codable {
-    var id: String
-    var title: String?
-    var content: String?
-    var text: String?  // Server might use 'text' instead of 'content'
-    
-    static func from(_ note: Note) -> ServerNote {
-        ServerNote(id: note.id, title: note.title, content: note.content, text: nil)
-    }
-    
-    func toLocal() -> Note {
-        Note(id: id, title: title ?? "", content: content ?? text ?? "")
-    }
-}
-
-struct ServerVariation: Codable {
-    var id: String
-    var variationName: String?
-    var text: String
-    
-    static func from(_ variation: Variation) -> ServerVariation {
-        ServerVariation(id: variation.id, variationName: variation.variationName, text: variation.text)
-    }
-    
-    func toLocal() -> Variation {
-        Variation(id: id, variationName: variationName ?? "", text: text)
-    }
-}
-
-struct ServerPreparationTime: Codable {
-    var id: String
-    var type: String
-    var timeString: String
-    
-    static func from(_ prepTime: PreparationTime) -> ServerPreparationTime {
-        ServerPreparationTime(id: prepTime.id, type: prepTime.type, timeString: prepTime.timeString)
-    }
-    
-    func toLocal() -> PreparationTime {
-        PreparationTime(id: id, type: type, timeString: timeString)
-    }
-}
-
-struct ServerNutrition: Codable {
-    var id: String?
-    var servingSize: String?
-    var calories: Double?
-    var protein: Double?
-    var carbohydrates: Double?
-    var fat: Double?
-    var saturatedFat: Double?
-    var transFat: Double?
-    var fiber: Double?
-    var sugar: Double?
-    var sodium: Double?
-    var cholesterol: Double?
-    var addedSugar: Double?
-    var vitaminD: Double?
-    var calcium: Double?
-    var iron: Double?
-    var potassium: Double?
-    var vitaminA: Double?
-    var vitaminC: Double?
-    
-    static func from(_ nutrition: NutritionInformation) -> ServerNutrition {
-        ServerNutrition(
-            id: nutrition.id,
-            servingSize: nutrition.servingSize,
-            calories: nutrition.calories,
-            protein: nutrition.protein,
-            carbohydrates: nutrition.carbohydrates,
-            fat: nutrition.fat,
-            saturatedFat: nutrition.saturatedFat,
-            transFat: nutrition.transFat,
-            fiber: nutrition.fiber,
-            sugar: nutrition.sugar,
-            sodium: nutrition.sodium,
-            cholesterol: nutrition.cholesterol,
-            addedSugar: nutrition.addedSugar,
-            vitaminD: nutrition.vitaminD,
-            calcium: nutrition.calcium,
-            iron: nutrition.iron,
-            potassium: nutrition.potassium,
-            vitaminA: nutrition.vitaminA,
-            vitaminC: nutrition.vitaminC
-        )
-    }
-    
-    func toLocal() -> NutritionInformation {
-        NutritionInformation(
-            id: id ?? UUIDV7().uuidString,
-            servingSize: servingSize,
-            calories: calories,
-            protein: protein,
-            carbohydrates: carbohydrates,
-            fat: fat,
-            saturatedFat: saturatedFat,
-            transFat: transFat,
-            fiber: fiber,
-            sugar: sugar,
-            sodium: sodium,
-            cholesterol: cholesterol,
-            addedSugar: addedSugar,
-            vitaminD: vitaminD,
-            calcium: calcium,
-            iron: iron,
-            potassium: potassium,
-            vitaminA: vitaminA,
-            vitaminC: vitaminC
-        )
-    }
-}
-
-struct ServerCourse: Codable {
-    var id: String
-    var name: String?
-    var lastModifiedDate: Date?
-}
-
-struct ServerCategory: Codable {
-    var id: String
-    var name: String?
-    var lastModifiedDate: Date?
-}
-
-struct ServerTag: Codable {
-    var id: String
-    var name: String?
-    var lastModifiedDate: Date?
-}
-
-/// Wire shape for a shopping list. Mirrors SaltyKMP's `ServerShoppingList` and the server's
-/// `shopping_list` table. Everything past `id` is optional so a client predating a field still
-/// round-trips — there is no protocol version field to negotiate with.
-struct ServerShoppingList: Codable {
-    var id: String
-    var name: String?
-    var isFreeform: Bool?
-    var contentsForList: [ShoppingListListContents]?
-    var contentsForFreeform: String?
-    var lastModifiedDate: Date?
-    /// Server-owned optimistic-concurrency counter: present on every GET/save response, bumped on
-    /// every accepted write. Nil only from clients or servers that predate revisions.
-    var revision: Int64?
-    /// Client → server on upload: the `revision` this edit is based on. The server rejects the write
-    /// with 409 (+ its current row) when this no longer matches — that mismatch IS conflict
-    /// detection. Legacy clients omit it and get timestamp-guarded last-writer-wins instead.
-    /// Encoding stays synthesized (`encodeIfPresent`), so nil keeps both fields off the wire.
-    var baseRevision: Int64?
-}
-
-/// Decodes a value, yielding nil instead of throwing. Wrapping array *elements* in this is what makes
-/// an array decode item-by-item: decoding the element type directly and catching would leave the
-/// container's index unadvanced, so the loop couldn't make progress.
-private struct FailableDecodable<T: Decodable>: Decodable {
-    let value: T?
-    init(from decoder: any Decoder) throws {
-        value = try? T(from: decoder)
-    }
-}
-
-extension ServerShoppingList {
-    private enum CodingKeys: String, CodingKey {
-        case id, name, isFreeform, contentsForList, contentsForFreeform, lastModifiedDate
-        case revision, baseRevision
-    }
-
-    /// Hand-written purely so `contentsForList` decodes item-by-item: one malformed item would
-    /// otherwise throw out of `fetchListFromServer` and abort the ENTIRE sync — recipes included —
-    /// on every attempt, with no way for the user to clear it.
-    ///
-    /// The leniency deliberately stops at the item level, in two directions:
-    ///
-    /// - The array of *lists* stays strict (this is per-list decoding). Silently dropping an
-    ///   undecodable list would read as "the server no longer has it", and the reconciler infers
-    ///   deletions from absence — so it would delete that list locally, or push a deletion for it.
-    /// - A `contentsForList` that isn't an array at all still throws. Coercing it to empty would
-    ///   quietly blank a list, and the next upload would make that permanent.
-    ///
-    /// Both of those are cases where failing loudly loses less than recovering quietly.
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let listId = try container.decode(String.self, forKey: .id)
-        id = listId
-        name = try container.decodeIfPresent(String.self, forKey: .name)
-        isFreeform = try container.decodeIfPresent(Bool.self, forKey: .isFreeform)
-        contentsForFreeform = try container.decodeIfPresent(String.self, forKey: .contentsForFreeform)
-        lastModifiedDate = try container.decodeIfPresent(Date.self, forKey: .lastModifiedDate)
-        revision = try container.decodeIfPresent(Int64.self, forKey: .revision)
-        baseRevision = try container.decodeIfPresent(Int64.self, forKey: .baseRevision)
-
-        if let wrapped = try container.decodeIfPresent([FailableDecodable<ShoppingListListContents>].self, forKey: .contentsForList) {
-            let items = wrapped.compactMap(\.value)
-            if items.count != wrapped.count {
-                let skipped = wrapped.count - items.count
-                Logger(subsystem: "Salty", category: "Sync").error(
-                    "Shopping list \(listId): skipped \(skipped) unreadable item(s) from the server payload"
-                )
-            }
-            contentsForList = items
-        } else {
-            contentsForList = nil
-        }
-    }
-}
-
-// Conversions live in an extension so the memberwise init survives — a hand-written `init` in the
-// body would suppress it, and constructing a sparse payload directly is exactly how an older peer's
-// response is represented.
-extension ServerShoppingList {
-    init(list: ShoppingList) {
-        self.id = list.id
-        self.name = list.name
-        self.isFreeform = list.isFreeform
-        self.contentsForList = list.contentsForList
-        self.contentsForFreeform = list.contentsForFreeform
-        self.lastModifiedDate = list.lastModifiedDate
-    }
-
-    /// The local row this payload represents. `lastModifiedDate` falls back to "now" rather than
-    /// `distantPast`: a nil would compare as older than the sync watermark forever, so the list would
-    /// be re-deleted on the next sync instead of kept (same hazard `coalesceNullShoppingListColumns`
-    /// guards against locally).
-    var asShoppingList: ShoppingList {
-        ShoppingList(
-            id: id,
-            name: name ?? "",
-            isFreeform: isFreeform ?? false,
-            contentsForFreeform: contentsForFreeform,
-            contentsForList: contentsForList ?? [],
-            lastModifiedDate: lastModifiedDate ?? Date()
-        )
-    }
-}

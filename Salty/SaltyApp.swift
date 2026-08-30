@@ -8,6 +8,7 @@
 import OSLog
 import SQLiteData
 import SwiftUI
+import SaltyCore
 #if os(macOS)
 import AppKit
 #endif
@@ -16,6 +17,18 @@ import AppKit
 struct SaltyApp: App {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
+
+    /// Chef View cooking progress, shared by every scene that can show a recipe — leave Chef View,
+    /// glance at something else, come back to the same current step. In-memory only; see
+    /// ChefSessionState. The shared instance (not a fresh one) so the iOS external-display scene,
+    /// which lives outside this environment, observes the same progress.
+    @State private var chefSessionStore = ChefViewSessionStore.shared
+
+    // No app delegate: the external-display (AirPlay / HDMI) scene — the one scene role SwiftUI
+    // can't declare — is claimed declaratively by the UIApplicationSceneManifest in Info.plist,
+    // which names ExternalDisplaySceneDelegate for it. Verified: with the manifest present, UIKit
+    // never consults a delegate's configurationForConnecting for that role, so an adaptor here
+    // would be dead code.
 
     /// The live database writer, kept so we can checkpoint its WAL when the app quiesces (so SaltyKMP,
     /// syncing the linked folder, sees the latest data in the main `.sqlite`). Nil in non-live contexts.
@@ -28,6 +41,11 @@ struct SaltyApp: App {
 
         var createdDatabase: (any DatabaseWriter)? = nil
         if context == .live {
+#if os(macOS)
+            // One-shot, and the last time the login-keychain authorization dialog can appear: everything
+            // afterwards uses the data-protection keychain. See migrateLegacyMacKeychainIfNeeded().
+            KeychainHelper.shared.migrateLegacyMacKeychainIfNeeded()
+#endif
             do {
                 // Begin (and hold) security-scoped access to the database location before opening it.
                 FileManager.beginAccessingDatabaseLocation()
@@ -73,6 +91,7 @@ struct SaltyApp: App {
         WindowGroup(id: "main-window") {
             MainView()
                 .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
+                .environment(chefSessionStore)
         }
         .handlesExternalEvents(matching: ["salty-recipe"])
         .onChange(of: scenePhase) { _, newPhase in
@@ -92,24 +111,16 @@ struct SaltyApp: App {
             Menus()
         }
         
-        // "Edit Categories" window
-        WindowGroup(id: "edit-categories-window") {
-            LibraryCategoriesEditView()
-                .frame(idealWidth: 250)
-                .navigationTitle("Categories Editor")
-        }
-        // "Edit Tags" window
-        WindowGroup(id: "edit-tags-window") {
-            LibraryTagsEditView()
-                .frame(idealWidth: 250)
-                .navigationTitle("Tags Editor")
-        }
-        // "Edit Courses" window
-        WindowGroup(id: "edit-courses-window") {
-            LibraryCoursesEditView()
-                .frame(idealWidth: 250)
-                .navigationTitle("Courses Editor")
-        }
+        // The three classifier editors (File ▸ Library; sheets on iOS). `Window` rather than
+        // `WindowGroup`: each is a single-instance editor of one library table, so a second copy of
+        // the same one is only ever a way to get two lists fighting over the same rows.
+        // (macOS only: iOS presents them as sheets from the sidebar's Library menu, and the commands
+        // that open these are themselves macOS-only -- see Menus.swift.)
+        #if os(macOS)
+        classifierEditorWindow(.category, id: "edit-categories-window")
+        classifierEditorWindow(.tag, id: "edit-tags-window")
+        classifierEditorWindow(.course, id: "edit-courses-window")
+        #endif
         // "Show Duplicate Recipes" window (File ▸ Library; a sheet on iOS)
         WindowGroup(id: "duplicate-recipes-window") {
             NavigationStack {
@@ -136,15 +147,39 @@ struct SaltyApp: App {
         // "Import from Web" window
         WindowGroup(id: "create-recipe-from-web-window") {
             CreateRecipeFromWebView()
-                .frame(idealWidth: 800)
-                .navigationTitle("Import Recipe from Web")
+                .frame(idealWidth: 1200)
+                .navigationTitle("Web Import")
         }
+        #if os(macOS)
+        .defaultSize(width: 1200, height: 800)
+        // Experiment with `.expanded` to use full-size toolbar below titlebar or remove
+        // title with .unified(showsTitle: false) if this becomes a problem, but this seems OK:
+        .windowToolbarStyle(.unified)
+        #endif
         // "Import from Image" window
         WindowGroup(id: "create-recipe-from-image-window") {
             CreateRecipeFromImageView()
                 .frame(idealWidth: 800)
                 .navigationTitle("Import Recipe from Image")
         }
+
+        // One shopping list in a window of its own, so it can be edited beside a recipe instead of
+        // replacing the recipe list in the main window. `for: String.self` — the list id — gives each
+        // list its own window, and makes re-opening a list that's already open bring that window
+        // forward rather than stacking a duplicate onto the same rows.
+        //
+        // Not macOS-only: iPad supports multiple scenes as well (Info.plist opts in), which is where
+        // Split View and iPadOS 26 windowing pick it up. iPhone can't, and simply never opens it —
+        // every command that would is gated on MultiWindowSupport.
+        WindowGroup(id: "shopping-list-window", for: String.self) { $listId in
+            NavigationStack {
+                ShoppingListWindowView(listId: $listId)
+            }
+            #if os(macOS)
+            .frame(minWidth: 300, idealWidth: 420, minHeight: 320, idealHeight: 640)
+            #endif
+        }
+        .defaultSize(width: 420, height: 640)
 
         #if os(macOS)
         // Standalone recipe viewer (narrow split views → open full detail in its own window)
@@ -153,14 +188,36 @@ struct SaltyApp: App {
                 RecipeDetailWindowView(recipeId: $recipeId)
             }
             .frame(minWidth: 520, idealWidth: 720, minHeight: 420, idealHeight: 680)
+            .environment(chefSessionStore)
         }
         .defaultSize(width: 720, height: 680)
+
+        // Chef View gets its own window on macOS so it can go full screen on an external display or
+        // TV while the main window stays usable. iOS/iPadOS presents it as a full-screen cover from
+        // the recipe detail view instead.
+        WindowGroup(id: "chef-view-window", for: ChefViewLaunch.self) { $launch in
+            ChefViewWindowView(launch: $launch)
+                .frame(minWidth: 640, idealWidth: 1100, minHeight: 480, idealHeight: 760)
+                .environment(chefSessionStore)
+        }
+        .defaultSize(width: 1100, height: 760)
 
         Settings {
             SettingsView()
         }
         #endif
     }
+
+    #if os(macOS)
+    /// One classifier editor window. The three differ only in which table they edit, so they share
+    /// both the scene shape and the view (see `LibraryClassifiersEditView`).
+    private func classifierEditorWindow(_ classifier: LibraryClassifier, id: String) -> some Scene {
+        Window("Edit \(classifier.pluralLabel)", id: id) {
+            LibraryClassifiersEditView(classifier: classifier)
+                .frame(minWidth: 320, idealWidth: 420, minHeight: 320, idealHeight: 520)
+        }
+    }
+    #endif
 }
 
 func isLiquidGlassAvailable() -> Bool {

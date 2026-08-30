@@ -54,7 +54,7 @@ struct SyncCancelStateTests {
 
     /// Nothing to cancel: the button state must not latch on, or the UI would show "Cancelling..." forever.
     @Test func cancellingWhenIdleIsANoOp() {
-        let service = SaltySyncService(session: .shared)
+        let service = SaltySyncService(session: .shared, credentials: InMemorySyncCredentialStore())
         #expect(!service.isCancellable)
         service.cancelSync()
         #expect(!service.isCancelling)
@@ -66,11 +66,11 @@ struct SyncCancelStateTests {
         let saved = UserDefaults.standard.object(forKey: key) as? Date
         defer { UserDefaults.standard.set(saved, forKey: key) }
 
-        let service = SaltySyncService(session: .shared)
+        let service = SaltySyncService(session: .shared, credentials: InMemorySyncCredentialStore())
         let stamp = Date(timeIntervalSince1970: 1_773_671_400)
         service.lastSyncDate = stamp
 
-        let relaunched = SaltySyncService(session: .shared)
+        let relaunched = SaltySyncService(session: .shared, credentials: InMemorySyncCredentialStore())
         #expect(relaunched.lastSyncDate == stamp)
     }
 }

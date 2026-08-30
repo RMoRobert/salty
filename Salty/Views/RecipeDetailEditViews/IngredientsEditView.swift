@@ -5,6 +5,8 @@
 //  Created by Robert on 7/4/23.
 //
 
+import SaltyCore
+import UUIDV7
 #if os(macOS)
 
 import SwiftUI
@@ -107,7 +109,7 @@ struct IngredientsEditView: View {
     
     private func addIngredientAfter(_ index: Int) {
         let newIngredient = Ingredient(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: false,
             isMain: false,
             text: ""
@@ -149,7 +151,7 @@ struct IngredientsEditView: View {
     
     private func addNewIngredient(isMain: Bool, isHeading: Bool) {
         let newIngredient = Ingredient(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: isMain ? false : isHeading,
             isMain: isMain,
             text: ""

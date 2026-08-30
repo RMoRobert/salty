@@ -9,6 +9,8 @@
 
 import SwiftUI
 import Flow
+import SaltyCore
+import UUIDV7
 
 struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss
@@ -228,7 +230,7 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Button(action: {
                         viewModel.recipe.ingredients.append(Ingredient(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             isHeading: false,
                             isMain: false,
                             text: ""
@@ -242,7 +244,7 @@ struct RecipeDetailEditMobileView: View {
                     Menu {
                         Button(action: {
                             viewModel.recipe.ingredients.append(Ingredient(
-                                id: UUID().uuidString,
+                                id: UUIDV7().uuidString,
                                 isHeading: true,
                                 isMain: false,
                                 text: ""
@@ -253,7 +255,7 @@ struct RecipeDetailEditMobileView: View {
                         
                         Button(action: {
                             viewModel.recipe.ingredients.append(Ingredient(
-                                id: UUID().uuidString,
+                                id: UUIDV7().uuidString,
                                 isHeading: false,
                                 isMain: true,
                                 text: ""
@@ -308,7 +310,7 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Button(action: {
                         viewModel.recipe.directions.append(Direction(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             isHeading: false,
                             text: ""
                         ))
@@ -322,7 +324,7 @@ struct RecipeDetailEditMobileView: View {
                     Menu {
                         Button(action: {
                             viewModel.recipe.directions.append(Direction(
-                                id: UUID().uuidString,
+                                id: UUIDV7().uuidString,
                                 isHeading: true,
                                 text: ""
                             ))
@@ -377,7 +379,7 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Button(action: {
                         viewModel.recipe.preparationTimes.append(PreparationTime(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             type: "",
                             timeString: ""
                         ))
@@ -418,7 +420,7 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Button(action: {
                         viewModel.recipe.notes.append(Note(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             title: "",
                             content: ""
                         ))
@@ -459,7 +461,7 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Button(action: {
                         viewModel.recipe.variations.append(Variation(
-                            id: UUID().uuidString,
+                            id: UUIDV7().uuidString,
                             variationName: "",
                             text: ""
                         ))

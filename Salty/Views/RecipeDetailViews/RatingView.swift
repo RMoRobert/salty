@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import SQLiteData
+import SaltyCore
 
 /// View-only star rating for recipes (0-5 stars)
 

@@ -7,6 +7,7 @@
 
 import Foundation
 import OSLog
+import SaltyCore
 
 private let fileLogger = Logger(subsystem: "Salty", category: "FileAccess")
 
@@ -17,6 +18,10 @@ private let fileLogger = Logger(subsystem: "Salty", category: "FileAccess")
 enum ImportFileLimits {
     static let maxImageBytes = 100 * 1024 * 1024   // 100 MB
     static let maxPDFBytes = 500 * 1024 * 1024    // 500 MB
+
+    /// Cap on a single recipe file. Generous because formats that embed photos as base64 (Crouton's
+    /// .crumb, a .saltyRecipe carrying an image) are several MB per recipe before anything is wrong.
+    static let maxRecipeFileBytes = 100 * 1024 * 1024   // 100 MB
 
     /// Cap on image bytes accepted from the sync server, so a hostile/misbehaving server can't make a
     /// sync balloon memory or disk. Deliberately larger than maxImageBytes: a server image can

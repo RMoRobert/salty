@@ -8,6 +8,8 @@
 import Foundation
 import SQLiteData
 import OSLog
+import SaltyCore
+import UUIDV7
 
 struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
     private static let logger = Logger(subsystem: "Salty", category: "App")
@@ -79,22 +81,12 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             for categoryName in uniqueCategories {
                                 // Reuses an existing category whose name differs only in case or
                                 // spacing, rather than creating a near-duplicate row.
-                                guard let categoryId = try LibraryItemResolver.resolveId(kind: .category, name: categoryName, in: db) else {
+                                guard let categoryId = try LibraryClassifierResolver.resolveId(kind: .category, name: categoryName, in: db) else {
                                     continue
                                 }
 
-                                // Check if relationship already exists before creating it
-                                let existingRelationship = try RecipeCategory
-                                    .where { $0.recipeId.eq(recipe.id) && $0.categoryId.eq(categoryId) }
-                                    .fetchOne(db)
-
-                                if existingRelationship == nil {
-                                    // Create relationship only if it doesn't already exist
-                                    let recipeCategory = RecipeCategory(id: UUID().uuidString, recipeId: recipe.id, categoryId: categoryId)
-                                    try RecipeCategory.insert {
-                                        recipeCategory
-                                    }.execute(db)
-                                }
+                                let recipeCategory = RecipeCategory(id: UUIDV7().uuidString, recipeId: recipe.id, categoryId: categoryId)
+                                try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
                             }
                         }
                         
@@ -104,26 +96,18 @@ struct SaltyRecipeImportHelper: RecipeFileImporterProtocol {
                             let uniqueTags = Set(tags)
                             
                             for tagName in uniqueTags {
-                                guard let tagId = try LibraryItemResolver.resolveId(kind: .tag, name: tagName, in: db) else {
+                                guard let tagId = try LibraryClassifierResolver.resolveId(kind: .tag, name: tagName, in: db) else {
                                     continue
                                 }
 
-                                // Check if relationship already exists before creating it
-                                let existingRelationship = try RecipeTag
-                                    .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tagId) }
-                                    .fetchOne(db)
-
-                                if existingRelationship == nil {
-                                    // Create relationship only if it doesn't already exist
-                                    let recipeTag = RecipeTag(id: UUID().uuidString, recipeId: recipe.id, tagId: tagId)
-                                    try RecipeTag.insert{ recipeTag }.execute(db)
-                                }
+                                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagId)
+                                try RecipeTag.insertIfAbsent(recipeTag, in: db)
                             }
                         }
                         
                         // Set course if present
                         if let courseName = saltyRecipe.course, !courseName.isEmpty {
-                            if let courseId = try LibraryItemResolver.resolveId(kind: .course, name: courseName, in: db) {
+                            if let courseId = try LibraryClassifierResolver.resolveId(kind: .course, name: courseName, in: db) {
                                 // Set the recipe's courseId
                                 recipe.courseId = courseId
                                 try Recipe.update(recipe).execute(db)

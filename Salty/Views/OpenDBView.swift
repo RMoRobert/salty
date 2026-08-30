@@ -46,7 +46,7 @@ struct OpenDBView: View {
             }
             
             VStack(spacing: 8) {
-                Text("A Salty recipe library must already exist at the selected location.")
+                Text("If the selected folder doesn't already contain a Salty recipe library, a new one will be created there.")
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -117,7 +117,11 @@ struct OpenDBView: View {
     private func openDatabase(at url: URL) {
         isOpening = true
         logger.debug("Starting database open...")
-        
+
+        // Remember the prior bookmark so a failed switch can be rolled back instead of leaving
+        // the app pointed at a folder it can't use on next launch.
+        let previousBookmark = UserDefaults.standard.data(forKey: FileManager.userDefaultsDatabaseParentLocationKey)
+
         do {
             guard url.startAccessingSecurityScopedResource() else {
                 logger.error("Unable to startAccessingSecurityScopedResource for \(url)")
@@ -126,16 +130,27 @@ struct OpenDBView: View {
                 isOpening = false
                 return
             }
-            
-            // Save multiple bookmarks for different components
+            defer { url.stopAccessingSecurityScopedResource() }
+
             try FileManager.saveCustomLocationBookmarks(parentDirectory: url)
-            url.stopAccessingSecurityScopedResource()
-            
+
+            // Initialize the location now rather than at next launch: creates the library bundle
+            // and schema in an empty folder (matching SaltyKMP), or opens and migrates a moved
+            // library — so an unusable folder fails here in the dialog. The returned connection
+            // is discarded; the app keeps using its current database until relaunch.
+            _ = try appDatabase()
+
             isOpening = false
             showingSuccessAlert = true
         } catch {
-            logger.error("Unable to save bookmarks for database path: \(error.localizedDescription)")
-            errorMessage = "Failed to save database location: \(error.localizedDescription)"
+            logger.error("Unable to switch database location: \(error.localizedDescription)")
+            if let previousBookmark {
+                UserDefaults.standard.set(previousBookmark, forKey: FileManager.userDefaultsDatabaseParentLocationKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: FileManager.userDefaultsDatabaseParentLocationKey)
+            }
+            FileManager.refreshCustomDatabaseBookmark()
+            errorMessage = "Failed to open a library in the selected folder: \(error.localizedDescription)"
             showingErrorAlert = true
             isOpening = false
         }

@@ -8,6 +8,7 @@
 //
 
 import Testing
+import SaltyCore
 @testable import Salty
 
 struct MarkdownToHtmlTests {

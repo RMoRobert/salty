@@ -8,6 +8,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import SaltyCore
 
 /// Backs the freeform (Markdown-style) editor for one shopping list. Mirrors the debounced-save
 /// pattern of `ShoppingListDetailViewModel`, but the payload is a single text blob
@@ -24,6 +25,10 @@ class ShoppingListFreeformViewModel {
     let listId: String
     var text = ""
     var isLoaded = false
+
+    /// Identifies this editor to `ShoppingListChangeNotifier`, so the saves it announces reach every
+    /// other editor of this list and not itself. See `ShoppingListDetailViewModel.editorToken`.
+    let editorToken = UUID()
 
     @ObservationIgnored
     private var saveTask: Task<Void, Never>?
@@ -70,6 +75,23 @@ class ShoppingListFreeformViewModel {
         }
     }
 
+    /// Re-reads the document after the row was written by something other than this view model, like a
+    /// recipe's "Add to Shopping List" sheet.  See the matching note in `ShoppingListDetailViewModel` on why pending
+    /// save is dropped rather than flushed.
+    func reloadAfterExternalChange() async {
+        guard isLoaded else { return }
+        saveTask?.cancel()
+        saveTask = nil
+        do {
+            let list = try await database.read { [listId] db in
+                try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
+            }
+            text = list?.contentsForFreeform ?? ""
+        } catch {
+            logger.error("Error reloading shopping list \(self.listId): \(error)")
+        }
+    }
+
     /// Debounced save: collapses a burst of keystrokes into one write. Guarded on `isLoaded` so the
     /// initial text assignment during `load()` doesn't schedule a redundant save.
     func scheduleSave() {
@@ -96,6 +118,7 @@ class ShoppingListFreeformViewModel {
         let content = text
         let id = listId
         let log = logger
+        let token = editorToken
         Task {
             do {
                 try await database.write { db in
@@ -106,6 +129,8 @@ class ShoppingListFreeformViewModel {
                         try ShoppingList.update(list).execute(db)
                     }
                 }
+                // The same list may be open in another window, holding its own copy of this text.
+                ShoppingListChangeNotifier.shared.noteEditorChange(listId: id, source: token)
             } catch {
                 log.error("Error saving shopping list \(id): \(error)")
             }

@@ -12,6 +12,9 @@
 //  Enabled by the `autoSyncEnabled` UserDefaults flag (Settings toggle, default off). When off, the
 //  database observation stays installed but every callback returns immediately, so overhead is nil.
 //
+//  Requires only that the device is enrolled with the server -- it authenticates with the stored sync
+//  token, so unlike earlier builds it no longer depends on the user having saved their password.
+//
 
 import Foundation
 import SQLiteData
@@ -178,10 +181,15 @@ final class AutoSyncCoordinator {
             // The user stopped this sync from Settings. Their choice, not a connectivity problem, so don't
             // count it toward the failure banner.
             logger.info("Auto-sync cancelled by user (\(reason))")
-        } catch SyncError.serverNotConfigured, SyncError.credentialsNotConfigured {
-            // Server/credentials not set up (e.g. password not saved to Keychain) → auto-sync is simply
-            // not applicable here. Not a connectivity failure, so don't count it or alarm the user.
-            logger.info("Auto-sync skipped (\(reason)): server/credentials not configured")
+        } catch SyncError.serverNotConfigured, SyncError.credentialsNotConfigured, SyncError.enrolmentRequired {
+            // Server not set up, or this device isn't connected to it yet → auto-sync is simply not
+            // applicable here. Not a connectivity failure, so don't count it or alarm the user.
+            //
+            // `enrolmentRequired` deliberately dead-ends here rather than raising the enrolment prompt:
+            // auto-sync runs unbidden, in the background, and a password sheet appearing on its own --
+            // possibly mid-recipe, possibly on the Apple TV display -- is the wrong way to ask. The next
+            // pull-to-refresh or Sync Now asks instead, at a moment the user chose.
+            logger.info("Auto-sync skipped (\(reason)): this device is not connected for sync")
         } catch SyncError.throttled {
             // A sync finished moments ago, so this attempt was redundant. Crucially not the success path:
             // `hasPendingLocalChanges` stays set, so an edit that arrived since still goes out on the

@@ -8,6 +8,7 @@
 import SwiftUI
 import SQLiteData
 import OSLog
+import SaltyCore
 
 struct RecipeImageView: View {
     private let logger = Logger(subsystem: "Salty", category: "RecipeImage")

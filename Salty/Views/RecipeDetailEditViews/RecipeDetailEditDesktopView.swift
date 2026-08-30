@@ -8,6 +8,7 @@
 //  This view is geard towards macOS; see iOS view for mobile-friendly
 //
 
+import SaltyCore
 #if os(macOS)
 
 import SwiftUI

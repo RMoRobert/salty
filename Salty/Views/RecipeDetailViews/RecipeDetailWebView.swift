@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import SQLiteData
 import WebViewKit
+import SaltyCore
 
 struct RecipeDetailWebView: View {
     @State var recipe: Recipe

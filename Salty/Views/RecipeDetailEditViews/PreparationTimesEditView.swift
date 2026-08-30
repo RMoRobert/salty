@@ -5,6 +5,8 @@
 //  Created by Robert on 5/29/23.
 //
 
+import SaltyCore
+import UUIDV7
 #if os(macOS)
 import SwiftUI
 
@@ -205,7 +207,7 @@ struct PreparationTimesEditView: View {
     
     private func addPreparationTimeAfter(_ index: Int) {
         let newPreparationTime = PreparationTime(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             type: "",
             timeString: ""
         )
@@ -243,7 +245,7 @@ struct PreparationTimesEditView: View {
     
     private func addNewPreparationTime() {
         let newPreparationTime = PreparationTime(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             type: "",
             timeString: ""
         )

@@ -8,6 +8,7 @@ import Foundation
 import OSLog
 import SQLiteData
 import UUIDV7
+import SaltyCore
 
 @Observable
 @MainActor
@@ -110,11 +111,11 @@ class CreateRecipeFromWebViewModel {
                 // Then, save the category relationships
                 for categoryId in categoryIDsToSave {
                     let recipeCategory = RecipeCategory(
-                        id: UUID().uuidString,
+                        id: UUIDV7().uuidString,
                         recipeId: recipeToSave.id,
                         categoryId: categoryId
                     )
-                    try RecipeCategory.insert { recipeCategory }.execute(db)
+                    try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
                 }
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
@@ -326,17 +327,14 @@ class CreateRecipeFromWebViewModel {
         logger.info("Recipe saved, ready to open editor for: \(self.recipe.id)")
     }
     
-    /// Decodes common HTML entities that might appear in scraped content
+    /// Decodes the HTML character references that appear in scraped content.
+    ///
+    /// The same decoder the JSON-LD importer uses, so text lifted out of the page by hand and text read
+    /// from its structured data come out the same. The chain of replacements this replaced decoded
+    /// `&amp;` before `&lt;`, so an escaped `&amp;lt;` was decoded twice and arrived as `<` — and, like
+    /// the importer's, it could only handle the entities it listed.
     private func decodeHTMLEntities(_ text: String) -> String {
-        return text
-            .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&#x27;", with: "'")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#34;", with: "\"")
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
+        HTMLEntities.decode(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

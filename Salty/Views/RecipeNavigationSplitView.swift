@@ -12,6 +12,7 @@
 import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
+import SaltyCore
 #if !os(macOS)
 import UIKit
 #endif
@@ -131,12 +132,30 @@ struct RecipeNavigationSplitView: View {
         )
     }
 
+    /// Everything the menu bar derives from the selection, in one Equatable value.
+    ///
+    /// One `onChange` rather than two: the menus need re-posting both when the selection moves (count,
+    /// enablement) and when the Last Prepared value changes under a stable selection (mark a recipe made
+    /// and the heading should follow). Keyed on this short string rather than on `viewModel.recipes` so
+    /// the comparison doesn't walk every row's thumbnail blob — and so a selection swap that changes
+    /// neither count nor date skips a post that would carry identical contents.
+    private var recipeSelectionMenuState: String {
+        "\(viewModel.selectedRecipeIDs.count)|\(viewModel.lastPreparedSummaryForSelection)"
+    }
+
     private func postRecipeSelectionChanged() {
         let count = viewModel.selectedRecipeIDs.count
         NotificationCenter.default.post(
             name: .recipeSelectionChanged,
             object: nil,
-            userInfo: ["hasSelected": count > 0, "count": count]
+            userInfo: [
+                "hasSelected": count > 0,
+                "count": count,
+                // The menu bar's Last Prepared heading. Sent with the selection because that's the only
+                // channel Commands can see, and re-sent on the value change below so marking a recipe
+                // made refreshes the heading without the selection moving.
+                "lastPreparedSummary": viewModel.lastPreparedSummaryForSelection,
+            ]
         )
     }
 
@@ -267,7 +286,7 @@ struct RecipeNavigationSplitView: View {
                 viewModel.handleNewRecipeSaved(recipeId: recipeId)
             }
         }
-        .onChange(of: viewModel.selectedRecipeIDs) { _, _ in
+        .onChange(of: recipeSelectionMenuState) { _, _ in
             postRecipeSelectionChanged()
         }
         .onChange(of: isAnySheetShown) { _, _ in
@@ -1022,19 +1041,25 @@ private struct RecipeListColumnView: View {
 
     /// "Last Made" submenu, shared by the single-recipe and multi-selection context menus. Setting a
     /// custom date opens the picker sheet, or "Clear" removes
+    ///
+    /// The section header states the current value, so the menu answers "when did I last make this?"
+    /// without a detour through Get Info. A `Section` title -- not a disabled `Button` -- because this is
+    /// a heading describing the group, whereas a greyed-out item reads as "a command you can't run now".
     @ViewBuilder
     private func lastMadeMenu(for recipeIds: [String]) -> some View {
         Menu("Last Prepared Date") {
-            Button("Set to Today") {
-                Task { await viewModel.setLastMade(Date(), forRecipeIds: recipeIds) }
-            }
-            Button("Set as Date…") {
-                lastMadeTargetIDs = recipeIds
-                lastMadePickerDate = Date()
-            }
-            Divider()
-            Button("Clear") {
-                Task { await viewModel.setLastMade(nil, forRecipeIds: recipeIds) }
+            Section(viewModel.lastPreparedSummary(forRecipeIds: recipeIds)) {
+                Button("Set to Today") {
+                    Task { await viewModel.setLastMade(Date(), forRecipeIds: recipeIds) }
+                }
+                Button("Set as Date…") {
+                    lastMadeTargetIDs = recipeIds
+                    lastMadePickerDate = Date()
+                }
+                Divider()
+                Button("Clear") {
+                    Task { await viewModel.setLastMade(nil, forRecipeIds: recipeIds) }
+                }
             }
         }
     }
@@ -1101,9 +1126,15 @@ private struct RecipeDetailColumnView: View {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
     @Binding var showRecipeDetailOnly: Bool
     @AppStorage("webPreviews") private var useWebRecipeDetailView = false
+    @Environment(\.openWindow) private var openWindow
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
+
+    private func editRecipe(_ recipeId: String) {
+        viewModel.recipeToEditID = recipeId
+        viewModel.showingEditSheet = true
+    }
 
     var body: some View {
         if viewModel.selectedSidebarItem?.isShoppingLists == true {
@@ -1123,6 +1154,22 @@ private struct RecipeDetailColumnView: View {
                 #if os(macOS)
                 .navigationSubtitle(list.isFreeform ? "Freeform List" : "Checklist")
                 #endif
+                // Moves this list into a window of its own, which is the only way to have it and a
+                // recipe on screen at once (the shopping lists take over this column). Declared here
+                // rather than inside the two editors so both kinds of list offer it, and so the same
+                // editors *in* that window don't offer to re-open where they already are.
+                .toolbar {
+                    if MultiWindowSupport.isSupported {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button("Open in New Window", systemImage: "macwindow") {
+                                openWindow(id: "shopping-list-window", value: listId)
+                            }
+                            #if os(macOS)
+                            .help("Open this list in its own window")
+                            #endif
+                        }
+                    }
+                }
             } else {
                 ContentUnavailableView("No List Selected", systemImage: "checklist")
             }
@@ -1131,8 +1178,22 @@ private struct RecipeDetailColumnView: View {
             Group {
                 if useWebRecipeDetailView {
                     RecipeDetailWebView(recipe: recipe)
+                        // The web preview has no Chef View button to order against, so it keeps
+                        // declaring Edit itself. RecipeDetailView owns both in the other branch.
+                        .toolbar {
+                            ToolbarItem(placement: .primaryAction) {
+                                Button("Edit", systemImage: "pencil") { editRecipe(recipeId) }
+                                    .keyboardShortcut("e", modifiers: .command)
+                            }
+                        }
                 } else {
-                    RecipeDetailView(recipe: recipe, onScaledRecipeSaved: viewModel.handleNewRecipeSaved)
+                    RecipeDetailView(
+                        recipe: recipe,
+                        // Handed down so Chef View and Edit are declared in one place, in the order
+                        // that puts Edit on the outer edge. See RecipeDetailView.onEdit.
+                        onEdit: { editRecipe(recipeId) },
+                        onScaledRecipeSaved: viewModel.handleNewRecipeSaved
+                    )
                 }
             }
             .id(recipeId) // seems to be needed to force full reload when recipe changes?
@@ -1149,15 +1210,6 @@ private struct RecipeDetailColumnView: View {
                     }
                 }
             #endif
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: {
-                        viewModel.recipeToEditID = recipeId
-                        viewModel.showingEditSheet = true
-                    }) {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .keyboardShortcut("e", modifiers: .command)
-                }
             }
         } else {
             ContentUnavailableView("No Recipe Selected", systemImage: "list.bullet.rectangle")
@@ -1245,30 +1297,30 @@ private struct RootPresentationsModifier: ViewModifier {
         .sheet(isPresented: $showingEditLibCategoriesSheet) {
             #if os(iOS)
             NavigationStack {
-                LibraryCategoriesEditView()
+                LibraryClassifiersEditView(classifier: .category)
             }
             #else
-            LibraryCategoriesEditView()
+            LibraryClassifiersEditView(classifier: .category)
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }
         .sheet(isPresented: $showingEditLibTagsSheet) {
             #if os(iOS)
             NavigationStack {
-                LibraryTagsEditView()
+                LibraryClassifiersEditView(classifier: .tag)
             }
             #else
-            LibraryTagsEditView()
+            LibraryClassifiersEditView(classifier: .tag)
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }
         .sheet(isPresented: $showingEditLibCoursesSheet) {
             #if os(iOS)
             NavigationStack {
-                LibraryCoursesEditView()
+                LibraryClassifiersEditView(classifier: .course)
             }
             #else
-            LibraryCoursesEditView()
+            LibraryClassifiersEditView(classifier: .course)
                 .frame(minWidth: 500, minHeight: 400)
             #endif
         }
@@ -1317,6 +1369,7 @@ private struct RootPresentationsModifier: ViewModifier {
     RecipeNavigationSplitView(
         viewModel: RecipeNavigationSplitViewModel()
     )
+    .environment(ChefViewSessionStore())
 }
 
 // MARK: - Export Document
@@ -1348,35 +1401,111 @@ struct ExportDocument: FileDocument {
 
 // MARK: - Inspector View
 
-/// Date picker for "Last Made → Set Date…". Only past dates are selectable — a recipe can't have been
-/// made in the future, and the field's whole purpose is recording what already happened.
+/// Date picker for "Last Prepared Date > Set as Date…". Offers current or past dates only.
+///
+/// Laid out per platform to get best button placement on each:
+///
+/// - **iOS/iPadOS** gets a real navigation bar (a `NavigationStack` inside the sheet). `.cancellationAction`
+///   and `.confirmationAction` put Cancel and Save at opposite ends of the bar (or wherever platform decides).
+/// - **macOS** keeps a bottom button row, which is the platform convention for a modal panel: default
+///   action in the lower-right, Cancel to its left. Sharing picker between two platforms with these custom UIs for each.
 private struct LastMadeDatePickerSheet: View {
     @State var date: Date
     let recipeCount: Int
     let onCancel: () -> Void
     let onSave: (Date) -> Void
 
+    private static let title = "Set Last Prepared Date"
+
+    /// Opening height of the iOS/iPadOS sheet: navigation bar + a six-row month + padding. Measured
+    /// rather than derived — the graphical DatePicker won't report its size to the layout system (see
+    /// the presentation modifiers below), so there's nothing to compute it from.
+    private static let preferredSheetHeight: CGFloat = 520
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(recipeCount > 1 ? "Last Made (\(recipeCount) Recipes)" : "Last Made")
+        #if os(macOS)
+        VStack(spacing: 16) {
+            Text(Self.title)
                 .font(.headline)
-            DatePicker(
-                "Date",
-                selection: $date,
-                in: ...Date(),
-                displayedComponents: .date
-            )
-            .datePickerStyle(.graphical)
-            .labelsHidden()
-            HStack {
+            // Intrinsic size, so the calendar doesn't stretch to fill a panel wider than it needs:
+            picker.fixedSize()
+            multipleRecipesNote
+            HStack(spacing: 12) {
                 Spacer()
                 Button("Cancel", role: .cancel) { onCancel() }
+                    .keyboardShortcut(.cancelAction)
                 Button("Save") { onSave(date) }
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding()
-        .frame(minWidth: 320)
+        .padding(20)
+        // No minimum width: the sheet hugs the calendar's own width instead of stretching past it, and
+        // the default (centered) VStack alignment then centers the calendar rather than pinning it left.
+        #else
+        NavigationStack {
+            // Scrolls only when it has to. A month with six rows plus a large Dynamic Type size can
+            // out-grow the sheet on some devices; without this the last week is simply cut off and
+            // unreachable, which is how the iPad sheet first went wrong.
+            ScrollView {
+                VStack(spacing: 12) {
+                    // `.fixedSize(vertical:)` only: the calendar keeps its natural HEIGHT (so the scroll
+                    // view can reveal all of it) while still taking the sheet's full width. Fixing the
+                    // width too makes the iPhone sheet clip the right-hand columns.
+                    picker.fixedSize(horizontal: false, vertical: true)
+                    multipleRecipesNote
+                }
+                .padding(.horizontal)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .navigationTitle(Self.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(date) }
+                }
+            }
+        }
+        // Opens at a height sized for a calendar rather than `.medium`, which is a fraction of the screen
+        // and left the month cut off on iPad until you dragged the sheet up. A six-row month (one that
+        // starts on a Saturday) is the tall case this has to clear; `.large` stays in the list so the
+        // sheet can still be expanded, and the ScrollView above covers anything taller still — a big
+        // Dynamic Type size, say.
+        .presentationDetents([.height(Self.preferredSheetHeight), .large])
+        // iPad presents a centered card; `.form` gives it the standard form-sheet WIDTH (its default was
+        // both too narrow and too short). Height comes from the detent above.
+        //
+        // Sizing-to-content reads like the better answer here and isn't: a graphical DatePicker inside a
+        // NavigationStack reports no usable ideal size, so `.fitted` collapses the sheet to a pill and
+        // `.form.fitted(vertical:)` collapses it to a bar — both verified on an iPad Air, with and without
+        // a Spacer. Hence an explicit height.
+        .presentationSizing(.form)
+        #endif
+    }
+
+    private var picker: some View {
+        DatePicker(
+            Self.title,
+            selection: $date,
+            in: ...Date(),
+            displayedComponents: .date
+        )
+        .datePickerStyle(.graphical)
+        .labelsHidden()
+    }
+
+    /// Multi-selection is invisible from a calendar alone, and this sheet overwrites every recipe it
+    /// applies to — so say how many when it's more than one. Kept out of the title, which would grow
+    /// awkwardly long in a navigation bar.
+    @ViewBuilder
+    private var multipleRecipesNote: some View {
+        if recipeCount > 1 {
+            Text("Applies to \(recipeCount) recipes")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -1400,7 +1529,7 @@ private struct RecipeInfoInspectorView: View {
                 Text(recipe.lastModifiedDate.formatted(date: .abbreviated, time: .shortened))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("Last Made")
+                Text("Last Prepared")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 // Date only since we don't care about time resolution (and "set as day" gets local noon so not always exact)

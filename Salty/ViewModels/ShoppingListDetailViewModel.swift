@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SQLiteData
 import UUIDV7
+import SaltyCore
 
 /// Backs the checklist view for one shopping list. Items are edited in memory (so inline TextFields
 /// don't fight a reactive fetch) and persisted with a short debounce; the view is recreated per list
@@ -25,6 +26,10 @@ class ShoppingListDetailViewModel {
     let listId: String
     var items: [ShoppingListListContents] = []
     var isLoaded = false
+
+    /// Identifies this editor to `ShoppingListChangeNotifier`: the saves it announces are picked up
+    /// by every other editor of this list, and ignored by this one.
+    let editorToken = UUID()
 
     @ObservationIgnored
     private var saveTask: Task<Void, Never>?
@@ -65,6 +70,28 @@ class ShoppingListDetailViewModel {
                 isLoaded = true
                 return
             }
+        }
+    }
+
+    /// Re-reads the checklist after the row was written by something other than this view model --
+    /// today that's a recipe's "Add to Shopping List" sheet, which can land while this list is open
+    /// in another window.
+    ///
+    /// A save still sitting in the debounce is dropped rather than flushed: the external write
+    /// already added to what was stored, so replaying this older array over it would erase the
+    /// additions. The cost is at most the last fraction of a second of typing, which beats silently
+    /// losing everything that was just added.
+    func reloadAfterExternalChange() async {
+        guard isLoaded else { return }
+        saveTask?.cancel()
+        saveTask = nil
+        do {
+            let list = try await database.read { [listId] db in
+                try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
+            }
+            items = list?.contentsForList ?? []
+        } catch {
+            logger.error("Error reloading shopping list \(self.listId): \(error)")
         }
     }
 
@@ -157,6 +184,7 @@ class ShoppingListDetailViewModel {
         let itemsToSave = items
         let id = listId
         let log = logger
+        let token = editorToken
         Task {
             do {
                 try await database.write { db in
@@ -169,6 +197,8 @@ class ShoppingListDetailViewModel {
                         try ShoppingList.update(list).execute(db)
                     }
                 }
+                // The same list may be open in another window, holding its own copy of these items.
+                ShoppingListChangeNotifier.shared.noteEditorChange(listId: id, source: token)
             } catch {
                 log.error("Error saving shopping list \(id): \(error)")
             }
@@ -185,6 +215,7 @@ class ShoppingListDetailViewModel {
         let content = ShoppingListFreeformConverter.text(from: items)
         let id = listId
         let log = logger
+        let token = editorToken
         Task {
             do {
                 try await database.write { db in
@@ -195,6 +226,10 @@ class ShoppingListDetailViewModel {
                         try ShoppingList.update(list).execute(db)
                     }
                 }
+                // A checklist of this list open in another window is about to be replaced by the
+                // freeform editor; announce the write so it doesn't save its items over the text
+                // on the way out.
+                ShoppingListChangeNotifier.shared.noteEditorChange(listId: id, source: token)
             } catch {
                 log.error("Error converting shopping list \(id) to freeform: \(error)")
             }

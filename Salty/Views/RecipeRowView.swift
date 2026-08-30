@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 func createXPImage(_ value: Data) -> Image {
 #if canImport(UIKit)

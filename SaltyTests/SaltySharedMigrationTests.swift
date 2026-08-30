@@ -12,6 +12,7 @@ import Testing
 import Foundation
 import GRDB
 @testable import Salty
+import SaltyCore
 
 struct SaltySharedMigrationTests {
 
@@ -89,6 +90,11 @@ struct SaltySharedMigrationTests {
             // Minimal pre-V0003 shapes: just enough of `recipe` for the image-date entry's ALTER, and
             // the `shoppingList` shape SHARED-V0002 leaves behind.
             try db.execute(sql: #"CREATE TABLE "recipe" ("id" TEXT)"#)
+            // Every real library has these (GRDB migration 0001 creates them) and SHARED-V0006 ALTERs
+            // them, so the minimal seed needs them too.
+            for table in ["category", "course", "tag"] {
+                try db.execute(sql: #"CREATE TABLE "\#(table)" ("id" TEXT, "lastModifiedDate" DATETIME)"#)
+            }
             try db.execute(sql: """
                 CREATE TABLE "shoppingList" (
                     "id" TEXT PRIMARY KEY NOT NULL,
@@ -120,6 +126,12 @@ struct SaltySharedMigrationTests {
         let dbQueue = try DatabaseQueue()
         try dbQueue.write { db in
             try db.execute(sql: #"CREATE TABLE "recipe" ("id" TEXT, "lastModifiedImageDate" DATETIME)"#)
+            // Already carrying SHARED-V0006's column, so that entry is a no-op here too.
+            for table in ["category", "course", "tag"] {
+                try db.execute(sql: #"""
+                    CREATE TABLE "\#(table)" ("id" TEXT, "lastModifiedDate" DATETIME, "syncedModifiedDate" DATETIME)
+                    """#)
+            }
             try db.execute(sql: """
                 CREATE TABLE "shoppingList" (
                     "id" TEXT PRIMARY KEY NOT NULL,

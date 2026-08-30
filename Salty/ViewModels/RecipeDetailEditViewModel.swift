@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SQLiteData
 import UUIDV7
+import SaltyCore
 
 @Observable
 @MainActor
@@ -152,7 +153,7 @@ class RecipeDetailEditViewModel {
                             recipeId: recipeToSave.id,
                             categoryId: categoryId
                         )
-                        try RecipeCategory.insert { recipeCategory }.execute(db)
+                        try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
                     }
                 }
             }
@@ -202,20 +203,14 @@ class RecipeDetailEditViewModel {
                 tagToUse = newTag
             }
 
-            // Check if recipe already has this tag
-            let existingRecipeTag = try await database.read { db in
-                try RecipeTag
-                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tagToUse.id) }
-                    .fetchOne(db)
+            // Add tag to recipe unless it already carries it
+            let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipeId, tagId: tagToUse.id)
+            let added = try await database.write { db -> Bool in
+                guard try RecipeTag.insertIfAbsent(recipeTag, in: db) else { return false }
+                try Recipe.touchLastModified(recipeId: recipeId, in: db)
+                return true
             }
-
-            if existingRecipeTag == nil {
-                // Add tag to recipe
-                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipeId, tagId: tagToUse.id)
-                try await database.write { db in
-                    try RecipeTag.insert { recipeTag }.execute(db)
-                    try Recipe.touchLastModified(recipeId: recipeId, in: db)
-                }
+            if added {
                 recipe.lastModifiedDate = Date()
             }
         } catch {

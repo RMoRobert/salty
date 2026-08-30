@@ -10,6 +10,7 @@
 import Foundation
 import OSLog
 import SQLiteData
+import SaltyCore
 
 @Observable
 @MainActor
@@ -89,14 +90,18 @@ final class DuplicateRecipesViewModel {
             let imageFilenames = try await database.read { db in
                 try Recipe
                     .select { $0.imageFilename }
-                    .where { ids.contains($0.id) }
+                    .where { $0.id.in(ids) }
                     .fetchAll(db)
             }
             for case let filename? in imageFilenames {
                 RecipeImageManager.shared.deleteImage(filename: filename)
             }
             try await database.write { db in
-                try Recipe.where { ids.contains($0.id) }.delete().execute(db)
+                try Recipe.where { $0.id.in(ids) }.delete().execute(db)
+                // Tombstoned like any other deletion: consolidating duplicates is still a deletion, and
+                // without this the copies come back on the next sync from a peer. See
+                // RecipeTombstoneWriter.
+                try RecipeTombstoneWriter.recordDeletions(Array(ids), in: db)
             }
             selectedRecipeIDs.subtract(ids)
             deleteCandidateIDs.removeAll()

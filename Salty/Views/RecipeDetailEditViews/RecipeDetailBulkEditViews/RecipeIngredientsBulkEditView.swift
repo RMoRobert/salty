@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct RecipeIngredientsBulkEditView: View {
     @Binding var recipe: Recipe
