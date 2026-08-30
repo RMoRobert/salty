@@ -64,9 +64,13 @@ public class SchemaOrgRecipeJSONLDImporter {
 
     /// Parses schema.org Recipe data from HTML containing JSON-LD, keeping page metadata
     /// (such as the recipe photo URL) alongside each recipe.
-    /// - Parameter html: HTML content containing JSON-LD script tags
+    /// - Parameters:
+    ///   - html: HTML content containing JSON-LD script tags
+    ///   - pageURL: where the HTML came from, used as `sourceDetails` for a recipe whose JSON-LD
+    ///     declares no `url` of its own. Plenty of sites — AllRecipes among them — declare none, and
+    ///     the address is the one thing about an imported recipe we always know.
     /// - Returns: Array of scanned recipes found in the HTML
-    public func scanRecipes(from html: String) -> [ScannedRecipe] {
+    public func scanRecipes(from html: String, pageURL: String? = nil) -> [ScannedRecipe] {
         var recipes: [ScannedRecipe] = []
 
         // Guard against pathologically large pages before handing them to the HTML parser.
@@ -95,7 +99,27 @@ public class SchemaOrgRecipeJSONLDImporter {
         }
 
         logger.info("Successfully parsed \(recipes.count) recipes from HTML")
-        return recipes
+        return recipes.map { scanned in
+            fillingInSourceDetails(scanned, from: pageURL)
+        }
+    }
+
+    /// Puts the page's own address into `sourceDetails` when the JSON-LD carried none.
+    ///
+    /// Only a real web address: the import browser starts on a bundled `file://` landing page, and
+    /// recording that as where a recipe came from would be worse than recording nothing.
+    private func fillingInSourceDetails(_ scanned: ScannedRecipe, from pageURL: String?) -> ScannedRecipe {
+        guard scanned.recipe.sourceDetails.isEmpty,
+              let pageURL,
+              let scheme = URL(string: pageURL)?.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else {
+            return scanned
+        }
+
+        var recipe = scanned.recipe
+        recipe.sourceDetails = pageURL
+        return ScannedRecipe(recipe: recipe, imageURL: scanned.imageURL)
     }
     
     // MARK: - JSON-LD parsing
@@ -205,20 +229,16 @@ public class SchemaOrgRecipeJSONLDImporter {
         return nil
     }
     
-    /// Decodes common HTML entities that might appear in JSON-LD data, and clamps the result so a single
-    /// oversized field can't blow up memory or downstream rendering. `&amp;` is decoded LAST so that an
-    /// already-escaped sequence like `&amp;lt;` resolves to the literal `&lt;` rather than being
-    /// double-decoded into `<`.
+    /// Decodes the HTML character references that appear in JSON-LD data, and clamps the result so a
+    /// single oversized field can't blow up memory or downstream rendering.
+    ///
+    /// See `HTMLEntities.decode` for why this is one real pass over the text rather than the chain of
+    /// replacements it used to be: the chain could only decode the entities it listed, and every recipe
+    /// plugin writes its fractions as `&#8531;`.
     private func decodeHTMLEntities(_ text: String) -> String {
-        let decoded = text
-            .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&#x27;", with: "'")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#34;", with: "\"")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&amp;", with: "&")
+        // Trimmed AFTER decoding, not just before: a field that is nothing but `&nbsp;` should end up
+        // empty rather than blank-looking, and the KMP and .NET importers do it in that order too.
+        let decoded = HTMLEntities.decode(text).trimmingCharacters(in: .whitespacesAndNewlines)
         return decoded.count > Limits.maxFieldLength ? String(decoded.prefix(Limits.maxFieldLength)) : decoded
     }
     
@@ -568,7 +588,9 @@ public class SchemaOrgRecipeJSONLDImporter {
                 }
             }
             
-            return result.joined(separator: " ")
+            // A duration with nothing but seconds in it ("PT45S") has no hours or minutes to render.
+            // Its own text beats a preparation time with no time in it.
+            return result.isEmpty ? duration : result.joined(separator: " ")
         }
         
         // Return as-is if not ISO 8601 format
@@ -606,7 +628,9 @@ public extension SchemaOrgRecipeJSONLDImporter {
                 return []
             }
             if let html = String(data: data, encoding: .utf8) {
-                return parseRecipes(from: html)
+                // The address is passed through so a page that declares no `url` still records where
+                // it came from. See scanRecipes(from:pageURL:).
+                return scanRecipes(from: html, pageURL: url.absoluteString).map(\.recipe)
             }
         } catch {
             logger.error("Error fetching URL \(url): \(error)")

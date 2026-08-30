@@ -177,7 +177,7 @@ struct CategoryEditView: View {
 
                     for categoryId in categoriesToAdd {
                         let recipeCategory = RecipeCategory(id: UUIDV7().uuidString, recipeId: recipeId, categoryId: categoryId)
-                        try RecipeCategory.insert { recipeCategory }.execute(db)
+                        try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
                     }
 
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)

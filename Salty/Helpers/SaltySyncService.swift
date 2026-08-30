@@ -471,6 +471,7 @@ class SaltySyncService {
             // library as never-agreed and uploading all of it straight back (SHARED-V0005).
             try await database.write { db in
                 try RecipeAgreementStore.markAllAgreed(in: db)
+                try ClassifierAgreementStore.markAllAgreed(in: db)
             }
 
             // Images: local files were wiped, so this only downloads (nothing to upload).
@@ -628,6 +629,7 @@ class SaltySyncService {
             // between this push and that sync.
             try await database.write { db in
                 try RecipeAgreementStore.markAllAgreed(in: db)
+                try ClassifierAgreementStore.markAllAgreed(in: db)
             }
 
             try await completeSyncOnServer()
@@ -1039,8 +1041,12 @@ class SaltySyncService {
 
     private func syncCoursesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
-        let localCourses = try await database.read { db in
-            try Course.fetchAll(db)
+        // Agreement-tracked (SHARED-V0006), exactly like recipes: a row that exists here and not on
+        // the server is classified by its recorded stamp, never by comparing clocks to the watermark.
+        let (localCourses, tracksAgreement, syncedStamps) = try await database.read { db -> ([Course], Bool, [String: Date]) in
+            (try Course.fetchAll(db),
+             try ClassifierAgreementStore.isAvailable(.course, in: db),
+             try ClassifierAgreementStore.stamps(.course, in: db))
         }
         
         // uniquingKeysWith (not uniqueKeysWithValues) so a duplicate id in the server response
@@ -1073,7 +1079,20 @@ class SaltySyncService {
                 if deviceInfo.isFirstSync {
                     try await postToServer(localCourse, endpoint: "/api/courses")
                     syncProgress.itemsUploaded += 1
+                } else if tracksAgreement {
+                    // Recorded fact, not a clock comparison. No stamp means it has never been to the
+                    // server, so it is new here; a stamp that no longer matches means it was edited here
+                    // after the server last had it, and an edit beats a delete everywhere in Salty. Only
+                    // a stamp that still matches proves the server had exactly this row and removed it.
+                    let localDate = (localCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                    if let stamp = syncedStamps[localCourse.id], stamp.roundedToWireMillis == localDate {
+                        toDeleteLocally.append(localCourse.id)
+                    } else {
+                        try await postToServer(localCourse, endpoint: "/api/courses")
+                        syncProgress.itemsUploaded += 1
+                    }
                 } else if let lastSync = deviceInfo.lastSyncDate {
+                    // Pre-V0006 library: the old watermark guess, until this file is migrated.
                     let localDate = (localCourse.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localCourse, endpoint: "/api/courses")
@@ -1150,6 +1169,19 @@ class SaltySyncService {
                 logger.info("Course \(current.id) changed on server after our fetch; downloaded instead of deleting")
             }
         }
+        // Record what this pass agreed on (SHARED-V0006): everything the server also holds, plus what
+        // this pass moved in either direction, minus anything just deleted here — the same three groups
+        // the recipe pass stamps, for the same reason.
+        if tracksAgreement {
+            var agreed = Set(localCourses.map { $0.id }).intersection(serverCoursesById.keys)
+            agreed.formUnion(serverCoursesById.keys.filter { !localCourseIds.contains($0) })
+            agreed.subtract(toDeleteLocally)
+            let stampIds = Array(agreed)
+            try await database.write { db in
+                try ClassifierAgreementStore.markAgreed(.course, stampIds, in: db)
+            }
+        }
+
     }
     
     // MARK: - Duplicate library items
@@ -1199,8 +1231,12 @@ class SaltySyncService {
 
     private func syncCategoriesWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
-        let localCategories = try await database.read { db in
-            try Category.fetchAll(db)
+        // Agreement-tracked (SHARED-V0006), exactly like recipes: a row that exists here and not on
+        // the server is classified by its recorded stamp, never by comparing clocks to the watermark.
+        let (localCategories, tracksAgreement, syncedStamps) = try await database.read { db -> ([Category], Bool, [String: Date]) in
+            (try Category.fetchAll(db),
+             try ClassifierAgreementStore.isAvailable(.category, in: db),
+             try ClassifierAgreementStore.stamps(.category, in: db))
         }
         
         let serverCategoriesById = Dictionary(serverCategories.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
@@ -1231,7 +1267,20 @@ class SaltySyncService {
                 if deviceInfo.isFirstSync {
                     try await postToServer(localCategory, endpoint: "/api/categories")
                     syncProgress.itemsUploaded += 1
+                } else if tracksAgreement {
+                    // Recorded fact, not a clock comparison. No stamp means it has never been to the
+                    // server, so it is new here; a stamp that no longer matches means it was edited here
+                    // after the server last had it, and an edit beats a delete everywhere in Salty. Only
+                    // a stamp that still matches proves the server had exactly this row and removed it.
+                    let localDate = (localCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                    if let stamp = syncedStamps[localCategory.id], stamp.roundedToWireMillis == localDate {
+                        toDeleteLocally.append(localCategory.id)
+                    } else {
+                        try await postToServer(localCategory, endpoint: "/api/categories")
+                        syncProgress.itemsUploaded += 1
+                    }
                 } else if let lastSync = deviceInfo.lastSyncDate {
+                    // Pre-V0006 library: the old watermark guess, until this file is migrated.
                     let localDate = (localCategory.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localCategory, endpoint: "/api/categories")
@@ -1308,14 +1357,31 @@ class SaltySyncService {
                 logger.info("Category \(current.id) changed on server after our fetch; downloaded instead of deleting")
             }
         }
+        // Record what this pass agreed on (SHARED-V0006): everything the server also holds, plus what
+        // this pass moved in either direction, minus anything just deleted here — the same three groups
+        // the recipe pass stamps, for the same reason.
+        if tracksAgreement {
+            var agreed = Set(localCategories.map { $0.id }).intersection(serverCategoriesById.keys)
+            agreed.formUnion(serverCategoriesById.keys.filter { !localCategoryIds.contains($0) })
+            agreed.subtract(toDeleteLocally)
+            let stampIds = Array(agreed)
+            try await database.write { db in
+                try ClassifierAgreementStore.markAgreed(.category, stampIds, in: db)
+            }
+        }
+
     }
     
     // MARK: - Tag Sync
     
     private func syncTagsWithDeletions(deviceInfo: DeviceInfo) async throws {
         let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
-        let localTags = try await database.read { db in
-            try Tag.fetchAll(db)
+        // Agreement-tracked (SHARED-V0006), exactly like recipes: a row that exists here and not on
+        // the server is classified by its recorded stamp, never by comparing clocks to the watermark.
+        let (localTags, tracksAgreement, syncedStamps) = try await database.read { db -> ([Tag], Bool, [String: Date]) in
+            (try Tag.fetchAll(db),
+             try ClassifierAgreementStore.isAvailable(.tag, in: db),
+             try ClassifierAgreementStore.stamps(.tag, in: db))
         }
         
         let serverTagsById = Dictionary(serverTags.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
@@ -1346,7 +1412,20 @@ class SaltySyncService {
                 if deviceInfo.isFirstSync {
                     try await postToServer(localTag, endpoint: "/api/tags")
                     syncProgress.itemsUploaded += 1
+                } else if tracksAgreement {
+                    // Recorded fact, not a clock comparison. No stamp means it has never been to the
+                    // server, so it is new here; a stamp that no longer matches means it was edited here
+                    // after the server last had it, and an edit beats a delete everywhere in Salty. Only
+                    // a stamp that still matches proves the server had exactly this row and removed it.
+                    let localDate = (localTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
+                    if let stamp = syncedStamps[localTag.id], stamp.roundedToWireMillis == localDate {
+                        toDeleteLocally.append(localTag.id)
+                    } else {
+                        try await postToServer(localTag, endpoint: "/api/tags")
+                        syncProgress.itemsUploaded += 1
+                    }
                 } else if let lastSync = deviceInfo.lastSyncDate {
+                    // Pre-V0006 library: the old watermark guess, until this file is migrated.
                     let localDate = (localTag.lastModifiedDate ?? Date.distantPast).roundedToWireMillis
                     if localDate > lastSync {
                         try await postToServer(localTag, endpoint: "/api/tags")
@@ -1423,6 +1502,19 @@ class SaltySyncService {
                 logger.info("Tag \(current.id) changed on server after our fetch; downloaded instead of deleting")
             }
         }
+        // Record what this pass agreed on (SHARED-V0006): everything the server also holds, plus what
+        // this pass moved in either direction, minus anything just deleted here — the same three groups
+        // the recipe pass stamps, for the same reason.
+        if tracksAgreement {
+            var agreed = Set(localTags.map { $0.id }).intersection(serverTagsById.keys)
+            agreed.formUnion(serverTagsById.keys.filter { !localTagIds.contains($0) })
+            agreed.subtract(toDeleteLocally)
+            let stampIds = Array(agreed)
+            try await database.write { db in
+                try ClassifierAgreementStore.markAgreed(.tag, stampIds, in: db)
+            }
+        }
+
     }
     
     // MARK: - Device-based Recipe Sync with Deletion Detection
@@ -1855,8 +1947,9 @@ class SaltySyncService {
                         recipeId: recipe.id,
                         categoryId: categoryId
                     )
-                    try RecipeCategory.insert { rc }.execute(db)
-                    logger.debug("Inserted RecipeCategory: recipe=\(recipe.id), category=\(categoryId)")
+                    if try RecipeCategory.insertIfAbsent(rc, in: db) {
+                        logger.debug("Inserted RecipeCategory: recipe=\(recipe.id), category=\(categoryId)")
+                    }
                 }
             }
             
@@ -1883,8 +1976,9 @@ class SaltySyncService {
                         recipeId: recipe.id,
                         tagId: tagId
                     )
-                    try RecipeTag.insert { rt }.execute(db)
-                    logger.debug("Inserted RecipeTag: recipe=\(recipe.id), tag=\(tagId)")
+                    if try RecipeTag.insertIfAbsent(rt, in: db) {
+                        logger.debug("Inserted RecipeTag: recipe=\(recipe.id), tag=\(tagId)")
+                    }
                 }
             }
         }

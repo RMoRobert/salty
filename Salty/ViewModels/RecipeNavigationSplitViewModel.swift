@@ -1050,19 +1050,12 @@ class RecipeNavigationSplitViewModel {
         let log = logger // Sendable copy for the off-actor closure
         do {
             try await database.write { db in
-                // Check if relationship already exists
-                let existingRelationship = try RecipeCategory
-                    .where { $0.recipeId.eq(recipeId) && $0.categoryId.eq(categoryId) }
-                    .fetchOne(db)
-
-                if existingRelationship == nil {
-                    // Create relationship only if it doesn't already exist
-                    let recipeCategory = RecipeCategory(
-                        id: UUIDV7().uuidString,
-                        recipeId: recipeId,
-                        categoryId: categoryId
-                    )
-                    try RecipeCategory.insert { recipeCategory }.execute(db)
+                let recipeCategory = RecipeCategory(
+                    id: UUIDV7().uuidString,
+                    recipeId: recipeId,
+                    categoryId: categoryId
+                )
+                if try RecipeCategory.insertIfAbsent(recipeCategory, in: db) {
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)
                     log.info("Added recipe \(recipeId) to category \(categoryId)")
                 } else {
@@ -1145,19 +1138,12 @@ class RecipeNavigationSplitViewModel {
         let log = logger // Sendable copy for the off-actor closure
         do {
             try await database.write { db in
-                // Check if relationship already exists
-                let existingRelationship = try RecipeTag
-                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tagId) }
-                    .fetchOne(db)
-
-                if existingRelationship == nil {
-                    // Create relationship only if it doesn't already exist
-                    let recipeTag = RecipeTag(
-                        id: UUIDV7().uuidString,
-                        recipeId: recipeId,
-                        tagId: tagId
-                    )
-                    try RecipeTag.insert { recipeTag }.execute(db)
+                let recipeTag = RecipeTag(
+                    id: UUIDV7().uuidString,
+                    recipeId: recipeId,
+                    tagId: tagId
+                )
+                if try RecipeTag.insertIfAbsent(recipeTag, in: db) {
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)
                     log.info("Added recipe \(recipeId) to tag \(tagId)")
                 } else {

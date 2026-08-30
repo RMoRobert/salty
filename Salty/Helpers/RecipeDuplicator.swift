@@ -109,7 +109,7 @@ enum RecipeDuplicator {
                     recipeId: finalCopy.id,
                     categoryId: categoryId
                 )
-                try RecipeCategory.insert { recipeCategory }.execute(db)
+                try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
             }
 
             for tagId in tagIds {
@@ -118,7 +118,7 @@ enum RecipeDuplicator {
                     recipeId: finalCopy.id,
                     tagId: tagId
                 )
-                try RecipeTag.insert { recipeTag }.execute(db)
+                try RecipeTag.insertIfAbsent(recipeTag, in: db)
             }
         }
 

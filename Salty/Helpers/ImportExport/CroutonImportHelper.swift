@@ -69,14 +69,8 @@ struct CroutonImportHelper: RecipeFileImporterProtocol {
                                 continue
                             }
 
-                            let existingRelationship = try RecipeTag
-                                .where { $0.recipeId.eq(recipe.id) && $0.tagId.eq(tagId) }
-                                .fetchOne(db)
-
-                            if existingRelationship == nil {
-                                let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagId)
-                                try RecipeTag.insert { recipeTag }.execute(db)
-                            }
+                            let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipe.id, tagId: tagId)
+                            try RecipeTag.insertIfAbsent(recipeTag, in: db)
                         }
                     }
 

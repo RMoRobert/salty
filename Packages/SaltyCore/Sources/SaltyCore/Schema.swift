@@ -612,19 +612,19 @@ public func saltyMigrator() -> DatabaseMigrator {
         logger.info("Running 'Create initial tables' migration")
 
         try db.create(table: "course") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("name", .text)
             t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "category") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("name", .text)
             t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "recipe") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("name", .text).notNull()
             t.column("createdDate", .datetime)
             t.column("lastModifiedDate", .datetime)
@@ -649,25 +649,25 @@ public func saltyMigrator() -> DatabaseMigrator {
         }
         
         try db.create(table: "recipeCategory") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("categoryId", .text).notNull().indexed().references("category", onDelete: .cascade)
         }
         
         try db.create(table: "tag") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("name", .text)
             t.column("lastModifiedDate", .datetime)
         }
         
         try db.create(table: "recipeTag") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("recipeId", .text).notNull().indexed().references("recipe", onDelete: .cascade)
             t.column("tagId", .text).notNull().indexed().references("tag", onDelete: .cascade)
         }
         
         try db.create(table: "shoppingList") { t in
-            t.primaryKey("id", .text, onConflict: .replace).notNull().defaults(to: UUIDV7().uuidString)
+            t.primaryKey("id", .text, onConflict: .replace).notNull()
             t.column("name", .text)
             t.column("isFreeform", .boolean)
             t.column("contentsForList", .jsonText)
@@ -969,7 +969,25 @@ public let saltySharedMigrations: [SaltySharedMigration] = [
         if !exists {
             try db.execute(sql: #"ALTER TABLE "recipe" ADD COLUMN "syncedModifiedDate" DATETIME"#)
         }
-    }
+    },
+    // SHARED-V0005's agreement bookkeeping, extended to the library tables — retiring the reconciler's
+    // last clock-vs-watermark guess. A category/course/tag that exists here and not on the server is now
+    // classified by its recorded stamp, so a row created while the previous sync ran is no longer read
+    // as a server-side deletion (which cascaded its junction rows and silently unfiled recipes).
+    // Deliberately NOT backfilled, for V0005's reason: a wrong backfill deletes a row, NULL merely
+    // re-uploads one once. Mirror: SaltyKMP's SHARED_MIGRATIONS and Salty.NET's SharedMigrations, SAME id.
+    SaltySharedMigration(id: "SHARED-V0006") { db in
+        for table in ["category", "course", "tag"] {
+            let exists = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'syncedModifiedDate'",
+                arguments: [table]
+            ) ?? 0 > 0
+            if !exists {
+                try db.execute(sql: #"ALTER TABLE "\#(table)" ADD COLUMN "syncedModifiedDate" DATETIME"#)
+            }
+        }
+    },
 ]
 
 /// Applies any shared migrations not yet recorded in `saltyMigration`, then records them (platform

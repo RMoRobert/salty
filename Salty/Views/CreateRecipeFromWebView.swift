@@ -665,7 +665,9 @@ struct RecipeWebBrowserView: View {
 
             Task { @MainActor in
                 let importer = SchemaOrgRecipeJSONLDImporter()
-                let scannedRecipes = importer.scanRecipes(from: html)
+                // The address goes in so a page that declares no `url` of its own still records where
+                // the recipe came from. See scanRecipes(from:pageURL:).
+                let scannedRecipes = importer.scanRecipes(from: html, pageURL: self.viewModel.currentURL)
 
                 if let firstScanned = scannedRecipes.first {
                     // Populate the viewModel with the found recipe data
