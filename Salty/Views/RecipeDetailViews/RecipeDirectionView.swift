@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SQLiteData
+import SaltyCore
 
 struct RecipeDirectionView: View {
     @State var recipe: Recipe

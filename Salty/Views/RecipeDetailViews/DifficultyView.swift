@@ -7,6 +7,7 @@
 
 import SQLiteData
 import SwiftUI
+import SaltyCore
 
 struct DifficultyView: View {
     let recipe: Recipe

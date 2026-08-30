@@ -9,6 +9,7 @@ import SwiftUI
 import PhotosUI
 import OSLog
 import SQLiteData
+import SaltyCore
 
 #if os(iOS)
 import VisionKit

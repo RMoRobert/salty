@@ -5,6 +5,8 @@
 //  Created by Robert on 5/29/23.
 //
 
+import SaltyCore
+import UUIDV7
 #if os(macOS)
 
 import SwiftUI
@@ -221,7 +223,7 @@ struct DirectionsEditView: View {
     
     private func addStepAfter(_ index: Int) {
         let newDirection = Direction(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: false,
             text: ""
         )
@@ -262,7 +264,7 @@ struct DirectionsEditView: View {
     
     private func addNewStep() {
         let newDirection = Direction(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: false,
             text: ""
         )
@@ -279,7 +281,7 @@ struct DirectionsEditView: View {
     
     private func addNewHeading() {
         let newDirection = Direction(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             isHeading: true,
             text: ""
         )

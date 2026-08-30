@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 // Want to disable some menu items on macOS (and iPadOS 26+?) when
 // sheets are open since can't open more than one; this should help
@@ -40,6 +41,10 @@ class SheetStateTracker {
 class SelectionStateTracker {
     var hasRecipeSelected = false
     var selectedRecipeCount = 0
+    /// Heading for the menu bar's "Last Prepared Date" menu. Computed by the view (which holds the
+    /// recipe list) and pushed here, since Commands can't reach the view model. Re-posted when the
+    /// value changes as well as when the selection does, so marking a recipe made updates the menu.
+    var lastPreparedSummary = "Last Prepared"
 
     init() {
         NotificationCenter.default.addObserver(
@@ -50,10 +55,12 @@ class SelectionStateTracker {
             // Extract the Sendable values before hopping; Notification itself isn't Sendable.
             let hasSelected = notification.userInfo?["hasSelected"] as? Bool
             let count = notification.userInfo?["count"] as? Int
+            let summary = notification.userInfo?["lastPreparedSummary"] as? String
             // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
             MainActor.assumeIsolated {
                 if let hasSelected { self.hasRecipeSelected = hasSelected }
                 if let count { self.selectedRecipeCount = count }
+                if let summary { self.lastPreparedSummary = summary }
             }
         }
     }
@@ -156,8 +163,15 @@ struct Menus: Commands {
     @State private var selectionTracker = SelectionStateTracker()
     @State private var searchOptionsTracker = SearchOptionsTracker()
     @State private var syncService = SaltySyncService.shared
+    /// The lists behind File ▸ Open Shopping List in New Window. Commands can't reach a scene's view
+    /// model, so the menu does its own (tiny) fetch; see `ShoppingListsMenuModel`.
+    @State private var shoppingListsMenu = ShoppingListsMenuModel()
     /// Non-nil only while a window showing the recipe list is frontmost; see `SearchFieldFocusAction`.
     @FocusedValue(\.searchFieldFocusAction) private var focusSearchField
+    /// Non-nil only while a window showing a recipe is frontmost; see `ChefViewOpenAction`.
+    @FocusedValue(\.chefViewOpenAction) private var openChefView
+    /// Non-nil only while the web importer is frontmost; see `AddressFieldFocusAction`.
+    @FocusedValue(\.addressFieldFocusAction) private var focusAddressField
     @AppStorage("serverUse") private var serverUse = false
     
     @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
@@ -208,6 +222,20 @@ struct Menus: Commands {
                openWindow(id: "main-window")
            }
            .keyboardShortcut("n", modifiers: [.command, .shift])
+           // Safari's File ▸ Open Location, and in the same menu. No ellipsis: it moves focus to the
+           // address field rather than opening a dialog, exactly as Find does below.
+           //
+           // Disabled rather than hidden, and not by choice: `if focusAddressField != nil` around
+           // this item does compile, but the item then never appears at all. SwiftUI re-evaluates a
+           // command's *enabled* state when a `@FocusedValue` changes, but not the menu's structure
+           // — so the item is built once while the value is still nil and is never added back.
+           // Disabled is the HIG-preferred behaviour anyway, so this costs nothing but the looks.
+           Divider()
+           Button("Open Location") {
+               focusAddressField?()
+           }
+           .keyboardShortcut("l", modifiers: .command)
+           .disabled(focusAddressField == nil || sheetTracker.isAnySheetShown)
            #endif
            Divider()
            Button(selectionTracker.selectedRecipeCount <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
@@ -215,19 +243,37 @@ struct Menus: Commands {
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
            .keyboardShortcut(.return)
-           // Mirrors the recipe context menu, item for item. The menu bar carries it because a
-           // contextual menu shouldn't be the only route to a command — and unlike right-clicking a
-           // row, this one follows the whole selection. Disabled (not hidden) without one, per HIG.
-           Menu("Last Made") {
-               Button("Made Today") {
-                   NotificationCenter.default.post(name: .markSelectedRecipesMadeToday, object: nil)
+           // Opens any list in its own window without going near the sidebar — the point being to
+           // read a recipe and work on its shopping list side by side, which selecting Shopping Lists
+           // in the sidebar can't do (it replaces the recipe list). Named rather than acting on a
+           // selection for the same reason: the frontmost window is usually showing a recipe.
+           // Left out entirely where a second window is impossible (iPhone).
+           if MultiWindowSupport.isSupported {
+               Menu("Open Shopping List in New Window") {
+                   ForEach(shoppingListsMenu.shoppingLists) { list in
+                       Button(list.name) {
+                           openWindow(id: "shopping-list-window", value: list.id)
+                       }
+                   }
                }
-               Button("Set Date…") {
-                   NotificationCenter.default.post(name: .setSelectedRecipesLastMadeDate, object: nil)
-               }
-               Divider()
-               Button("Clear") {
-                   NotificationCenter.default.post(name: .clearSelectedRecipesLastMade, object: nil)
+               .disabled(shoppingListsMenu.shoppingLists.isEmpty)
+           }
+           // Mirrors the recipe context menu, item for item — same titles, same order, same section
+           // heading showing the current value. The menu bar carries it because a contextual menu
+           // shouldn't be the only route to a command; unlike right-clicking a row, this one follows
+           // the whole selection. Disabled (not hidden) without one, per HIG.
+           Menu("Last Prepared Date") {
+               Section(selectionTracker.lastPreparedSummary) {
+                   Button("Set to Today") {
+                       NotificationCenter.default.post(name: .markSelectedRecipesMadeToday, object: nil)
+                   }
+                   Button("Set as Date…") {
+                       NotificationCenter.default.post(name: .setSelectedRecipesLastMadeDate, object: nil)
+                   }
+                   Divider()
+                   Button("Clear") {
+                       NotificationCenter.default.post(name: .clearSelectedRecipesLastMade, object: nil)
+                   }
                }
            }
            .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
@@ -303,6 +349,14 @@ struct Menus: Commands {
            .disabled(focusSearchField == nil || sheetTracker.isAnySheetShown)
        }
         CommandGroup(before: .sidebar) {
+            // Disabled (not hidden) when no recipe is on screen, per HIG. On macOS this opens a
+            // Chef View window; on iPadOS, a full-screen cover — hence the sheet guard.
+            Button("Chef View") {
+                openChefView?()
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .disabled(openChefView == nil || sheetTracker.isAnySheetShown)
+            Divider()
             Menu("Sort By") {
                 Picker("Sort Options", selection: $recipeListSortOrder) {
                     ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
@@ -338,18 +392,7 @@ struct Menus: Commands {
             }
             //Divider()
         }
-       #if os(macOS)
-       CommandGroup(before: .windowList) {
-           Button("Edit Categories") {
-               openWindow(id: "edit-categories-window")
-           }
-           Button("Edit Tags") {
-               openWindow(id: "edit-tags-window")
-           }
-           Button("Edit Courses") {
-               openWindow(id: "edit-courses-window")
-           }
-       }
-       #endif
+       // The classifier editors are single-instance `Window` scenes (SaltyApp.swift), and a Window
+       // scene adds its own item to the Window menu -- hand-rolled copies here would double them up.
   }
 }

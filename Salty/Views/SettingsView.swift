@@ -8,6 +8,7 @@
 import SwiftUI
 import SQLiteData
 import OSLog
+import SaltyCore
 
 struct SettingsView: View {
     @Dependency(\.defaultDatabase) private var database
@@ -134,17 +135,22 @@ struct DatabaseSettingsView: View {
 struct ServerSettingsView: View {
     @AppStorage("serverUse") private var serverUse = false
     @AppStorage("serverUrl") private var serverUrl: String = ""
-    @AppStorage("savePasswordInKeychain") private var savePasswordInKeychain = false
     @AppStorage("autoSyncEnabled") private var autoSyncEnabled = false
     @State private var syncService = SaltySyncService.shared
     @State private var autoSync = AutoSyncCoordinator.shared
     @State private var showingSyncAlert = false
     @State private var syncAlertMessage = ""
     @State private var syncAlertTitle = ""
-    @State private var password: String = ""
-    @State private var hasLoadedPassword = false
+    @State private var showingPasswordPrompt = false
+    @State private var isConnecting = false
+    @State private var connectError: String?
     @State private var showingForceResyncConfirm = false
+    @State private var showingForgetConfirm = false
     @State private var showingSaltyServerHelpAlert = false
+
+    /// Whether the sync controls can do anything: this device is connected, or is one sync away from
+    /// migrating a password saved by an earlier build into a sync token.
+    private var canSync: Bool { syncService.hasCredentials }
     
     var body: some View {
         Form {
@@ -152,12 +158,9 @@ struct ServerSettingsView: View {
                 let serverToggle =
                 Toggle("Enable sync with Salty Server", isOn: $serverUse)
                     .onChange(of: serverUse) { oldValue, newValue in
-                        if newValue && !hasLoadedPassword {
-                            loadPasswordIfEnabled()
-                        } else if !newValue {
-                            // Clear password from memory when sync is disabled
-                            password = ""
-                        }
+                        // Disabling sync doesn't forget the device, so the stored token is deliberately
+                        // left alone; only a stale error message is worth clearing.
+                        if !newValue { connectError = nil }
                     }
                 let helpButton = Button("What's this?", systemImage:  "questionmark.circle") {
                     showingSaltyServerHelpAlert = true
@@ -198,31 +201,46 @@ struct ServerSettingsView: View {
                 }
                 
                 TextField("Username", text: $syncService.serverUsername)
-                    .disabled(!serverUse)
-                
-                SecureField("Password", text: $password)
-                    .disabled(!serverUse)
-                    .onChange(of: password) { oldValue, newValue in
-                        // Only save to Keychain if sync is enabled and user wants to save it
-                        if serverUse && savePasswordInKeychain {
-                            syncService.serverPassword = newValue
+                    .disabled(!serverUse || canSync)
+#if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+#endif
+
+                // One action, in the row the password field used to occupy. Which one it is depends
+                // on whether this device is connected, so there is never a dead control here.
+                if canSync {
+                    Button("Forget This Device", role: .destructive) {
+                        showingForgetConfirm = true
+                    }
+#if os(macOS)
+                    .buttonStyle(.link)
+#else
+                    .buttonStyle(.borderless)
+#endif
+                    .disabled(syncService.isSyncing)
+                } else {
+                    HStack {
+                        Button("Connect This Device") { showingPasswordPrompt = true }
+#if os(iOS)
+                            .buttonStyle(.borderless)
+#endif
+                            .disabled(!serverUse || serverUrl.isEmpty
+                                      || syncService.serverUsername.isEmpty || isConnecting)
+                        if isConnecting {
+                            ProgressView()
+                                .controlSize(.small)
                         }
-                    }                
-                if serverUse {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Save password securely in Keychain", isOn: $savePasswordInKeychain)
-                            .onChange(of: savePasswordInKeychain) { oldValue, newValue in
-                                if newValue && !password.isEmpty {
-                                    // Save current password to Keychain
-                                    syncService.serverPassword = password
-                                } else if !newValue {
-                                    // Remove from Keychain (but keep in memory for current session)
-                                    syncService.serverPassword = ""
-                                }
-                            }
-                        Text("If not saved, you will need to enter your password on every sync.")
+                    }
+                }
+
+                if let connectError {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(connectError)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -235,7 +253,7 @@ struct ServerSettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Sync automatically", isOn: $autoSyncEnabled)
                         .disabled(!serverUse)
-                    Text("Syncs in the background after you make changes, on launch, and when returning to the app. Requires saving your password in the Keychain. Occasional failures are silent; persistent ones show a dismissable banner.")
+                    Text("Syncs in the background after you make changes, on launch, and when returning to the app. Occasional failures are silent; persistent ones show a dismissable banner.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -244,18 +262,7 @@ struct ServerSettingsView: View {
 
                 HStack {
                     Button {
-                        Task {
-                            // Always use the current UI credentials for sync (token for background tasks only -- not yet implemented)
-                            // Clear any existing token to force re-authentication with current UI values
-                            syncService.logout()
-                            // Set password in sync service (will be used for authentication)
-                            syncService.serverPassword = password
-                            await performSync()
-                            // Clear password from sync service if not saving to Keychain
-                            if !savePasswordInKeychain {
-                                syncService.serverPassword = ""
-                            }
-                        }
+                        Task { await performSync() }
                     } label: {
                         HStack {
                             if syncService.isSyncing {
@@ -273,7 +280,7 @@ struct ServerSettingsView: View {
                     #if os(iOS)
                     .buttonStyle(.borderless)
                     #endif
-                    .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || password.isEmpty || syncService.serverUsername.isEmpty)
+                    .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || !canSync)
 
                     // Only offered for a regular sync -- a force re-sync empties one side before refilling
                     // it, so there's no safe point to stop it partway.
@@ -289,14 +296,6 @@ struct ServerSettingsView: View {
                     }
                 }
 
-                Button {
-                    syncService.logout()
-                    syncAlertTitle = "Token Cleared"
-                    syncAlertMessage = "Login token cleared. Next sync will re-authenticate with the current credentials."
-                    showingSyncAlert = true
-                } label: {
-                        Text("Clear Saved Token")
-                }
                 #if os(macOS)
                 .buttonStyle(.link)
                 #endif
@@ -312,7 +311,7 @@ struct ServerSettingsView: View {
                 .buttonStyle(.link)
                 #endif
                 .controlSize(.small)
-                .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || password.isEmpty || syncService.serverUsername.isEmpty)
+                .disabled(!serverUse || serverUrl.isEmpty || syncService.isSyncing || !canSync)
 
                 if syncService.isSyncing {
                     VStack(alignment: .leading, spacing: 4) {
@@ -379,33 +378,26 @@ struct ServerSettingsView: View {
         }
         .confirmationDialog("Force Full Re-Sync?", isPresented: $showingForceResyncConfirm, titleVisibility: .visible) {
             Button("Delete Local, Pull from Server", role: .destructive) {
-                Task {
-                    syncService.logout()
-                    syncService.serverPassword = password
-                    await performForceResync()
-                    if !savePasswordInKeychain {
-                        syncService.serverPassword = ""
-                    }
-                }
+                Task { await performForceResync() }
             }
             Button("Delete Server, Push from Local", role: .destructive) {
-                Task {
-                    syncService.logout()
-                    syncService.serverPassword = password
-                    await performForcePush()
-                    if !savePasswordInKeychain {
-                        syncService.serverPassword = ""
-                    }
-                }
+                Task { await performForcePush() }
             }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("A full re-sync will delete all content from either the local device or the server and force a re-sync from the other direction. We suggest making a database backup before using this option. Please select a force-sync method.")
         }
-        .onAppear {
-            if serverUse && !hasLoadedPassword {
-                loadPasswordIfEnabled()
+        .confirmationDialog("Forget This Device?", isPresented: $showingForgetConfirm, titleVisibility: .visible) {
+            Button("Forget", role: .destructive) {
+                Task { await forgetDevice() }
             }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This device will stop syncing until you connect it again. Your recipes stay on this device and on the server.")
+        }
+        .syncPasswordPrompt(isPresented: $showingPasswordPrompt,
+                            username: syncService.serverUsername) { password in
+            connectDevice(password: password)
         }
         .alert("What is Salty Server?", isPresented: $showingSaltyServerHelpAlert) {
             Button("OK", role: .cancel) {}
@@ -414,18 +406,42 @@ struct ServerSettingsView: View {
         }
     }
     
-    private func loadPasswordIfEnabled() {
-        // Only load from Keychain if sync is enabled and user wants to save password
-        if serverUse && savePasswordInKeychain {
-            password = syncService.serverPassword
-            hasLoadedPassword = true
-        } else {
-            // Don't load from Keychain - user will enter password manually
-            password = ""
-            hasLoadedPassword = true
+    /// Forgets this device, and says so only when the server couldn't be told.
+    ///
+    /// Success is silent: the row turns back into "Connect This Device", which is the confirmation.
+    /// A failed revoke is worth a word, though, because the user is the only one who can finish the
+    /// job -- and only they know whether this device is merely being reset or has gone missing.
+    private func forgetDevice() async {
+        let outcome = await syncService.signOut()
+        connectError = nil
+        if outcome == .localOnly {
+            syncAlertTitle = "Forgotten on This Device"
+            syncAlertMessage = "The server could not be reached to revoke your device's authorization, but local credentials have been deleted. You may wish to also manually remove this device from your active devices on your Salty Server instance if still active."
+            showingSyncAlert = true
         }
     }
-    
+
+    /// Trades the password from the prompt for this device's sync token.
+    ///
+    /// The password arrives as a parameter and is never stored on this view, so it exists only for the
+    /// duration of this call.
+    private func connectDevice(password: String) {
+        isConnecting = true
+        connectError = nil
+        Task {
+            do {
+                try await syncService.enroll(username: syncService.serverUsername, password: password)
+                isConnecting = false
+                syncAlertTitle = "Device Connected"
+                syncAlertMessage = "This device is connected and ready to sync."
+                showingSyncAlert = true
+            } catch {
+                connectError = friendlySyncMessage(error)
+                isConnecting = false
+            }
+        }
+    }
+
     private func performSync() async {
         do {
             // Settings is the deliberate, watch-it-happen sync, so it bypasses the recently-synced guard.

@@ -9,6 +9,7 @@
 
 import Testing
 @testable import Salty
+import SaltyCore
 
 struct ShoppingListFreeformConverterTests {
 

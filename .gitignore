@@ -48,6 +48,12 @@ playground.xcworkspace
 
 .build/
 
+# Local packages (Packages/SaltyCore) are consumed by Salty.xcodeproj, so the authoritative dependency
+# pin is the workspace's Package.resolved, which IS tracked. A package-local Package.resolved only gets
+# written when someone runs `swift build`/`swift test` inside the package directory, and would be a
+# second, silently-diverging set of pins.
+Packages/*/Package.resolved
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
@@ -94,3 +100,7 @@ OLDVIEWS
 AGENTS.md
 CLAUDE.md
 FEATURE_PLANS.md
+
+# Machine-local path to the shared conformance corpus (salty-contract/corpus).
+# Read by SaltyTests/ContractCorpus.swift; see salty-contract/runners/README.md.
+.salty-contract-path

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SQLiteData
+import SaltyCore
 
 struct ZoomableImageView: View {
     let image: Image

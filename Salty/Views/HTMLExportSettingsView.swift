@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct HTMLExportSettingsView: View {
     @Binding var options: HTMLExportOptions

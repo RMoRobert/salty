@@ -19,6 +19,30 @@
 	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<string>$(CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS)</string>
+	<!-- Written out (replacing the generated manifest; see pbxproj note on the removed
+	     INFOPLIST_KEY_UIApplicationSceneManifest_Generation) solely to declare the external-display
+	     scene: when Screen Mirroring or HDMI connects, UIKit gives Salty the TV as a separate
+	     non-interactive scene showing Chef View (ExternalDisplaySceneDelegate) instead of a
+	     pillarboxed mirror of the phone. The application role is deliberately NOT declared here, so
+	     SwiftUI keeps managing the app's own windows exactly as before. iOS-only key; ignored on
+	     macOS. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleExternalDisplayNonInteractive</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>External Display</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).ExternalDisplaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>CFBundleExecutable</key>
 	<string></string>
 	<key>CFBundleIdentifier</key>

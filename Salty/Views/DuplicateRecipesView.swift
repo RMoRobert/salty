@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct DuplicateRecipesView: View {
     @State private var viewModel = DuplicateRecipesViewModel()

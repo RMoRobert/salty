@@ -16,6 +16,7 @@
 		D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = D47AF4B62E25D3E30001E4D4 /* SwiftSoup */; };
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
 		D48AB7422F20966800184122 /* UUIDV7 in Frameworks */ = {isa = PBXBuildFile; productRef = D48AB7412F20966800184122 /* UUIDV7 */; };
+		D4C0DE032F0000000000AA03 /* SaltyCore in Frameworks */ = {isa = PBXBuildFile; productRef = D4C0DE022F0000000000AA02 /* SaltyCore */; };
 		D4CF1AFF2FDF1B5000870E9D /* AGENTS.md in Resources */ = {isa = PBXBuildFile; fileRef = D4CF1AFE2FDF1B4700870E9D /* AGENTS.md */; };
 /* End PBXBuildFile section */
 
@@ -81,6 +82,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4C0DE032F0000000000AA03 /* SaltyCore in Frameworks */,
 				D48AB7422F20966800184122 /* UUIDV7 in Frameworks */,
 				D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */,
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
@@ -168,6 +170,7 @@
 			);
 			name = Salty;
 			packageProductDependencies = (
+				D4C0DE022F0000000000AA02 /* SaltyCore */,
 				D45D78962DFF646A0067A88D /* SwiftHtml */,
 				D45D789B2DFF7B8A0067A88D /* Flow */,
 				D45D78A02DFF7E950067A88D /* WebViewKit */,
@@ -260,6 +263,7 @@
 			mainGroup = D47F8FD62DF35EB300A64304;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				D4C0DE012F0000000000AA01 /* XCLocalSwiftPackageReference "Packages/SaltyCore" */,
 				D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */,
 				D45D789A2DFF7B8A0067A88D /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */,
 				D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */,
@@ -473,7 +477,7 @@
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 61;
 				CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS = "";
 				"CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS[sdk=iphoneos*]" = NO;
 				DEAD_CODE_STRIPPING = YES;
@@ -498,8 +502,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used for capturing optional recipe photos or to import recipes via document scan or camera photo";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
@@ -513,7 +515,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.2.0;
+				MARKETING_VERSION = 3.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.inuvro.salty-dev";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -538,7 +540,7 @@
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 61;
 				CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS = "";
 				"CUSTOM_LS_SUPPORTS_OPENING_DOCUMENTS[sdk=iphoneos*]" = NO;
 				DEAD_CODE_STRIPPING = YES;
@@ -563,8 +565,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used for capturing optional recipe photos or to import recipes via document scan or camera photo";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
@@ -578,7 +578,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.2.0;
+				MARKETING_VERSION = 3.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inuvro.salty;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -729,6 +729,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		D4C0DE012F0000000000AA01 /* XCLocalSwiftPackageReference "Packages/SaltyCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/SaltyCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -833,6 +840,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D48AB7402F20966800184122 /* XCRemoteSwiftPackageReference "swift-uuidv7" */;
 			productName = UUIDV7;
+		};
+		D4C0DE022F0000000000AA02 /* SaltyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SaltyCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

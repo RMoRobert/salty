@@ -9,6 +9,7 @@
 
 import SwiftUI
 import CoreGraphics
+import SaltyCore
 #if os(iOS)
 import UIKit
 #elseif os(macOS)

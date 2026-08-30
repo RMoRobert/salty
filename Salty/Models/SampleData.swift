@@ -7,6 +7,7 @@
 
 import Foundation
 import UUIDV7
+import SaltyCore
 
 // MARK: - Shared Sample Data
 
@@ -53,20 +54,20 @@ struct SampleData {
             servings: 36,
             courseId: "main-id",
             directions: [
-                Direction(id: UUID().uuidString, text: "Do the first step. We'll make this text a bit longer so there is a chance that it will need to wrap or show other text rendering nuances. Lorem ipsum dolor sit amet consectetur adipisicing elit. Quo, molestias! Quasi, voluptatem. Now, let's move on to the next step -- but not before adding a bit more here just in case. Wow, what a long step!"),
-                Direction(id: UUID().uuidString, text: "Now, do the second step."),
+                Direction(id: UUIDV7().uuidString, text: "Do the first step. We'll make this text a bit longer so there is a chance that it will need to wrap or show other text rendering nuances. Lorem ipsum dolor sit amet consectetur adipisicing elit. Quo, molestias! Quasi, voluptatem. Now, let's move on to the next step -- but not before adding a bit more here just in case. Wow, what a long step!"),
+                Direction(id: UUIDV7().uuidString, text: "Now, do the second step."),
             ],
             ingredients: [
-                Ingredient(id: UUID().uuidString, isMain: true, text: "1 cup flour"),
-                Ingredient(id: UUID().uuidString, text: "1/2 cup water"),
-                Ingredient(id: UUID().uuidString, text: "salt, to taste")
+                Ingredient(id: UUIDV7().uuidString, isMain: true, text: "1 cup flour"),
+                Ingredient(id: UUIDV7().uuidString, text: "1/2 cup water"),
+                Ingredient(id: UUIDV7().uuidString, text: "salt, to taste")
             ],
             notes: [
-                Note(id: UUID().uuidString, title: "Note 1", content: "This is the text of the note")
+                Note(id: UUIDV7().uuidString, title: "Note 1", content: "This is the text of the note")
             ],
             preparationTimes: [
-                PreparationTime(id: UUID().uuidString, type: "Preparation", timeString: "25 Minutes"),
-                PreparationTime(id: UUID().uuidString, type: "Total Time", timeString: "1 Hour, 30 Minutes")
+                PreparationTime(id: UUIDV7().uuidString, type: "Preparation", timeString: "25 Minutes"),
+                PreparationTime(id: UUIDV7().uuidString, type: "Total Time", timeString: "1 Hour, 30 Minutes")
             ],
             nutrition: NutritionInformation(
                 servingSize: "1 serving",
@@ -108,32 +109,32 @@ struct SampleData {
             yield: "8-10 servings",
             courseId: "dessert-id",
             directions: [
-                Direction(id: UUID().uuidString, text: "First, prepare all your ingredients. This step is crucial for success."),
-                Direction(id: UUID().uuidString, text: "Next, combine the dry ingredients in a large bowl."),
-                Direction(id: UUID().uuidString, isHeading: true, text: "Next Steps"),
-                Direction(id: UUID().uuidString, text: "In a separate bowl, whisk together the wet ingredients until well combined."),
-                Direction(id: UUID().uuidString, text: "Gradually add the wet ingredients to the dry ingredients, stirring gently."),
-                Direction(id: UUID().uuidString, text: "Pour the batter into a prepared pan and bake until done.")
+                Direction(id: UUIDV7().uuidString, text: "First, prepare all your ingredients. This step is crucial for success."),
+                Direction(id: UUIDV7().uuidString, text: "Next, combine the dry ingredients in a large bowl."),
+                Direction(id: UUIDV7().uuidString, isHeading: true, text: "Next Steps"),
+                Direction(id: UUIDV7().uuidString, text: "In a separate bowl, whisk together the wet ingredients until well combined."),
+                Direction(id: UUIDV7().uuidString, text: "Gradually add the wet ingredients to the dry ingredients, stirring gently."),
+                Direction(id: UUIDV7().uuidString, text: "Pour the batter into a prepared pan and bake until done.")
             ],
             ingredients: [
-                Ingredient(id: UUID().uuidString, isMain: true, text: "2 cups all-purpose flour"),
-                Ingredient(id: UUID().uuidString, isMain: true, text: "1 cup granulated sugar"),
-                Ingredient(id: UUID().uuidString, isMain: true, text: "1/2 cup unsalted butter, melted"),
-                Ingredient(id: UUID().uuidString, isHeading: true, isMain: false, text: "For the frosting:"),
-                Ingredient(id: UUID().uuidString, text: "1/2 cup powdered sugar"),
-                Ingredient(id: UUID().uuidString, text: "2 tablespoons milk"),
-                Ingredient(id: UUID().uuidString, text: "1 teaspoon vanilla extract")
+                Ingredient(id: UUIDV7().uuidString, isMain: true, text: "2 cups all-purpose flour"),
+                Ingredient(id: UUIDV7().uuidString, isMain: true, text: "1 cup granulated sugar"),
+                Ingredient(id: UUIDV7().uuidString, isMain: true, text: "1/2 cup unsalted butter, melted"),
+                Ingredient(id: UUIDV7().uuidString, isHeading: true, isMain: false, text: "For the frosting:"),
+                Ingredient(id: UUIDV7().uuidString, text: "1/2 cup powdered sugar"),
+                Ingredient(id: UUIDV7().uuidString, text: "2 tablespoons milk"),
+                Ingredient(id: UUIDV7().uuidString, text: "1 teaspoon vanilla extract")
             ],
             notes: [
-                Note(id: UUID().uuidString, title: "Storage Tips", content: "Store in an airtight container for up to 3 days."),
-                Note(id: UUID().uuidString, title: "Substitutions", content: "You can substitute whole wheat flour for up to half of the all-purpose flour."),
-                Note(id: UUID().uuidString, title: "", content: "This is a note without a title to test how the UI handles missing titles.")
+                Note(id: UUIDV7().uuidString, title: "Storage Tips", content: "Store in an airtight container for up to 3 days."),
+                Note(id: UUIDV7().uuidString, title: "Substitutions", content: "You can substitute whole wheat flour for up to half of the all-purpose flour."),
+                Note(id: UUIDV7().uuidString, title: "", content: "This is a note without a title to test how the UI handles missing titles.")
             ],
-            variations: [Variation(id: UUID().uuidString, variationName: "Variation 1", text: "Do the other thing instead of this one thing. Then, it can be this other thing. Here is some more text just in case.")],
+            variations: [Variation(id: UUIDV7().uuidString, variationName: "Variation 1", text: "Do the other thing instead of this one thing. Then, it can be this other thing. Here is some more text just in case.")],
             preparationTimes: [
-                PreparationTime(id: UUID().uuidString, type: "Prep", timeString: "15 minutes"),
-                PreparationTime(id: UUID().uuidString, type: "Cook", timeString: "30 minutes"),
-                PreparationTime(id: UUID().uuidString, type: "Total", timeString: "45 minutes")
+                PreparationTime(id: UUIDV7().uuidString, type: "Prep", timeString: "15 minutes"),
+                PreparationTime(id: UUIDV7().uuidString, type: "Cook", timeString: "30 minutes"),
+                PreparationTime(id: UUIDV7().uuidString, type: "Total", timeString: "45 minutes")
             ]
         )
     ]

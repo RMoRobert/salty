@@ -5,6 +5,8 @@
 //  Created by Assistant on 1/27/25.
 //
 
+import SaltyCore
+import UUIDV7
 #if os(macOS)
 
 import SwiftUI
@@ -196,7 +198,7 @@ struct NotesEditView: View {
     
     private func addNoteAfter(_ index: Int) {
         let newNote = Note(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             title: "",
             content: ""
         )
@@ -234,7 +236,7 @@ struct NotesEditView: View {
     
     private func addNewNote() {
         let newNote = Note(
-            id: UUID().uuidString,
+            id: UUIDV7().uuidString,
             title: "",
             content: ""
         )

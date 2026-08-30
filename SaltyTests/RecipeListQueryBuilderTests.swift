@@ -12,6 +12,7 @@ import Testing
 import Foundation
 import SQLiteData
 @testable import Salty
+import SaltyCore
 
 struct RecipeListQueryBuilderTests {
 
@@ -132,6 +133,26 @@ struct RecipeListQueryBuilderTests {
         #expect(s.contains("$.text"))
         // One value field → exactly one LIKE.
         #expect(s.components(separatedBy: " LIKE ").count - 1 == 1)
+    }
+
+    @Test func mainIngredientsSearchFiltersOnTheIsMainFlag() {
+        // The narrow sibling of `.ingredients`: same json_each walk, but only over the lines flagged
+        // main, so a garnish or a teaspoon of stock can't match.
+        let s = sql(pattern: "%x%", options: [.mainIngredients])
+        #expect(s.contains("json_each"))
+        #expect(s.contains("$.isMain"))
+        #expect(s.contains("$.text"))
+        #expect(s.components(separatedBy: " LIKE ").count - 1 == 1)
+
+        // The broad option stays broad -- it must not pick up the flag test.
+        #expect(!sql(pattern: "%x%", options: [.ingredients]).contains("$.isMain"))
+    }
+
+    @Test func ingredientsAndMainIngredientsAreIndependentOptions() {
+        // Both selected = two OR'd conditions over the same column, not one collapsed condition.
+        let s = sql(pattern: "%x%", options: [.ingredients, .mainIngredients])
+        #expect(s.components(separatedBy: " LIKE ").count - 1 == 2)
+        #expect(s.contains(" OR "))
     }
 
     @Test func emptyOptionsDefaultToName() {

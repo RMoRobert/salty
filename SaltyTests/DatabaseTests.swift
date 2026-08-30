@@ -25,6 +25,7 @@ import Foundation
 import GRDB
 import SQLiteData
 @testable import Salty
+import SaltyCore
 
 /// Builds a fresh, migrated, isolated database for a single test.
 private func makeTestDatabase() throws -> any DatabaseWriter {
@@ -266,8 +267,8 @@ struct DatabaseIntegrationTests {
 
         @Test func deletingCourseSetsRecipeCourseIdToNull() async throws {
             // recipe.courseId is a `references("course", onDelete: .setNull)` FK, so deleting a course must
-            // clear courseId on its recipes (not delete them). LibraryCoursesEditViewModel relies on this;
-            // it additionally bumps lastModifiedDate so the change syncs, which is app logic, not tested here.
+            // clear courseId on its recipes (not delete them). LibraryClassifierEditor.delete relies on this;
+            // it additionally bumps lastModifiedDate so the change syncs (see LibraryClassifierEditorTests).
             let db = try makeTestDatabase()
 
             try await db.write { db in
@@ -526,6 +527,39 @@ struct DatabaseIntegrationTests {
             #expect(try await search([.notes], "%title%") == [])
             #expect(try await search([.variations], "%variationName%") == [])
             #expect(try await search([.notes, .variations], "%id%") == [])
+        }
+
+        @Test func mainIngredientsSearchMatchesOnlyFlaggedLines() async throws {
+            let db = try makeTestDatabase()
+            try await db.write { db in
+                // r1 has chicken as a main ingredient; r2 only as a background one; r3 predates the
+                // flag entirely (no isMain key at all, as older writers left it out).
+                try db.execute(sql: "INSERT INTO recipe (id, name, ingredients) VALUES ('r1', 'A', ?)",
+                               arguments: [#"[{"id":"i1","isHeading":false,"isMain":true,"text":"2 lb chicken thighs"}]"#])
+                try db.execute(sql: "INSERT INTO recipe (id, name, ingredients) VALUES ('r2', 'B', ?)",
+                               arguments: [#"[{"id":"i2","isHeading":false,"isMain":false,"text":"1 cup chicken stock"}]"#])
+                try db.execute(sql: "INSERT INTO recipe (id, name, ingredients) VALUES ('r3', 'C', ?)",
+                               arguments: [#"[{"id":"i3","isHeading":false,"text":"chicken skin, for garnish"}]"#])
+            }
+
+            func search(_ opts: Set<RecipeListSearchOptions>, _ pattern: String) async throws -> [String] {
+                try await runIDs(
+                    RecipeListQueryBuilder.fragment(
+                        scope: .all, searchPattern: pattern, options: opts,
+                        includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
+                    ),
+                    db
+                )
+            }
+
+            // Main-only sees the flagged line and nothing else -- including the row with no flag.
+            #expect(try await search([.mainIngredients], "%chicken%") == ["r1"])
+            // The broad option still sees all three.
+            #expect(try await search([.ingredients], "%chicken%") == ["r1", "r2", "r3"])
+            // OR'd together they behave like the broad option.
+            #expect(try await search([.ingredients, .mainIngredients], "%chicken%") == ["r1", "r2", "r3"])
+            // Headings can never match: nothing flags them main, and the editors clear the flag anyway.
+            #expect(try await search([.mainIngredients], "%isMain%") == [])
         }
 
         @Test func notesSearchHandlesNullAndEmptyColumns() async throws {
@@ -873,7 +907,7 @@ struct DatabaseIntegrationTests {
 
     // MARK: - Resolving library items by name (the import path)
 
-    /// `LibraryItemResolver` is what keeps an import from creating the duplicates the Consolidate
+    /// `LibraryClassifierResolver` is what keeps an import from creating the duplicates the Consolidate
     /// command would then have to clean up: it matches names the way the editors do rather than
     /// with the exact, case-sensitive comparison the importers used to make inline.
     @Suite struct LibraryItemResolution {
@@ -886,9 +920,9 @@ struct DatabaseIntegrationTests {
 
             let resolved = try await db.write { database in
                 try [
-                    LibraryItemResolver.resolveId(kind: .category, name: "zzz slow cooker", in: database),
-                    LibraryItemResolver.resolveId(kind: .category, name: "  Zzz Slow Cooker  ", in: database),
-                    LibraryItemResolver.resolveId(kind: .category, name: "Zzz  Slow  Cooker", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .category, name: "zzz slow cooker", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .category, name: "  Zzz Slow Cooker  ", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .category, name: "Zzz  Slow  Cooker", in: database),
                 ]
             }
 
@@ -902,8 +936,8 @@ struct DatabaseIntegrationTests {
         @Test func createsOneRowForANewNameAndReusesItAfterwards() async throws {
             let db = try makeTestDatabase()
 
-            let first = try await db.write { try LibraryItemResolver.resolveId(kind: .tag, name: " Weeknight ", in: $0) }
-            let second = try await db.write { try LibraryItemResolver.resolveId(kind: .tag, name: "WEEKNIGHT", in: $0) }
+            let first = try await db.write { try LibraryClassifierResolver.resolveId(kind: .tag, name: " Weeknight ", in: $0) }
+            let second = try await db.write { try LibraryClassifierResolver.resolveId(kind: .tag, name: "WEEKNIGHT", in: $0) }
 
             #expect(first != nil)
             #expect(first == second)
@@ -920,8 +954,8 @@ struct DatabaseIntegrationTests {
 
             let resolved = try await db.write { database in
                 try [
-                    LibraryItemResolver.resolveId(kind: .course, name: "", in: database),
-                    LibraryItemResolver.resolveId(kind: .course, name: "   \n", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .course, name: "", in: database),
+                    LibraryClassifierResolver.resolveId(kind: .course, name: "   \n", in: database),
                 ]
             }
 
@@ -936,7 +970,7 @@ struct DatabaseIntegrationTests {
             let db = try makeTestDatabase()
             try await db.write { database in
                 for name in ["Zzz Grill", "zzz grill", " ZZZ  GRILL "] {
-                    _ = try LibraryItemResolver.resolveId(kind: .category, name: name, in: database)
+                    _ = try LibraryClassifierResolver.resolveId(kind: .category, name: name, in: database)
                 }
             }
 

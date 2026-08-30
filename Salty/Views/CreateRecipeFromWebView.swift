@@ -6,11 +6,15 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 struct CreateRecipeFromWebView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = CreateRecipeFromWebViewModel()
     @State private var webView: WebViewCoordinator?
+    /// Window content width, fed to the browser pane so the address field's toolbar item can size
+    /// itself to the space the row actually has. macOS only; iOS never shows that field.
+    @State private var windowContentWidth: CGFloat = 0
     
     var body: some View {
         NavigationStack {
@@ -18,12 +22,17 @@ struct CreateRecipeFromWebView: View {
             // macOS: Use HSplitView with browser and editor side by side
             HSplitView {
                 // Left side - Web Browser
-                RecipeWebBrowserView(viewModel: viewModel, webView: $webView, onSave: { dismiss() })
+                RecipeWebBrowserView(viewModel: viewModel, webView: $webView, windowWidth: windowContentWidth, onSave: { dismiss() })
                     .frame(minWidth: 400, idealWidth: 600)
                 
                 // Right side - Recipe Editor
                 RecipeWebImportEditView(viewModel: viewModel)
                     .frame(minWidth: 400, idealWidth: 500)
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                windowContentWidth = width
             }
             #else
             // iOS/iPadOS: Use simplified layout with browser and direct editor
@@ -56,7 +65,15 @@ struct CreateRecipeFromWebView: View {
                 }
             #endif
         }
+        #if os(macOS)
+        // Short title so the unified toolbar's one shared row keeps its width for the browser chrome.
+        .navigationTitle("Web Import")
+        #else
         .navigationTitle("Import Recipe from Web")
+        #endif
+        #if os(macOS)
+        .windowContentBelowTitlebar()
+        #endif
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -197,6 +214,9 @@ struct CreateRecipeFromWebView: View {
 struct RecipeWebBrowserView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     @Binding var webView: WebViewCoordinator?
+    /// See `CreateRecipeFromWebView.windowContentWidth`. Defaults to 0 (unknown) for the iOS call
+    /// site, which has no address-field toolbar item to size.
+    var windowWidth: CGFloat = 0
     @State private var urlText: String = ""
     @FocusState private var isAddressFieldFocused: Bool
     @State private var isCompactScreen: Bool = false
@@ -210,8 +230,9 @@ struct RecipeWebBrowserView: View {
     let toolbarNavButtonsPlacement = ToolbarItemPlacement.topBarLeading
     let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.topBarTrailing
     #else
-    let toolbarNavButtonsPlacement = ToolbarItemPlacement.principal
-    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.automatic
+    // Nav buttons use explicit `.navigation` in `toolbarContent` rather than a shared constant, so
+    // there's no macOS counterpart to `toolbarNavButtonsPlacement` here.
+    let toolbarImportAndCloseButtonsPlacement = ToolbarItemPlacement.primaryAction
     #endif
     
     
@@ -237,28 +258,32 @@ struct RecipeWebBrowserView: View {
             isCompactScreen = isCompact
         }
         .toolbar {
-            ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
-                navigationButtons
-            }
-            
-            // URL field placement - show as text field on larger screens, in menu on compact screens
-            if !isCompactScreen {
-                ToolbarItemGroup(placement: .principal) {
-                    urlTextField
-                }
-            }
-            
-            if !isLiquidGlassAvailable() || viewModel.isLoading {
-                ToolbarItemGroup(placement: .status) {
-                    LoadingProgressIndicator(isLoading: viewModel.isLoading)
-                }
-            }
-            
-            // Import/close buttons placement
-            ToolbarItemGroup(placement: toolbarImportAndCloseButtonsPlacement) {
-                importAndCloseButtons
-            }
+            toolbarContent
         }
+        // On the body rather than on the address field so it still runs at compact widths, where the
+        // field is hidden but the "Enter URL..." menu item still seeds its alert from `urlText`.
+        .onAppear {
+            syncURLText(viewModel.currentURL)
+        }
+        .onChange(of: viewModel.currentURL) { _, newURL in
+            syncURLText(newURL)
+        }
+        // Scene-scoped, so File ▸ Open Location (⌘L) reaches the address field in the frontmost
+        // window and nothing else. See AddressFieldFocusAction.
+        .focusedSceneValue(\.addressFieldFocusAction, AddressFieldFocusAction {
+            #if os(macOS)
+            if isCompactScreen {
+                // No address field in the toolbar at this width, so ⌘L falls back to the same
+                // "Enter URL" alert the overflow menu offers, rather than silently doing nothing.
+                tempURLText = urlText
+                showingURLInputAlert = true
+            } else {
+                WebImportAddressField.focusInKeyWindow()
+            }
+            #else
+            isAddressFieldFocused = true
+            #endif
+        })
         .alert("Enter URL", isPresented: $showingURLInputAlert) {
             TextField("Enter URL", text: $tempURLText)
             #if !os(macOS)
@@ -276,6 +301,162 @@ struct RecipeWebBrowserView: View {
     }
     
     // MARK: - Toolbar Items
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        #if os(macOS)
+        // Browser layout, old Safari-inspired arrangement: navigation leading, address field
+        // centered/principal, recipe actions trailing.
+        
+        ToolbarItemGroup(placement: .navigation) {
+            backButton
+            forwardButton
+        }
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .navigation)
+        }
+        ToolbarItemGroup(placement: .navigation) {
+            homeButton
+        }
+        if isCompactScreen {
+            // The address field is hidden at this width, so Reload gets a toolbar slot of its own;
+            // otherwise it lives inside the field, Safari-style.
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .navigation)
+            }
+            ToolbarItem(placement: .navigation) {
+                reloadButton
+            }
+        } else {
+            ToolbarItem(placement: .principal) {
+                addressField
+            }
+        }
+        #else
+        ToolbarItemGroup(placement: toolbarNavButtonsPlacement) {
+            navigationButtons
+        }
+
+        // URL field placement - show as text field on larger screens, in menu on compact screens
+        if !isCompactScreen {
+            ToolbarItemGroup(placement: .principal) {
+                urlTextField
+            }
+        }
+        #endif
+
+        #if os(macOS)
+        // Loading feedback lives inside the address field; the toolbar slot is only needed at
+        // compact widths, where the field is hidden.
+        if isCompactScreen && (!isLiquidGlassAvailable() || viewModel.isLoading) {
+            ToolbarItemGroup(placement: .status) {
+                LoadingProgressIndicator(isLoading: viewModel.isLoading)
+            }
+        }
+        #else
+        if !isLiquidGlassAvailable() || viewModel.isLoading {
+            ToolbarItemGroup(placement: .status) {
+                LoadingProgressIndicator(isLoading: viewModel.isLoading)
+            }
+        }
+        #endif
+
+        // Import/close buttons placement
+        #if os(macOS)
+        if isCompactScreen {
+            ToolbarItemGroup(placement: .primaryAction) {
+                importAndCloseButtons
+            }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                scanPageButton
+            }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                saveRecipeButton
+            }
+        }
+        #else
+        ToolbarItemGroup(placement: toolbarImportAndCloseButtonsPlacement) {
+            importAndCloseButtons
+        }
+        #endif
+    }
+
+    /// Keeps the address bar in step with the page the web view actually has loaded.
+    private func syncURLText(_ url: String) {
+        urlText = (url.isEmpty || url.starts(with: "file://")) ? "about:home" : url
+    }
+
+    #if os(macOS)
+    private var backButton: some View {
+        Button("Back", systemImage: "chevron.left") {
+            webView?.goBack()
+        }
+        .labelStyle(.iconOnly)
+        .disabled(!viewModel.canGoBack)
+        .keyboardShortcut("[", modifiers: .command)
+        .help("Go back to previous page")
+    }
+
+    private var forwardButton: some View {
+        Button("Forward", systemImage: "chevron.right") {
+            webView?.goForward()
+        }
+        .labelStyle(.iconOnly)
+        .disabled(!viewModel.canGoForward)
+        .keyboardShortcut("]", modifiers: .command)
+        .help("Go forward to next page")
+    }
+
+    private var homeButton: some View {
+        Button("Home", systemImage: "house") {
+            goHome()
+        }
+        .labelStyle(.iconOnly)
+        .keyboardShortcut("h", modifiers: [.command, .shift])
+        .help("Go to the start page")
+    }
+
+    /// Only shown at compact widths; otherwise Reload lives inside `WebImportAddressField`.
+    private var reloadButton: some View {
+        Button(viewModel.isLoading ? "Stop" : "Reload",
+               systemImage: viewModel.isLoading ? "xmark" : "arrow.clockwise") {
+            reloadOrStop()
+        }
+        .labelStyle(.iconOnly)
+        .keyboardShortcut("r", modifiers: .command)
+        .help(viewModel.isLoading ? "Stop loading this page" : "Reload this page")
+    }
+
+    private var addressField: some View {
+        WebImportAddressField(
+            text: $urlText,
+            isLoading: viewModel.isLoading,
+            idealWidth: addressFieldIdealWidth,
+            onSubmit: { navigateToURL() },
+            onReloadOrStop: { reloadOrStop() }
+        )
+    }
+
+    /// The row's other occupants -- traffic lights, nav pods, title, Scan, Save, margins -- take a
+    /// roughly fixed ~750pt, so the field gets what's left, floored at a usable 450 and capped so an
+    /// ultrawide window doesn't produce a comical quarter-screen URL. 0 (unknown width) means the
+    /// first layout pass hasn't run; start from the floor.
+    private var addressFieldIdealWidth: CGFloat {
+        windowWidth > 0 ? min(1000, max(450, windowWidth - 750)) : 450
+    }
+
+    private func reloadOrStop() {
+        if viewModel.isLoading {
+            webView?.stopLoading()
+        } else {
+            webView?.reload()
+        }
+    }
+    #else
     private var navigationButtons: some View {
         Group {
             Button(action: { webView?.goBack() }) {
@@ -284,14 +465,14 @@ struct RecipeWebBrowserView: View {
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canGoBack)
-            
+
             Button(action: { webView?.goForward() }) {
                 Label("Forward", systemImage: "chevron.right")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canGoForward)
-            
+
             Button(action: {
                 goHome()
             }) {
@@ -299,7 +480,7 @@ struct RecipeWebBrowserView: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.plain)
-            
+
             Button(action: {
                 if viewModel.isLoading {
                     webView?.stopLoading()
@@ -318,27 +499,22 @@ struct RecipeWebBrowserView: View {
             .buttonStyle(.plain)
         }
     }
+    #endif
     
+    #if !os(macOS)
     private var urlTextField: some View {
         TextField("Enter URL", text: $urlText)
-#if !os(macOS)
             .keyboardType(.URL)
             .autocapitalization(.none)
-#endif
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
             .onSubmit {
                 navigateToURL()
             }
-            .onAppear {
-                urlText = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
-            }
-            .onChange(of: viewModel.currentURL) { _, newURL in
-                urlText = (newURL.isEmpty || newURL.starts(with: "file://")) ? "about:home" : newURL
-            }
             .focused($isAddressFieldFocused)
             .truncationMode(.middle)
     }
+    #endif
     
     private struct LoadingProgressIndicator: View {
         let isLoading: Bool
@@ -346,20 +522,61 @@ struct RecipeWebBrowserView: View {
             ProgressView()
                 .controlSize(.small)
                 .opacity(isLoading ? 1.0 : 0.0)
+                .padding(.trailing, 6)
         }
     }
+
+    /// Scanning needs a real webpage under the browser -- not the landing page, not a file.
+    private var canScanPage: Bool {
+        !viewModel.isLoading && !viewModel.currentURL.isEmpty
+            && !viewModel.currentURL.starts(with: "about:") && !viewModel.currentURL.starts(with: "file://")
+    }
+
+    private var scanPageButton: some View {
+        Button(action: {
+            scanWebpageForRecipeData()
+        }) {
+            Label("Scan Site", systemImage: "text.viewfinder")
+                .labelStyle(.titleAndIcon)
+        }
+        .help("Scan this webpage for recipe data")
+        .disabled(!canScanPage)
+    }
+
+    #if os(macOS)
+    private var saveRecipeButton: some View {
+        Button {
+            if viewModel.hasRecipeData {
+                Task {
+                    // Only close the window if the save actually succeeded;
+                    // otherwise the view model presents an error alert.
+                    if await viewModel.saveRecipe() {
+                        onSave?()
+                    }
+                }
+            } else {
+                viewModel.showingSaveAlert = true
+            }
+        } label: {
+            Label("Save Recipe", systemImage: "square.and.arrow.down")
+                .labelStyle(.titleAndIcon)
+        }
+        .disabled(!viewModel.hasRecipeData)
+    }
+    #endif
 
     private var importAndCloseButtons: some View {
         Group {
             if isCompactScreen {
-                // On compact screens, show Auto Import button and menu with URL/Close options
+                // On compact screens, show Scan button and menu with URL/Close options
                 Button(action: {
                     scanWebpageForRecipeData()
                 }) {
-                    Label("Auto Import", systemImage: "square.and.arrow.down")
+                    Label("Scan Site", systemImage: "text.viewfinder")
                         .labelStyle(.iconOnly)
                 }
-                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                .help("Scan this webpage for recipe data")
+                .disabled(!canScanPage)
                 
                 Menu {
                     Button("Enter URL...") {
@@ -376,30 +593,13 @@ struct RecipeWebBrowserView: View {
                     Image(systemName: isLiquidGlassAvailable() ? "ellipsis" : "ellipsis.circle")
                 }
             } else {
-                // On larger screens, show individual buttons
-                Button(action: {
-                    scanWebpageForRecipeData()
-                }) {
-                    Label("Auto Import", systemImage: "square.and.arrow.down")
-                        .labelStyle(.titleAndIcon)
-                }
-                .disabled(viewModel.isLoading || viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "about:") || viewModel.currentURL.starts(with: "file://"))
+                // On larger screens, show individual buttons. (On macOS, regular widths bypass this
+                // view entirely -- `toolbarContent` places `scanPageButton` and `saveRecipeButton`
+                // in separate toolbar items so they get their own pods.)
+                scanPageButton
                 
 #if os(macOS)
-                Button("Save Recipe") {
-                    if viewModel.hasRecipeData {
-                        Task {
-                            // Only close the window if the save actually succeeded;
-                            // otherwise the view model presents an error alert.
-                            if await viewModel.saveRecipe() {
-                                onSave?()
-                            }
-                        }
-                    } else {
-                        viewModel.showingSaveAlert = true
-                    }
-                }
-                .disabled(!viewModel.hasRecipeData)
+                saveRecipeButton
 #endif
                 
 #if os(iOS)
@@ -465,7 +665,9 @@ struct RecipeWebBrowserView: View {
 
             Task { @MainActor in
                 let importer = SchemaOrgRecipeJSONLDImporter()
-                let scannedRecipes = importer.scanRecipes(from: html)
+                // The address goes in so a page that declares no `url` of its own still records where
+                // the recipe came from. See scanRecipes(from:pageURL:).
+                let scannedRecipes = importer.scanRecipes(from: html, pageURL: self.viewModel.currentURL)
 
                 if let firstScanned = scannedRecipes.first {
                     // Populate the viewModel with the found recipe data
@@ -756,30 +958,6 @@ struct RecipeWebImportEditView: View {
     
 }
 #endif
-
-struct ProminentToolbarButtonModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            content
-                //.buttonStyle(.borderedProminent)
-                //.tint(.accentColor.opacity(0.9))
-        }
-        else {
-            content
-                .buttonStyle(.borderedProminent)
-        }
-    }
-}
-
-struct DisabledButtonStyleModifier: ViewModifier {
-    let isDisabled: Bool
-    
-    func body(content: Content) -> some View {
-        content
-//            .foregroundStyle(isDisabled ? .secondary : .primary)
-//            .opacity(isDisabled ? 0.7 : 1.0)
-    }
-}
 
 #Preview {
     CreateRecipeFromWebView()

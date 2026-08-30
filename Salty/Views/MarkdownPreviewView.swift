@@ -7,6 +7,7 @@
 
 import SwiftUI
 import WebViewKit
+import SaltyCore
 
 /// Read-only rendering of user-authored Markdown, converted to HTML by `MarkdownToHtml` and shown in
 /// a web view; try native if find solution in future, but this is easy for now to get macOS and iOS parity 

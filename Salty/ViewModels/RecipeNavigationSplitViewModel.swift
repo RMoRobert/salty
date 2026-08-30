@@ -10,6 +10,7 @@ import OSLog
 import SQLiteData
 import UniformTypeIdentifiers
 import UUIDV7
+import SaltyCore
 #if os(macOS)
 import WebKit
 import AppKit
@@ -294,7 +295,7 @@ class RecipeNavigationSplitViewModel {
             let imageFilenames = try await database.read { db in
                 try Recipe
                     .select { $0.imageFilename }
-                    .where { idsToDelete.contains($0.id) }
+                    .where { $0.id.in(idsToDelete) }
                     .fetchAll(db)
             }
 
@@ -305,12 +306,15 @@ class RecipeNavigationSplitViewModel {
                 }
             }
 
-            // Now delete the recipes from the database
+            // Now delete the recipes from the database, recording a tombstone for each in the SAME
+            // transaction so a peer sharing this library can tell "deleted here" from "not yet
+            // downloaded". See RecipeTombstoneWriter.
             try await database.write { db in
                 try Recipe
-                    .where { idsToDelete.contains($0.id) }
+                    .where { $0.id.in(idsToDelete) }
                     .delete()
                     .execute(db)
+                try RecipeTombstoneWriter.recordDeletions(Array(idsToDelete), in: db)
             }
 
             selectedRecipeIDs.removeAll()
@@ -336,12 +340,13 @@ class RecipeNavigationSplitViewModel {
                 }
             }
 
-            // Now delete the recipe from the database
+            // Now delete the recipe from the database, with its tombstone. See the bulk path above.
             try await database.write { db in
                 try Recipe
                     .where { $0.id.eq(id) }
                     .delete()
                     .execute(db)
+                try RecipeTombstoneWriter.recordDeletion(id, in: db)
             }
         } catch {
             logger.error("Error deleting recipe \(id): \(error)")
@@ -350,38 +355,33 @@ class RecipeNavigationSplitViewModel {
     
     /// Sets (or clears, with `date: nil`) the "last made on" date for one or more recipes.
     ///
-    /// Deliberately does not touch `lastModifiedDate`: would move recipe to the top of the "Date Modified" sort every time
-    /// this is set when the recipe itself didn't change`lastModifiedPreparedDate` is stamped instead and used for sync.
-    ///
     /// A picked calendar day is stored at local noon; "Today" sets current time. Usually only displayed as date, but noon should
     /// at least cover any reasonable offsets to avoid unexpected date changes with minor time zone shifts.
+    ///
+    /// The write itself lives in `RecipeLastPreparedWriter`, shared with Chef View's "Made It!".
     func setLastMade(_ date: Date?, forRecipeIds ids: [String]) async {
-        guard !ids.isEmpty else { return }
-        let stamp = Date()
         do {
-            // Raw SQL so ONLY these two columns change (a record-level update would rewrite every column,
-            // and the whole point of this write is that lastModifiedDate stays exactly as it was)
-            try await database.write { db in
-                for id in ids {
-                    try db.execute(
-                        sql: """
-                            UPDATE recipe
-                            SET lastPrepared = ?, lastModifiedPreparedDate = ?
-                            WHERE id = ?
-                            """,
-                        arguments: [date, stamp, id]
-                    )
-                }
-            }
+            try await RecipeLastPreparedWriter.setLastMade(date, forRecipeIds: ids, in: database)
         } catch {
             logger.error("Error setting last-made date for \(ids.count) recipe(s): \(error)")
         }
     }
 
-    /// Local noon on the calendar day of [day] — the storage form for a user-picked date. Falls back to
-    /// the raw value if the calendar can't build it (it always can for a real date).
+    /// Local noon on the calendar day of [day] — the storage form for a user-picked date.
     static func localNoon(on day: Date) -> Date {
-        Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
+        RecipeLastPreparedWriter.localNoon(on: day)
+    }
+
+    /// Heading for the "Last Prepared Date" menus: the current value for [ids]. Read from the
+    /// already-loaded list projection rather than the database, so opening a menu costs nothing.
+    func lastPreparedSummary(forRecipeIds ids: [String]) -> String {
+        let wanted = Set(ids)
+        return LastPreparedSummary.text(for: recipes.filter { wanted.contains($0.id) }.map(\.lastPrepared))
+    }
+
+    /// The same heading for whatever is currently selected — what the menu bar's copy shows.
+    var lastPreparedSummaryForSelection: String {
+        lastPreparedSummary(forRecipeIds: Array(selectedRecipeIDs))
     }
 
     func recipeToEdit(recipeId: String?) -> Recipe? {
@@ -1050,19 +1050,12 @@ class RecipeNavigationSplitViewModel {
         let log = logger // Sendable copy for the off-actor closure
         do {
             try await database.write { db in
-                // Check if relationship already exists
-                let existingRelationship = try RecipeCategory
-                    .where { $0.recipeId.eq(recipeId) && $0.categoryId.eq(categoryId) }
-                    .fetchOne(db)
-
-                if existingRelationship == nil {
-                    // Create relationship only if it doesn't already exist
-                    let recipeCategory = RecipeCategory(
-                        id: UUIDV7().uuidString,
-                        recipeId: recipeId,
-                        categoryId: categoryId
-                    )
-                    try RecipeCategory.insert { recipeCategory }.execute(db)
+                let recipeCategory = RecipeCategory(
+                    id: UUIDV7().uuidString,
+                    recipeId: recipeId,
+                    categoryId: categoryId
+                )
+                if try RecipeCategory.insertIfAbsent(recipeCategory, in: db) {
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)
                     log.info("Added recipe \(recipeId) to category \(categoryId)")
                 } else {
@@ -1145,19 +1138,12 @@ class RecipeNavigationSplitViewModel {
         let log = logger // Sendable copy for the off-actor closure
         do {
             try await database.write { db in
-                // Check if relationship already exists
-                let existingRelationship = try RecipeTag
-                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tagId) }
-                    .fetchOne(db)
-
-                if existingRelationship == nil {
-                    // Create relationship only if it doesn't already exist
-                    let recipeTag = RecipeTag(
-                        id: UUIDV7().uuidString,
-                        recipeId: recipeId,
-                        tagId: tagId
-                    )
-                    try RecipeTag.insert { recipeTag }.execute(db)
+                let recipeTag = RecipeTag(
+                    id: UUIDV7().uuidString,
+                    recipeId: recipeId,
+                    tagId: tagId
+                )
+                if try RecipeTag.insertIfAbsent(recipeTag, in: db) {
                     try Recipe.touchLastModified(recipeId: recipeId, in: db)
                     log.info("Added recipe \(recipeId) to tag \(tagId)")
                 } else {

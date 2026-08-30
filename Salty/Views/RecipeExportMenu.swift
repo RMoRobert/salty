@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import SaltyCore
 
 @ViewBuilder
 func recipeExportFormatItems(

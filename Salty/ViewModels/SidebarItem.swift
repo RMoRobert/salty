@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SaltyCore
 
 /// A selectable entry in the navigation sidebar.
 /// Replaces the previous string-encoded scheme (a `"0"` for for "All Recipes" or prefixes like `"_cat"`, etc. `List(selection:)`

@@ -35,13 +35,18 @@ final class StubURLProtocol: URLProtocol {
 @Suite(.serialized)
 struct SaltySyncServiceErrorPathTests {
 
-    /// A service whose every request resolves to `status` via the stub protocol.
+    /// A service whose every request resolves to `status` via the stub protocol, and whose credentials are
+    /// in-memory: these tests only care about status-code handling, and the real keychain would make them
+    /// depend on the developer's saved credentials.
     private func makeService(status: Int, body: Data = Data()) -> SaltySyncService {
         UserDefaults.standard.set("https://stub.local", forKey: "serverUrl")
         StubURLProtocol.stub = .init(status: status, body: body)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubURLProtocol.self]
-        return SaltySyncService(session: URLSession(configuration: config))
+        return SaltySyncService(
+            session: URLSession(configuration: config),
+            credentials: InMemorySyncCredentialStore()
+        )
     }
 
     // MARK: - completeSyncOnServer

@@ -8,15 +8,69 @@
 import Foundation
 import SwiftUI
 import Flow
+import SaltyCore
 
 struct RecipeDetailView: View {
     @State private var viewModel: RecipeDetailViewModel
     @Environment(\.openWindow) private var openWindow
-    
-    init(recipe: Recipe, onScaledRecipeSaved: ((String) -> Void)? = nil) {
+    @Environment(ChefViewSessionStore.self) private var chefSessionStore
+    #if !os(macOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// Supplied by the host so this view can place Edit itself. Toolbar content from a host is
+    /// collected *before* its child's, so an item declared here always lands outboard of one the
+    /// host declares -- the only way to keep Edit on the outer edge with Chef View on other side of it is
+    /// for both to be declared here, in that order. Hosts that show `RecipeDetailWebView` instead
+    /// keep declaring their own Edit, since this view isn't in the hierarchy at all then.
+    private let onEdit: (() -> Void)?
+
+    init(recipe: Recipe, onEdit: (() -> Void)? = nil, onScaledRecipeSaved: ((String) -> Void)? = nil) {
+        self.onEdit = onEdit
         self._viewModel = State(initialValue: RecipeDetailViewModel(recipe: recipe, onScaledRecipeSaved: onScaledRecipeSaved))
     }
-    
+
+    /// Whether to break Chef View out of the capsule it would otherwise share with its neighbour.
+    ///
+    /// Always on macOS, where it would fuse with Edit. On iOS only at regular width, i.e.,
+    /// when the host declares the show/hide-list toggle for it to sit beside (at compact width, the
+    /// neighbor is the provided Back button, which it already won't fuse with).
+    private var showsChefViewSpacer: Bool {
+        #if os(macOS)
+        true
+        #else
+        horizontalSizeClass == .regular
+        #endif
+    }
+
+    /// Where Chef View icon is placed, slight platform differences since bars differ on each.
+    ///
+    /// On iOS, place in leading, beside the split view's show/hide-list toggle. macOS has
+    /// no `.topBarLeading`, and `.navigation` puts it at very leading edge of window
+    /// titlebar, where it's not clearly connected to recipe, so put in trailing group instead, but
+    /// on trailing edge of "Edit" so "Edit" is more prominent.
+    private static var chefViewPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .primaryAction
+        #else
+        .topBarLeading
+        #endif
+    }
+
+    /// Chef View is presented from here rather than the split view's root because this view owns the
+    /// live ingredient-scale state Chef View needs (which also means every context that hosts a
+    /// recipe detail -- e.g., split-view column, macOS recipe window -- gets the entry point for free).
+    private func openChefView(recipe: Recipe) {
+        #if os(macOS)
+        openWindow(
+            id: "chef-view-window",
+            value: ChefViewLaunch(recipeId: recipe.id, scalePercent: viewModel.ingredientScalePercent)
+        )
+        #else
+        viewModel.isChefViewPresented = true
+        #endif
+    }
+
     var body: some View {
         Group {
             if let recipe = viewModel.recipe {
@@ -56,6 +110,43 @@ struct RecipeDetailView: View {
                 .navigationTitle(recipe.name)  // do I need this on macOS? Not displayed but doesn't seem to hurt
                 #endif
                 .toolbarTitleDisplayMode(.inline)
+                .toolbar {
+                    // Declare Edit first to get better positioning on macOS (on iOS, have different placements
+                    // do doesn't matter):
+                    if let onEdit {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button("Edit", systemImage: "pencil", action: onEdit)
+                                .keyboardShortcut("e", modifiers: .command)
+                        }
+                    }
+                    // Avoid single capsule with "full detail view" icon
+                    if #available(iOS 26.0, macOS 26.0, *) {
+                        if showsChefViewSpacer {
+                            ToolbarSpacer(.fixed, placement: Self.chefViewPlacement)
+                        }
+                    }
+                    ToolbarItem(placement: Self.chefViewPlacement) {
+                        Button("Chef View", systemImage: "rectangle.stack.badge.play") {
+                            openChefView(recipe: recipe)
+                        }
+                        #if os(macOS)
+                        .help("Cook from this recipe in Chef View")
+                        #endif
+                    }
+                }
+                // Scene-scoped, so the View > Chef View command reaches the recipe in the frontmost
+                // window and nothing else. See ChefViewOpenAction.
+                .focusedSceneValue(\.chefViewOpenAction, ChefViewOpenAction { openChefView(recipe: recipe) })
+                #if !os(macOS)
+                // Full-screen cover on iOS/iPadOS; macOS, opens the window scene above instead.
+                .fullScreenCover(isPresented: $viewModel.isChefViewPresented) {
+                    ChefView(
+                        recipe: recipe,
+                        scaleFactor: viewModel.ingredientScaleFactor,
+                        sessionStore: chefSessionStore
+                    )
+                }
+                #endif
             } else {
                 ProgressView("Loading recipe...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -286,23 +377,81 @@ private struct IngredientsSection: View {
                     .padding(.top, 8)
                     .font(.caption)
             }
-            Button("Scale…", systemImage: "slider.horizontal.3") {
-                viewModel.isIngredientScalePopoverShowing = true
+            IngredientsSectionActions(viewModel: viewModel, recipe: recipe)
+                .padding(.bottom, 4)
+                .padding(.top, 16)
+        }
+        .frame(minWidth: 85, maxWidth: 300)
+        .modifier(RecipeSectionBoxModifier())
+    }
+}
+
+/// The ingredients box footer. Side by side when the box has the width for it, stacked when it
+/// doesn't -- the box narrows to 85pt, where two labels on one line would truncate to nothing.
+private struct IngredientsSectionActions: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    let recipe: Recipe
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                IngredientsScaleButton(viewModel: viewModel)
+                IngredientsAddToListButton(viewModel: viewModel, recipe: recipe)
             }
+            VStack(alignment: .leading, spacing: 8) {
+                IngredientsScaleButton(viewModel: viewModel)
+                IngredientsAddToListButton(viewModel: viewModel, recipe: recipe)
+            }
+        }
+    }
+}
+
+private struct IngredientsScaleButton: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+
+    var body: some View {
+        Button("Scale…", systemImage: "slider.horizontal.3") {
+            viewModel.isIngredientScalePopoverShowing = true
+        }
+        .modifier(IngredientsActionButtonModifier())
+        .popover(isPresented: $viewModel.isIngredientScalePopoverShowing) {
+            IngredientScalePopoverContent(viewModel: viewModel)
+        }
+    }
+}
+
+private struct IngredientsAddToListButton: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    let recipe: Recipe
+    @State private var isAddToShoppingListShowing = false
+
+    var body: some View {
+        Button("Add to List…", systemImage: "cart.badge.plus") {
+            isAddToShoppingListShowing = true
+        }
+        .modifier(IngredientsActionButtonModifier())
+        .sheet(isPresented: $isAddToShoppingListShowing) {
+            AddToShoppingListView(
+                recipe: recipe,
+                // Whatever the ingredients list is currently showing is what gets added, so a
+                // recipe being read at half scale adds half-scale amounts.
+                scaleFactor: viewModel.ingredientScaleFactor,
+                scaleLabel: viewModel.isIngredientScaleActive ? viewModel.ingredientScalePercentLabel : nil
+            )
+        }
+    }
+}
+
+/// Shared look for the small actions under the ingredients list.
+private struct IngredientsActionButtonModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
             #if os(macOS)
             .buttonStyle(.link)
             #else
             .buttonStyle(.plain)
             #endif
             .controlSize(.small)
-            .padding(.bottom, 4)
-            .padding(.top, 16)
-            .popover(isPresented: $viewModel.isIngredientScalePopoverShowing) {
-                IngredientScalePopoverContent(viewModel: viewModel)
-            }
-        }
-        .frame(minWidth: 85, maxWidth: 300)
-        .modifier(RecipeSectionBoxModifier())
     }
 }
 
@@ -600,6 +749,7 @@ private struct RecipeSectionBoxModifier: ViewModifier {
 
 #Preview {
     RecipeDetailView(recipe: SampleData.sampleRecipes[0])
+        .environment(ChefViewSessionStore())
 }
 
 
