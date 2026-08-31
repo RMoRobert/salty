@@ -9,8 +9,9 @@ import Foundation
 
 /// Where the sync service reads and writes the secrets it needs.
 ///
-/// Two of the three are kept: the long-lived per-device sync token the server issues at enrolment, and
-/// the short-lived JWT minted from it. The password is only ever *read*, and only by the one-time
+/// One secret is kept: the long-lived per-device sync token the server issues at enrolment. (There used
+/// to be a second, a short-lived JWT minted from it, until the server dropped its JWT tier and the token
+/// became what every request carries.) The password is only ever *read*, and only by the one-time
 /// migration that spends a pre-enrolment build's saved password to enrol this device before deleting it
 /// -- `setPassword` exists so that deletion has a way to happen, not so a password can be stored.
 ///
@@ -23,8 +24,6 @@ protocol SyncCredentialStore: Sendable {
     func password() -> String
     /// In practice only ever called with `""`, to erase a migrated legacy password.
     func setPassword(_ password: String)
-    func jwtToken() -> String?
-    func setJwtToken(_ token: String?)
     func deviceToken() -> String?
     func setDeviceToken(_ token: String?)
 }
@@ -32,8 +31,6 @@ protocol SyncCredentialStore: Sendable {
 extension KeychainHelper: SyncCredentialStore {
     func password() -> String { getPassword() }
     func setPassword(_ password: String) { savePassword(password) }
-    func jwtToken() -> String? { getJwtToken() }
-    func setJwtToken(_ token: String?) { saveJwtToken(token) }
     func deviceToken() -> String? { getDeviceToken() }
     func setDeviceToken(_ token: String?) { saveDeviceToken(token) }
 }

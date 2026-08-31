@@ -30,7 +30,7 @@ class SaltySyncService {
     @ObservationIgnored
     private let session: URLSession
 
-    /// Storage for the server password and JWT. Defaults to the keychain; injectable so tests can run
+    /// Storage for the device sync token. Defaults to the keychain; injectable so tests can run
     /// against an in-memory store instead of the developer's own keychain.
     @ObservationIgnored
     private let credentials: any SyncCredentialStore
@@ -94,18 +94,6 @@ class SaltySyncService {
         }
     }
 
-    /// Cached JWT token (stored securely in Keychain)
-    private var jwtToken: String? {
-        get { credentials.jwtToken() }
-        set { credentials.setJwtToken(newValue) }
-    }
-    
-    /// Token expiration date (stored in UserDefaults - not sensitive)
-    private var tokenExpirationDate: Date? {
-        get { UserDefaults.standard.object(forKey: "serverTokenExpiration") as? Date }
-        set { UserDefaults.standard.set(newValue, forKey: "serverTokenExpiration") }
-    }
-    
     /// Whether this device holds a sync token, and so can sync without asking the user for anything.
     ///
     /// Stored rather than computed from the keychain on demand, for two reasons. It is read from SwiftUI
@@ -133,16 +121,6 @@ class SaltySyncService {
     private func discardSavedPassword() {
         credentials.setPassword("")
         hasUnspentSavedPassword = false
-    }
-    
-    /// Whether the current token is valid (exists and not expired)
-    private var hasValidToken: Bool {
-        guard let token = jwtToken, !token.isEmpty,
-              let expiration = tokenExpirationDate else {
-            return false
-        }
-        // Consider token invalid if it expires within the next minute
-        return expiration > Date().addingTimeInterval(60)
     }
     
     /// Unique device ID for sync tracking (generated once, persisted)
@@ -182,25 +160,27 @@ class SaltySyncService {
     
     // MARK: - Authentication Methods
     
-    /// The server's reply to both `/api/auth/login` and `/api/auth/token`.
+    /// The server's reply to `/api/auth/login` and `/api/auth/token/verify`.
     ///
     /// `deviceToken` is present exactly once, in the login that enrols this device, and only because we
-    /// asked by sending a `deviceId`. Every later exchange omits it.
+    /// asked by sending a `deviceId`. The verify call omits it -- we are already holding it.
+    ///
+    /// `token` and `expiresIn` used to be here, carrying a short-lived JWT that every sync request then
+    /// presented. The server has no JWT tier any more: the device token authenticates the sync routes
+    /// directly and is checked against its row on each request, so revoking a device now takes effect on
+    /// its next call instead of whenever its last JWT happened to expire. Both fields were declared
+    /// non-optional, which is why a server that stopped sending them showed up here as "the app couldn't
+    /// read the response" rather than as anything about authentication.
     private struct AuthResponse: Decodable {
-        let token: String
         let username: String
-        /// Milliseconds. Now ~90 minutes, down from 8 days -- which is precisely why the device token
-        /// exists: re-minting has to be silent, because it now happens constantly.
-        let expiresIn: Int
         let deviceToken: String?
     }
 
     /// Enrols this device: the one and only time the password is needed.
     ///
-    /// Sends the password with this device's `deviceId`, and the server returns a long-lived sync token
-    /// alongside the usual JWT. The password is used for this single request and never written anywhere
-    /// -- not to the keychain, not to a stored property. From here on `mintJwtFromDeviceToken()` keeps
-    /// the app authenticated on its own.
+    /// Sends the password with this device's `deviceId`, and the server returns a long-lived sync token.
+    /// The password is used for this single request and never written anywhere -- not to the keychain,
+    /// not to a stored property. From here on that token is the credential every request carries.
     ///
     /// The `deviceId` deliberately reuses the one the sync protocol already registers under: the server
     /// keys tokens on (user, deviceId), so enrolling under a fresh id would list this device twice on the
@@ -250,9 +230,8 @@ class SaltySyncService {
         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
 
         // A server predating device tokens answers a login unchanged, ignoring the deviceId it doesn't
-        // know about. Accepting that would leave the app with a 90-minute JWT and no way to renew it,
-        // so it's a setup failure with a message that names the actual fix rather than a mystery
-        // re-prompt every 90 minutes.
+        // know about. There is no longer any fallback to fall back TO -- the app keeps no other
+        // credential -- so this is a setup failure with a message naming the actual fix.
         guard let issuedDeviceToken = authResponse.deviceToken, !issuedDeviceToken.isEmpty else {
             logger.error("Server accepted the login but issued no device token")
             throw SyncError.enrolmentUnsupported
@@ -260,7 +239,6 @@ class SaltySyncService {
 
         serverUsername = authResponse.username
         deviceToken = issuedDeviceToken
-        storeJwt(authResponse)
 
         // Nothing else in the app writes this key any more; clearing it here is what makes the upgrade
         // from a password-saving build a one-way trip.
@@ -269,17 +247,21 @@ class SaltySyncService {
         logger.info("Device enrolled for user: \(authResponse.username)")
     }
 
-    /// Trades this device's sync token for a fresh JWT -- the only authentication call the app makes
-    /// after enrolment, and the reason it never needs the password again.
+    /// Confirms this device's sync token is still good before a sync leans on it.
+    ///
+    /// This used to trade the token for a fresh JWT that the rest of the sync then presented. Nothing is
+    /// traded now -- the token authenticates the sync routes itself -- but the round trip is still worth
+    /// making, because it is what separates "the server disowned this device" from "the network is
+    /// down" *before* a sync starts writing.
     ///
     /// A 401 here is meaningful rather than transient: the token was revoked from the server's devices
     /// page, or the account password changed (which signs every device out). Either way the token is
     /// dead, so it's deleted and the caller is told to enrol again.
-    private func mintJwtFromDeviceToken() async throws {
+    private func verifyDeviceToken() async throws {
         guard let token = deviceToken, !token.isEmpty else {
             throw SyncError.enrolmentRequired
         }
-        guard let url = URL(string: "\(serverUrl)/api/auth/token") else {
+        guard let url = URL(string: "\(serverUrl)/api/auth/token/verify") else {
             throw SyncError.authenticationFailed("Invalid server URL")
         }
 
@@ -296,8 +278,6 @@ class SaltySyncService {
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             logger.warning("Device token rejected (HTTP \(httpResponse.statusCode)); clearing it")
             deviceToken = nil
-            jwtToken = nil
-            tokenExpirationDate = nil
             throw SyncError.enrolmentRequired
         }
 
@@ -305,12 +285,15 @@ class SaltySyncService {
             // Anything else -- server down, proxy in the way -- leaves the token alone: it is very
             // probably still good, and discarding it would cost the user a password prompt for what is
             // really a network problem.
-            logger.error("Token exchange failed HTTP \(httpResponse.statusCode)")
+            logger.error("Token check failed HTTP \(httpResponse.statusCode)")
             throw SyncError.authenticationFailed(SyncError.httpMessage(status: httpResponse.statusCode, body: data))
         }
 
-        storeJwt(try JSONDecoder().decode(AuthResponse.self, from: data))
-        logger.info("Minted a fresh JWT from the device token")
+        let verified = try JSONDecoder().decode(AuthResponse.self, from: data)
+        // The server is the authority on which account the token belongs to, so take the name from it:
+        // it is what the Settings screen shows, and it would otherwise drift after a rename.
+        serverUsername = verified.username
+        logger.info("Device token verified for user: \(verified.username)")
     }
 
     /// Spends a password left by a pre-enrolment build to enrol this device, once.
@@ -325,23 +308,18 @@ class SaltySyncService {
         try await enroll(username: serverUsername, password: saved)
     }
 
-    /// Records a freshly minted JWT and when it expires.
-    private func storeJwt(_ response: AuthResponse) {
-        jwtToken = response.token
-        tokenExpirationDate = Date().addingTimeInterval(Double(response.expiresIn) / 1000.0)
-    }
-
-    /// Ensure we have a valid token, minting a new one if necessary.
+    /// Makes sure this device holds a credential the server still accepts, before a sync uses it.
+    ///
+    /// There is no expiry bookkeeping left to do. The device token does not expire, so the old
+    /// "is the JWT still fresh?" check has nothing to check -- what matters instead is whether the token
+    /// is still *accepted*, which only the server knows and which one call establishes.
     ///
     /// Internal rather than private so the auth paths can be tested directly: driving them through a
     /// whole `syncNow()` would need a migrated database and a dozen stubbed routes to assert one
     /// credential decision.
     func ensureAuthenticated() async throws {
-        if hasValidToken { return }
-
         if isEnrolled {
-            logger.info("Token expired or missing, exchanging the device token...")
-            try await mintJwtFromDeviceToken()
+            try await verifyDeviceToken()
             return
         }
 
@@ -359,23 +337,19 @@ class SaltySyncService {
         case localOnly
     }
 
-    /// Forgets this device: revokes its token on the server, then discards it and the JWT here, so the
+    /// Forgets this device: revokes its token on the server, then discards it here, so the
     /// next sync asks for the password again.
     ///
     /// The revoke is attempted first, because it needs the credential this is about to destroy. Local
     /// state is cleared regardless of how it goes: a user who asked to sign out has signed out, and
     /// leaving them connected because a server was unreachable would be the wrong way to fail.
     ///
-    /// There is deliberately no "clear just the JWT" counterpart any more. It used to be a useful
-    /// troubleshooting button when a JWT lasted 8 days and re-minting cost a password prompt; now one
-    /// expires every 90 minutes and is replaced silently, so clearing it by hand does nothing a user
-    /// could observe.
+    /// There is deliberately no "clear just the cached token" counterpart. There is nothing cached to
+    /// clear: the device token is the only credential the app holds, and discarding it *is* signing out.
     @discardableResult
     func signOut() async -> ForgetOutcome {
         let outcome = await revokeDeviceTokenOnServer()
         deviceToken = nil
-        jwtToken = nil
-        tokenExpirationDate = nil
         discardSavedPassword()
         logger.info("Forgot this device (server revoke: \(outcome == .revokedOnServer ? "done" : "unreachable"))")
         return outcome
@@ -418,9 +392,13 @@ class SaltySyncService {
         }
     }
 
-    /// Add authorization header to a request
+    /// Signs a request with this device's sync token.
+    ///
+    /// The same credential that authenticates enrolment-adjacent calls now authenticates every sync
+    /// request, because the server accepts it directly on the sync routes. It reaches nothing else:
+    /// account and device-management routes do not mount the provider that understands it.
     private func addAuthHeader(to request: inout URLRequest) {
-        if let token = jwtToken {
+        if let token = deviceToken, !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }

@@ -20,14 +20,13 @@ import Synchronization
 final class InMemorySyncCredentialStore: SyncCredentialStore {
     private struct Storage {
         var password = ""
-        var jwtToken: String?
         var deviceToken: String?
     }
 
     private let storage: Mutex<Storage>
 
-    init(password: String = "", jwtToken: String? = nil, deviceToken: String? = nil) {
-        storage = Mutex(Storage(password: password, jwtToken: jwtToken, deviceToken: deviceToken))
+    init(password: String = "", deviceToken: String? = nil) {
+        storage = Mutex(Storage(password: password, deviceToken: deviceToken))
     }
 
     func password() -> String {
@@ -36,14 +35,6 @@ final class InMemorySyncCredentialStore: SyncCredentialStore {
 
     func setPassword(_ password: String) {
         storage.withLock { $0.password = password }
-    }
-
-    func jwtToken() -> String? {
-        storage.withLock { $0.jwtToken }
-    }
-
-    func setJwtToken(_ token: String?) {
-        storage.withLock { $0.jwtToken = token }
     }
 
     func deviceToken() -> String? {

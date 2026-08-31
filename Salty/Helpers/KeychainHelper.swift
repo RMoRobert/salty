@@ -161,6 +161,9 @@ final class KeychainHelper: Sendable {
         /// `SaltySyncService` spends it once to enrol this device before deleting it. See
         /// `enrollUsingSavedPasswordIfPresent()`.
         case serverPassword = "salty.server.password"
+        /// Legacy. Held the short-lived JWT the app used to mint from its device token; the server has
+        /// no JWT tier any more, so nothing writes this. The case survives so `clearAuthData` still
+        /// purges anything an older build left behind.
         case jwtToken = "salty.server.jwtToken"
         /// The per-device sync token (`salty_…`) the server issues at enrolment. Long-lived and the
         /// only credential the app keeps: it can sync, and deliberately nothing else -- it cannot
@@ -182,21 +185,6 @@ final class KeychainHelper: Sendable {
         return getString(forKey: Key.serverPassword.rawValue) ?? ""
     }
     
-    /// Save the JWT token
-    @discardableResult
-    func saveJwtToken(_ token: String?) -> Bool {
-        if let token = token, !token.isEmpty {
-            return save(token, forKey: Key.jwtToken.rawValue)
-        } else {
-            return delete(forKey: Key.jwtToken.rawValue)
-        }
-    }
-    
-    /// Get the JWT token
-    func getJwtToken() -> String? {
-        return getString(forKey: Key.jwtToken.rawValue)
-    }
-
     /// Save the device sync token. Passing nil or "" deletes it, which is how a device is un-enrolled.
     @discardableResult
     func saveDeviceToken(_ token: String?) -> Bool {

@@ -102,20 +102,21 @@ struct SaltySyncServiceServerEditTests {
         UserDefaults.standard.set("https://stub.local", forKey: "serverUrl")
         UserDefaults.standard.set(true, forKey: "serverUse")
         UserDefaults.standard.set("tester", forKey: "serverUsername")
-        UserDefaults.standard.set(Date().addingTimeInterval(3600), forKey: "serverTokenExpiration")
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SyncRouteStubURLProtocol.self]
         return SaltySyncService(
             session: URLSession(configuration: config),
-            credentials: InMemorySyncCredentialStore(password: "pw", jwtToken: "test-jwt")
+            credentials: InMemorySyncCredentialStore(password: "pw", deviceToken: "salty_test")
         )
     }
 
-    /// The always-needed routes: device registration (a returning device with a watermark one hour
-    /// ago), sync completion, and empty recipe manifest/delta. Entity list routes ride on the
-    /// unrouted-request default ("[]") unless a test overrides them.
+    /// The always-needed routes: the token check every sync opens with, device registration (a
+    /// returning device with a watermark one hour ago), sync completion, and empty recipe
+    /// manifest/delta. Entity list routes ride on the unrouted-request default ("[]") unless a test
+    /// overrides them.
     private func baseRoutes(lastSync: Date) -> [SyncRouteStubURLProtocol.Route] {
         [
+            .init(method: "POST", path: "/api/auth/token/verify", body: #"{"username":"tester"}"#),
             .init(method: "POST", path: "/api/recipes/sync/device",
                   body: #"{"isFirstSync": false, "lastSyncDate": "\#(SyncWireDate.string(from: lastSync))"}"#),
             .init(method: "POST", path: "/api/recipes/sync/device/", isPrefix: true, body: "{}"),

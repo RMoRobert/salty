@@ -2,8 +2,9 @@
 //  SyncDeviceEnrolmentTests.swift
 //  SaltyTests
 //
-//  The device/token authentication scheme: enrol once with a password, then keep minting short-lived
-//  JWTs from the sync token forever after.
+//  The device/token authentication scheme: enrol once with a password, then carry that sync token on
+//  every request forever after. (It used to be traded for a short-lived JWT; the server has no JWT tier
+//  any more, so the token itself is what authenticates.)
 //
 //  Weighted towards the cases where getting it wrong is expensive and quiet rather than the happy path:
 //  a password that survives enrolment, a token thrown away because the server was merely down, and a
@@ -87,7 +88,7 @@ final class AuthRouteStubURLProtocol: URLProtocol {
 
 /// The UserDefaults keys `SyncDeviceEnrolmentTests.makeService` writes, and restores afterwards.
 private let enrolmentTestManagedDefaultsKeys = [
-    "serverUrl", "syncDeviceId", "serverUsername", "serverTokenExpiration",
+    "serverUrl", "syncDeviceId", "serverUsername",
 ]
 
 /// A class rather than a struct so `deinit` can put UserDefaults back.
@@ -127,19 +128,24 @@ final class SyncDeviceEnrolmentTests {
     }
 
     /// A login reply carrying a freshly issued sync token, shaped as the server sends it.
+    ///
+    /// Deliberately carries no `token`/`expiresIn`: the server stopped sending them when the JWT tier
+    /// went, and both were once declared non-optional here -- which is exactly how that change reached
+    /// users, as "the app couldn't read the response" rather than as anything about authentication.
+    /// Keeping this body minimal is what would have caught it.
     private static func loginBody(deviceToken: String? = "salty_abc123",
-                                  username: String = "cook",
-                                  expiresIn: Int = 5_400_000) -> String {
+                                  username: String = "cook") -> String {
         let tokenField = deviceToken.map { ",\"deviceToken\":\"\($0)\"" } ?? ""
         return """
-        {"token":"jwt-from-password","username":"\(username)","expiresIn":\(expiresIn)\(tokenField)}
+        {"username":"\(username)"\(tokenField)}
         """
     }
 
-    /// A `/api/auth/token` reply: a fresh JWT and, correctly, no device token.
-    private static func mintBody(jwt: String = "jwt-from-device-token") -> String {
+    /// A `/api/auth/token/verify` reply: who the token belongs to, and no credential -- the caller is
+    /// already holding the only one there is.
+    private static func verifyBody(username: String = "cook") -> String {
         """
-        {"token":"\(jwt)","username":"cook","expiresIn":5400000}
+        {"username":"\(username)"}
         """
     }
 
@@ -152,19 +158,16 @@ final class SyncDeviceEnrolmentTests {
         responses: [String: AuthRouteStubURLProtocol.Response],
         username: String = "cook",
         password: String = "",
-        jwtToken: String? = nil,
         deviceToken: String? = nil
     ) -> (SaltySyncService, InMemorySyncCredentialStore) {
         UserDefaults.standard.set("https://stub.local", forKey: "serverUrl")
         UserDefaults.standard.set(Self.deviceId, forKey: "syncDeviceId")
         UserDefaults.standard.set(username, forKey: "serverUsername")
-        UserDefaults.standard.removeObject(forKey: "serverTokenExpiration")
         AuthRouteStubURLProtocol.reset(responses)
 
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AuthRouteStubURLProtocol.self]
-        let store = InMemorySyncCredentialStore(password: password, jwtToken: jwtToken,
-                                                deviceToken: deviceToken)
+        let store = InMemorySyncCredentialStore(password: password, deviceToken: deviceToken)
         let service = SaltySyncService(session: URLSession(configuration: config), credentials: store)
         return (service, store)
     }
@@ -185,7 +188,6 @@ final class SyncDeviceEnrolmentTests {
         #expect(sent.body.contains("\"deviceName\""), "the devices page needs something to label the row")
 
         #expect(store.deviceToken() == "salty_abc123")
-        #expect(store.jwtToken() == "jwt-from-password")
         #expect(service.isEnrolled)
     }
 
@@ -214,8 +216,8 @@ final class SyncDeviceEnrolmentTests {
     }
 
     /// A server predating device tokens accepts the login and ignores the deviceId, so the reply looks
-    /// successful. Accepting it would leave the app holding a 90-minute JWT it can never renew, and the
-    /// user facing a password prompt every 90 minutes with no explanation.
+    /// successful. There is no other credential to fall back on, so accepting it would leave a device
+    /// that looks connected and can never authenticate a single request.
     @Test func aServerThatIssuesNoTokenIsRejectedRatherThanHalfConnected() async {
         let (service, store) = makeService(
             responses: ["/api/auth/login": .init(status: 200, body: Self.loginBody(deviceToken: nil))]
@@ -245,45 +247,47 @@ final class SyncDeviceEnrolmentTests {
         #expect(store.deviceToken() == nil)
     }
 
-    // MARK: - Minting a JWT from the token
+    // MARK: - Checking the token
 
-    /// The call the app makes for the rest of its life: token in, JWT out, no password anywhere.
-    @Test func aStoredTokenMintsAFreshJwtWithoutThePassword() async throws {
+    /// The call the app makes for the rest of its life: present the token, learn it still works, and
+    /// keep using that same token. No password anywhere, and nothing new issued.
+    @Test func aStoredTokenAuthenticatesWithoutThePassword() async throws {
         let (service, store) = makeService(
-            responses: ["/api/auth/token": .init(status: 200, body: Self.mintBody())],
+            responses: ["/api/auth/token/verify": .init(status: 200, body: Self.verifyBody())],
             password: "",
             deviceToken: "salty_stored"
         )
 
         try await service.ensureAuthenticated()
 
-        let sent = try #require(AuthRouteStubURLProtocol.request(forPath: "/api/auth/token"))
+        let sent = try #require(AuthRouteStubURLProtocol.request(forPath: "/api/auth/token/verify"))
         #expect(sent.headers["Authorization"] == "Bearer salty_stored")
-        #expect(store.jwtToken() == "jwt-from-device-token")
+        #expect(store.deviceToken() == "salty_stored",
+                "verifying must not replace the credential -- there is nothing to replace it with")
         #expect(AuthRouteStubURLProtocol.request(forPath: "/api/auth/login") == nil,
                 "an enrolled device must never hit the password endpoint again")
     }
 
-    /// A valid, unexpired JWT is reused rather than re-minted -- otherwise every sync would spend a
-    /// round trip re-authenticating.
-    @Test func anUnexpiredJwtIsReusedWithoutContactingTheServer() async throws {
+    /// The old exchange endpoint must not be called. It no longer exists server-side, so a client still
+    /// reaching for it gets a 404 that surfaces as a mystery network error rather than as anything
+    /// actionable.
+    @Test func theRetiredExchangeEndpointIsNeverCalled() async throws {
         let (service, _) = makeService(
-            responses: ["/api/auth/token": .init(status: 200, body: Self.mintBody())],
-            jwtToken: "still-good",
+            responses: ["/api/auth/token/verify": .init(status: 200, body: Self.verifyBody())],
             deviceToken: "salty_stored"
         )
-        UserDefaults.standard.set(Date().addingTimeInterval(3600), forKey: "serverTokenExpiration")
 
         try await service.ensureAuthenticated()
 
-        #expect(AuthRouteStubURLProtocol.recorded.isEmpty, "no request should have been needed")
+        #expect(AuthRouteStubURLProtocol.request(forPath: "/api/auth/token") == nil,
+                "the JWT exchange is gone; asking for it would 404")
     }
 
     /// A revoked token (devices page, or a password change) is dead. Keeping it would retry forever;
     /// the user has to be asked instead.
     @Test func aRevokedTokenIsDiscardedAndEnrolmentIsRequested() async {
         let (service, store) = makeService(
-            responses: ["/api/auth/token": .init(status: 401, body: #"{"error":"unauthorized"}"#)],
+            responses: ["/api/auth/token/verify": .init(status: 401, body: #"{"error":"unauthorized"}"#)],
             deviceToken: "salty_revoked"
         )
 
@@ -304,7 +308,7 @@ final class SyncDeviceEnrolmentTests {
     /// about the token. Discarding it here would cost a password prompt for what is a network blip.
     @Test func aServerOutageLeavesTheTokenInPlace() async {
         let (service, store) = makeService(
-            responses: ["/api/auth/token": .init(status: 503, body: #"{"error":"maintenance"}"#)],
+            responses: ["/api/auth/token/verify": .init(status: 503, body: #"{"error":"maintenance"}"#)],
             deviceToken: "salty_stored"
         )
 
@@ -361,7 +365,7 @@ final class SyncDeviceEnrolmentTests {
     @Test func forgettingRevokesTheTokenOnTheServerThenClearsIt() async throws {
         let (service, store) = makeService(
             responses: ["/api/auth/token/revoke": .init(status: 204, body: "")],
-            password: "leftover", jwtToken: "cached", deviceToken: "salty_stored"
+            password: "leftover", deviceToken: "salty_stored"
         )
 
         let outcome = await service.signOut()
@@ -371,7 +375,6 @@ final class SyncDeviceEnrolmentTests {
                 "the revoke has to present the very token it is retiring")
         #expect(outcome == .revokedOnServer)
         #expect(store.deviceToken() == nil)
-        #expect(store.jwtToken() == nil)
         #expect(store.password().isEmpty)
         #expect(!service.hasCredentials)
     }
