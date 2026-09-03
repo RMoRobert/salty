@@ -253,7 +253,7 @@ struct ServerSettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Sync automatically", isOn: $autoSyncEnabled)
                         .disabled(!serverUse)
-                    Text("Syncs in the background after you make changes, on launch, and when returning to the app. Occasional failures are silent; persistent ones show a dismissable banner.")
+                    Text("Syncs in the background after you make changes, on launch, and when returning to the app. Repeated failures will show a dismissable banner to notify you (occasional failures are ignored).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

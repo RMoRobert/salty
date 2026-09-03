@@ -2,8 +2,8 @@
 //  ContractCorpus.swift
 //  SaltyTests
 //
-//  Loader for the shared conformance corpus (`salty-contract/corpus`). The SaltyKMP and Salty.NET
-//  cores run the same cases through their own runners; see salty-contract/runners/README.md.
+//  Loader for the shared conformance corpus (`salty-contract/corpus`). The SaltyKMP core runs the same
+//  cases through its own runner; see salty-contract/runners/README.md.
 //
 
 import Foundation
@@ -127,16 +127,20 @@ enum CorpusLoader {
 
     /// Finds `salty-contract/corpus`.
     ///
-    /// The contract does not live in this repo, so there is no reliable relative path to it. In order:
-    /// the `SALTY_CORPUS_DIR` environment variable; a `.salty-contract-path` file at the repo root
-    /// (gitignored, one line, the path to the corpus); then a walk up from THIS SOURCE FILE's location
-    /// looking for `salty-contract/corpus`, checking each ancestor and each ancestor's immediate
-    /// children, which is what finds a sibling checkout.
+    /// The contract is its own repo, checked out beside this one, so there is no path to it from inside
+    /// this one. In order: the `SALTY_CORPUS_DIR` environment variable; a `.salty-contract-path` file at
+    /// the repo root (gitignored, one line, the path to the corpus); then a walk up from THIS SOURCE
+    /// FILE's location looking for `salty-contract/corpus`, checking each ancestor and each ancestor's
+    /// immediate children — the last of which is what finds the sibling checkout, and is how this
+    /// resolves in an ordinary working copy.
+    ///
+    /// The first two are escape hatches for a layout the walk does not anticipate. The pointer file was
+    /// how this resolved while the contract was a subdirectory of Salty.NET, out of reach of any walk;
+    /// nothing writes one now.
     ///
     /// `#filePath` rather than the bundle, because a macOS unit-test bundle's resources are copied at
     /// build time and Xcode schemes here are autocreated into gitignored `xcuserdata` — so neither a
-    /// resource copy phase nor a scheme environment variable is a durable place to put this. Once
-    /// salty-contract is its own repo checked out beside this one, the ancestor walk finds it unaided.
+    /// resource copy phase nor a scheme environment variable is a durable place to put this.
     private static func locate() throws -> URL {
         if let configured = ProcessInfo.processInfo.environment["SALTY_CORPUS_DIR"], !configured.isEmpty {
             let url = URL(fileURLWithPath: configured)

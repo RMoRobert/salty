@@ -3,7 +3,7 @@
 //  SaltyTests
 //
 //  Runs the shared conformance corpus (`salty-contract/corpus`) against this client's implementation.
-//  The SaltyKMP and Salty.NET cores run the same cases through their own runners.
+//  The SaltyKMP core runs the same cases through its own runner.
 //
 //  This suite deliberately holds no expected values of its own — they all live in the corpus, so adding
 //  a case there adds it to three clients at once. What lives here is only the mapping from a corpus
