@@ -7,8 +7,6 @@
 
 import Foundation
 import SwiftHtml
-import ImageIO
-import UniformTypeIdentifiers
 
 public extension String {
     /// SwiftHtml's DocumentRenderer emits text content verbatim (no entity encoding), so every
