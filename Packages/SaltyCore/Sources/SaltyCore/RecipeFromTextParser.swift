@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import NaturalLanguage
 import OSLog
 import UUIDV7
 
@@ -32,18 +31,15 @@ public struct RecipeFromTextParser {
             lastModifiedDate: Date()
         )
         
-        // Use NLTokenizer for better text analysis
-        let tokenizer = NLTokenizer(unit: .sentence)
-        tokenizer.string = text
         
         // Extract recipe name using improved logic
-        recipe.name = extractRecipeName(from: lines, using: tokenizer)
+        recipe.name = extractRecipeName(from: lines)
         
         // Extract ingredients with better pattern recognition
-        recipe.ingredients = extractIngredients(from: lines, using: tokenizer)
+        recipe.ingredients = extractIngredients(from: lines)
         
         // Extract directions with improved step detection
-        recipe.directions = extractDirections(from: lines, using: tokenizer)
+        recipe.directions = extractDirections(from: lines)
         
         // Extract additional metadata
         let metadata = extractMetadata(from: lines)
@@ -58,7 +54,7 @@ public struct RecipeFromTextParser {
     
     // MARK: - Recipe Name Extraction
     
-    private func extractRecipeName(from lines: [String], using tokenizer: NLTokenizer) -> String {
+    private func extractRecipeName(from lines: [String]) -> String {
         // Look for title-like patterns in the first few lines
         for line in lines.prefix(15) {
             let lowercased = line.lowercased()
@@ -71,11 +67,7 @@ public struct RecipeFromTextParser {
                 continue
             }
             
-            // Use NLTokenizer to analyze the line
-            let lineTokenizer = NLTokenizer(unit: .word)
-            lineTokenizer.string = line
-            
-            let tokenCount = lineTokenizer.tokens(for: line.startIndex..<line.endIndex).count
+            let tokenCount = line.wordCount
             
             // Skip very short or very long lines
             if tokenCount < 2 || tokenCount > 15 {
@@ -127,7 +119,7 @@ public struct RecipeFromTextParser {
     
     // MARK: - Ingredients Extraction
     
-    private func extractIngredients(from lines: [String], using tokenizer: NLTokenizer) -> [Ingredient] {
+    private func extractIngredients(from lines: [String]) -> [Ingredient] {
         var ingredients: [Ingredient] = []
         var inIngredientsSection = false
         var sectionStartIndex = -1
@@ -145,7 +137,7 @@ public struct RecipeFromTextParser {
         
         // If no explicit ingredients section found, try to infer from patterns
         if !inIngredientsSection {
-            return inferIngredientsFromPatterns(lines, using: tokenizer)
+            return inferIngredientsFromPatterns(lines)
         }
         
         // Second pass: extract ingredients from the section
@@ -164,7 +156,7 @@ public struct RecipeFromTextParser {
             }
             
             // Add as ingredient if it looks like an ingredient
-            if isLikelyIngredient(line, using: tokenizer) {
+            if isLikelyIngredient(line) {
                 ingredients.append(Ingredient(
                     id: UUIDV7().uuidString,
                     isHeading: false,
@@ -177,11 +169,11 @@ public struct RecipeFromTextParser {
         return ingredients
     }
     
-    private func inferIngredientsFromPatterns(_ lines: [String], using tokenizer: NLTokenizer) -> [Ingredient] {
+    private func inferIngredientsFromPatterns(_ lines: [String]) -> [Ingredient] {
         var ingredients: [Ingredient] = []
         
         for line in lines {
-            if isLikelyIngredient(line, using: tokenizer) {
+            if isLikelyIngredient(line) {
                 ingredients.append(Ingredient(
                     id: UUIDV7().uuidString,
                     isHeading: false,
@@ -194,7 +186,7 @@ public struct RecipeFromTextParser {
         return ingredients
     }
     
-    private func isLikelyIngredient(_ line: String, using tokenizer: NLTokenizer) -> Bool {
+    private func isLikelyIngredient(_ line: String) -> Bool {
         // Check for measurement patterns
         if isIngredientMeasurement(line) {
             return true
@@ -222,7 +214,7 @@ public struct RecipeFromTextParser {
     
     // MARK: - Directions Extraction
     
-    private func extractDirections(from lines: [String], using tokenizer: NLTokenizer) -> [Direction] {
+    private func extractDirections(from lines: [String]) -> [Direction] {
         var directions: [Direction] = []
         var inDirectionsSection = false
         var sectionStartIndex = -1
@@ -242,7 +234,7 @@ public struct RecipeFromTextParser {
         // If no explicit directions section found, try to infer from patterns
         if !inDirectionsSection {
             logger.info("No explicit directions section found, using pattern inference")
-            return inferDirectionsFromPatterns(lines, using: tokenizer)
+            return inferDirectionsFromPatterns(lines)
         }
         
         // Second pass: extract directions from the section
@@ -284,7 +276,7 @@ public struct RecipeFromTextParser {
                 // Continue the current direction
                 if !currentDirection.isEmpty {
                     currentDirection += " " + line
-                } else if isLikelyDirection(line, using: tokenizer) {
+                } else if isLikelyDirection(line) {
                     // This might be a direction without a step number
                     currentDirection = line
                 }
@@ -305,11 +297,11 @@ public struct RecipeFromTextParser {
         return directions
     }
     
-    private func inferDirectionsFromPatterns(_ lines: [String], using tokenizer: NLTokenizer) -> [Direction] {
+    private func inferDirectionsFromPatterns(_ lines: [String]) -> [Direction] {
         var directions: [Direction] = []
         
         for line in lines {
-            if isLikelyDirection(line, using: tokenizer) {
+            if isLikelyDirection(line) {
                 directions.append(Direction(
                     id: UUIDV7().uuidString,
                     isHeading: false,
@@ -321,7 +313,7 @@ public struct RecipeFromTextParser {
         return directions
     }
     
-    private func isLikelyDirection(_ line: String, using tokenizer: NLTokenizer) -> Bool {
+    private func isLikelyDirection(_ line: String) -> Bool {
         // Skip metadata lines first
         if isMetadataLine(line) {
             return false
@@ -347,7 +339,7 @@ public struct RecipeFromTextParser {
         let isTimeSpec = line.lowercased().matches(of: /^\d+\s*(mins?|minutes?|hours?|hrs?)/).count > 0
         
         // Additional check: make sure it's not an ingredient
-        let isIngredient = isLikelyIngredient(line, using: tokenizer)
+        let isIngredient = isLikelyIngredient(line)
         
         let result = hasActionWords && reasonableLength && !isTimeSpec && !isIngredient
         
@@ -383,7 +375,7 @@ public struct RecipeFromTextParser {
                !isIngredientMeasurement(line) &&
                !isDirectionStep(line) &&
                !isMetadataLine(lowercased) &&
-               !isLikelyIngredient(line, using: NLTokenizer(unit: .word)) &&
+               !isLikelyIngredient(line) &&
                introduction.isEmpty &&
                line.count > 20 && line.count < 200 {
                 introduction = line

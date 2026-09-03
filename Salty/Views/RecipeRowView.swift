@@ -16,7 +16,9 @@ func createXPImage(_ value: Data) -> Image {
     let theImage: NSImage = NSImage(data: value) ?? NSImage()
     return Image(nsImage: theImage)
 #else
-    return Image(systemImage: "list.dash.header.rectangle")
+    // `Image(systemImage:)` does not exist -- the initialiser is `systemName:`. Neither shipping
+    // platform reaches this branch, so it has never been compiled and the typo never surfaced.
+    return Image(systemName: "list.dash.header.rectangle")
 #endif
 }
 
