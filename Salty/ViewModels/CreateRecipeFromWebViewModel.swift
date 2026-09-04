@@ -42,7 +42,13 @@ class CreateRecipeFromWebViewModel {
     
     // MARK: - Category State
     var selectedCategoryIDs: Set<String> = []
-    
+
+    // MARK: - Image State
+    /// The photo (downloaded from the page, or chosen by the user) waiting to be attached when the
+    /// recipe is saved or handed to the structured editor. Held in memory rather than written on
+    /// arrival so a discarded import leaves nothing on disk. See `PendingRecipeImage`.
+    var pendingImage: PendingRecipeImage = .unchanged
+
     // MARK: - Web Browser State
     var currentURL: String = ""
     var canGoBack = false
@@ -100,8 +106,17 @@ class CreateRecipeFromWebViewModel {
         recipe.lastModifiedDate = Date()
 
         // Copy main-actor state into locals for use inside the @Sendable DB closure
-        let recipeToSave = recipe
+        var recipeDraft = recipe
         let categoryIDsToSave = selectedCategoryIDs
+
+        // Write the pending photo's file now, so the row inserted below references a file that exists.
+        guard pendingImage.apply(to: &recipeDraft) else {
+            logger.error("Could not write the imported recipe photo; save aborted")
+            saveErrorMessage = "The photo couldn't be saved to the recipe library."
+            showingSaveErrorAlert = true
+            return false
+        }
+        let recipeToSave = recipeDraft
 
         do {
             try await database.write { db in
@@ -119,6 +134,8 @@ class CreateRecipeFromWebViewModel {
                 }
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
+            recipe = recipeToSave
+            pendingImage = .unchanged
             recipeWasSaved = true
             // Tell main window to select and scroll to the new recipe (lives in
             // separate window on macOS, so can't be done through shared state).
@@ -140,6 +157,13 @@ class CreateRecipeFromWebViewModel {
     /// converting any pasted/extracted text into structured ingredients and directions.
     func prepareRecipeForEditing() {
         convertTextToStructuredData()
+        // The structured editor takes a plain `Recipe`, so the pending photo has to become a real file
+        // here. The recipe is still unsaved, so if the editor is cancelled `cleanUpUnsavedImage()`
+        // removes it again.
+        if !pendingImage.apply(to: &recipe) {
+            logger.error("Could not write the imported recipe photo; handing off without it")
+        }
+        pendingImage = .unchanged
     }
 
     /// Downloads the recipe photo from a scanned image URL and attaches it to the recipe
@@ -157,17 +181,20 @@ class CreateRecipeFromWebViewModel {
             logger.info("Import session ended before photo download finished; discarding it")
             return
         }
-        recipe.setImage(imageData)
-        logger.info("Attached imported recipe photo (\(imageData.count) bytes)")
+        pendingImage = .replace(imageData)
+        logger.info("Holding imported recipe photo (\(imageData.count) bytes) until save")
     }
 
-    /// Deletes the downloaded photo when the import session ends without the recipe having been
-    /// saved, so a discarded import doesn't leave an orphaned file in image storage. Safe to call
-    /// from any dismissal path: it does nothing once the recipe is saved or if no photo is attached.
+    /// Deletes the photo file when the import session ends without the recipe having been saved, so
+    /// a discarded import doesn't leave an orphaned file in image storage. A photo only reaches disk
+    /// on hand-off to the structured editor (see `prepareRecipeForEditing()`), so this matters when
+    /// that editor is cancelled. Safe to call from any dismissal path: it does nothing once the
+    /// recipe is saved or if no photo was written.
     func cleanUpUnsavedImage() {
-        // Mark the session over first, so an in-flight photo download can't attach (and
-        // re-create the file) after this cleanup runs.
+        // Mark the session over first, so an in-flight photo download can't attach after this
+        // cleanup runs.
         importSessionEnded = true
+        pendingImage = .unchanged
         guard !recipeWasSaved, recipe.imageFilename != nil else { return }
         let recipeId = recipe.id
         Task {
@@ -178,6 +205,7 @@ class CreateRecipeFromWebViewModel {
                 }
                 if !recipeExists {
                     logger.info("Import discarded; deleting unsaved recipe photo")
+                    RecipeImageManager.shared.deleteImages(for: recipeId, except: nil)
                     recipe.removeImage()
                 }
             } catch {

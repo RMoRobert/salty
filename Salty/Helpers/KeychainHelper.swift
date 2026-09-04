@@ -70,13 +70,17 @@ final class KeychainHelper: Sendable {
     ///   - key: The key to store it under
     /// - Returns: True if successful
     @discardableResult
-    func save(_ data: Data, forKey key: String) -> Bool {
+    func save(_ data: Data, forKey key: String, accessible: CFString = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly) -> Bool {
         // Delete any existing item first
         delete(forKey: key)
-        
+
         var query = baseQuery(forKey: key)
         query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        // Keychain items are never in an unencrypted backup. The default class, ThisDeviceOnly, also
+        // keeps them out of encrypted backups and device-to-device transfer, which is right for a
+        // credential: a token that followed a restore onto a second phone would let both sync as one
+        // device. Items that are *meant* to follow a restore (the device id) pass a portable class.
+        query[kSecAttrAccessible as String] = accessible
 
         let status = SecItemAdd(query as CFDictionary, nil)
         
@@ -169,7 +173,16 @@ final class KeychainHelper: Sendable {
         /// only credential the app keeps: it can sync, and deliberately nothing else -- it cannot
         /// change a password or revoke another device.
         case deviceToken = "salty.server.deviceToken"
+        /// The id this device syncs and enrols under. Not secret. Saved with a *portable* class so
+        /// it follows an encrypted backup or device transfer onto a replacement phone, which then
+        /// carries on as the same device (the token does not follow; one password prompt re-enrols
+        /// it under this id and supersedes the old token server-side). Survives sign-out and app
+        /// reinstall on purpose: re-enrolling must reuse it, or the server lists the device twice.
+        case deviceId = "salty.server.deviceId"
     }
+
+    /// Where pre-keychain builds kept the device id. Read once by `getDeviceId()` and then removed.
+    private static let legacyDeviceIdDefaultsKey = "syncDeviceId"
     
     /// Save the server password
     @discardableResult
@@ -200,12 +213,67 @@ final class KeychainHelper: Sendable {
         return getString(forKey: Key.deviceToken.rawValue)
     }
 
+    /// The sync device id, or nil if this install has never had one.
+    ///
+    /// Builds before this one kept it in UserDefaults. It is moved here on first read (and removed
+    /// from UserDefaults) so it lives beside the token, survives an app reinstall, and stays out of
+    /// unencrypted backups -- while still, unlike the token, following an encrypted restore.
+    func getDeviceId() -> String? {
+        if let stored = getString(forKey: Key.deviceId.rawValue), !stored.isEmpty {
+            return stored
+        }
+        let defaults = UserDefaults.standard
+        guard let legacy = defaults.string(forKey: Self.legacyDeviceIdDefaultsKey), !legacy.isEmpty else {
+            return nil
+        }
+        // Only drop the UserDefaults copy once the keychain has it; a failed save must not lose the id.
+        if saveDeviceId(legacy) {
+            defaults.removeObject(forKey: Self.legacyDeviceIdDefaultsKey)
+            logger.info("Moved the sync device id from UserDefaults into the keychain")
+        }
+        return legacy
+    }
+
+    /// Save the sync device id. Not cleared by `clearAuthData()`: signing out must not change the
+    /// identity a later re-enrolment reuses.
+    @discardableResult
+    func saveDeviceId(_ id: String) -> Bool {
+        // Portable class: this is the one item that should come along in a device restore.
+        save(Data(id.utf8), forKey: Key.deviceId.rawValue, accessible: kSecAttrAccessibleAfterFirstUnlock)
+    }
+
     /// Clear all authentication data
     func clearAuthData() {
         delete(forKey: Key.serverPassword.rawValue)
         delete(forKey: Key.jwtToken.rawValue)
         delete(forKey: Key.deviceToken.rawValue)
         logger.info("Cleared all authentication data from keychain")
+    }
+
+    // MARK: - One-time protection upgrade
+
+    private static let thisDeviceOnlyUpgradeDefaultsKey = "keychainThisDeviceOnlyUpgradeCompleted"
+
+    /// Rewrites items saved by earlier builds so they carry the current accessibility class.
+    ///
+    /// `kSecAttrAccessible` is fixed when an item is added; items written before `save` switched to
+    /// `ThisDeviceOnly` keep the old, backup-portable class until they are written again. Enrolment
+    /// would eventually do that, but only on a re-enrol -- so this does it once, at launch, for
+    /// whatever is already there. Also gives the device id its move out of UserDefaults (see
+    /// `getDeviceId()`) a definite moment rather than "whenever sync first asks".
+    func upgradeItemProtectionIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.thisDeviceOnlyUpgradeDefaultsKey) else { return }
+
+        for key in [Key.serverPassword, .deviceToken] {
+            if let data = getData(forKey: key.rawValue) {
+                save(data, forKey: key.rawValue)
+            }
+        }
+        _ = getDeviceId()
+
+        defaults.set(true, forKey: Self.thisDeviceOnlyUpgradeDefaultsKey)
+        logger.info("Keychain items now use the ThisDeviceOnly protection class")
     }
 
     // MARK: - Legacy macOS keychain migration
