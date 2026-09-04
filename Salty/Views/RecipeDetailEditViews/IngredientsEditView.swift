@@ -6,233 +6,132 @@
 //
 
 import SaltyCore
-import UUIDV7
 #if os(macOS)
 
 import SwiftUI
 
 struct IngredientsEditView: View {
     @Binding var recipe: Recipe
-    @State private var editingIngredients: [Ingredient] = []
-    @State private var draggedItem: Ingredient?
-    @State private var dropTargetIndex: Int?
+    /// Where a dragged row would land, or nil when nothing is being dragged over the list.
+    @State private var dropTarget: RecipeItemListEditor.DropTarget?
+    /// A row that was just added: scrolled to and focused, then cleared.
     @State private var scrollToNewItem: String?
     @FocusState private var focusedIngredientID: String?
     @Environment(\.dismiss) private var dismiss
-    
+
     var showToolbar: Bool = true
     var showBottomButtons: Bool = false
-    
+
     var body: some View {
         Group {
             if showToolbar {
                 // Standalone view with toolbar (for sheet presentation)
-                IngredientsContentView(
-                    editingIngredients: $editingIngredients,
-                    showToolbar: showToolbar,
-                    scrollToNewItem: $scrollToNewItem,
-                    focusedIngredientID: $focusedIngredientID,
-                    dropTargetIndex: $dropTargetIndex,
-                    draggedItem: $draggedItem,
-                    onAddIngredientAfter: { addIngredientAfter($0) },
-                    onDeleteIngredient: { deleteIngredient(at: $0) },
-                    onMoveIngredient: { moveIngredient(from: $0, to: $1) }
-                )
-                .navigationTitle("Edit Ingredients")
-                .toolbar {
-                    ToolbarItemGroup(placement: .automatic) {
-                        Button {
-                            addNewIngredient()
-                        } label: {
-                            Label("New Ingredient", systemImage: "plus.circle")
+                content
+                    .navigationTitle("Edit Ingredients")
+                    .toolbar {
+                        ToolbarItemGroup(placement: .automatic) {
+                            Button {
+                                addIngredient()
+                            } label: {
+                                Label("New Ingredient", systemImage: "plus.circle")
+                            }
+
+                            Button {
+                                addHeading()
+                            } label: {
+                                Label("New Heading", systemImage: "folder.badge.plus")
+                            }
+                            .keyboardShortcut("n", modifiers: [.command, .shift])
                         }
-                        
-                        Button {
-                            addNewHeading()
-                        } label: {
-                            Label("New Heading", systemImage: "folder.badge.plus")
+
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                            .keyboardShortcut(.return, modifiers: [.command])
                         }
-                        .keyboardShortcut("n", modifiers: [.command, .shift])
                     }
-                    
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .keyboardShortcut(.return, modifiers: [.command])
-                    }
-                }
-                .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
-                       minHeight: 500, idealHeight: 600, maxHeight: 800)
-                .presentationSizing(.fitted)
+                    .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
+                           minHeight: 500, idealHeight: 600, maxHeight: 800)
+                    .presentationSizing(.fitted)
             } else {
                 // Embedded view (no toolbar, no frame constraints)
                 VStack(spacing: 0) {
-                    IngredientsContentView(
-                        editingIngredients: $editingIngredients,
-                        showToolbar: showToolbar,
-                        scrollToNewItem: $scrollToNewItem,
-                        focusedIngredientID: $focusedIngredientID,
-                        dropTargetIndex: $dropTargetIndex,
-                        draggedItem: $draggedItem,
-                        onAddIngredientAfter: { addIngredientAfter($0) },
-                        onDeleteIngredient: { deleteIngredient(at: $0) },
-                        onMoveIngredient: { moveIngredient(from: $0, to: $1) }
-                    )
+                    content
                     if showBottomButtons {
                         BottomActionButtonsView(
-                            onAddNewIngredient: { addNewIngredient() },
-                            onAddNewMainIngredient: { addNewMainIngredient() },
-                            onAddNewHeading: { addNewHeading() }
+                            onAddNewIngredient: { addIngredient() },
+                            onAddNewMainIngredient: { addMainIngredient() },
+                            onAddNewHeading: { addHeading() }
                         )
                         .padding(.top, 4)
                     }
                 }
             }
         }
-        .onAppear {
-            editingIngredients = recipe.ingredients
-        }
-        .onChange(of: recipe.ingredients) { _, newValue in
-            // Update local state when recipe changes (e.g., from bulk edit)
-            if editingIngredients != newValue {
-                editingIngredients = newValue
-            }
-        }
-        .onChange(of: editingIngredients) { _, newValue in
-            recipe.ingredients = newValue
-        }
-        .onDisappear {
-            recipe.ingredients = editingIngredients
-        }
     }
-    
-    private func addIngredientAfter(_ index: Int) {
-        let newIngredient = Ingredient(
-            id: UUIDV7().uuidString,
-            isHeading: false,
-            isMain: false,
-            text: ""
+
+    private var content: some View {
+        IngredientsContentView(
+            ingredients: $recipe.ingredients,
+            dropTarget: $dropTarget,
+            scrollToNewItem: $scrollToNewItem,
+            focusedIngredientID: $focusedIngredientID,
+            showToolbar: showToolbar
         )
+    }
+
+    // MARK: - Adding
+
+    private func addIngredient() {
+        append(.emptyRow(isHeading: false))
+    }
+
+    private func addMainIngredient() {
+        append(.emptyRow(isHeading: false, isMain: true))
+    }
+
+    private func addHeading() {
+        append(.emptyRow(isHeading: true))
+    }
+
+    private func append(_ ingredient: Ingredient) {
         withAnimation(.easeIn) {
-            editingIngredients.insert(newIngredient, at: index + 1)
+            scrollToNewItem = RecipeItemListEditor.append(ingredient, to: &recipe.ingredients)
         }
-        scrollToNewItem = newIngredient.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedIngredientID = newIngredient.id
-        }
-    }
-    
-    private func deleteIngredient(at index: Int) {
-        guard index >= 0 && index < editingIngredients.count else { return }
-        // Clear or adjust drop target if needed
-        if let dropTarget = dropTargetIndex {
-            if dropTarget == index {
-                // Clear if deleting the drop target itself
-                dropTargetIndex = nil
-            } else if dropTarget > index {
-                // Adjust drop target index if item before it is deleted
-                dropTargetIndex = dropTarget - 1
-            }
-            // If dropTarget < index, no adjustment needed
-        }
-        withAnimation(.easeIn)  {
-            _ = editingIngredients.remove(at: index)
-        }
-    }
-    
-    private func moveIngredient(from fromIndex: Int, to toIndex: Int) {
-        withAnimation(.snappy)  {
-            editingIngredients.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
-        }
-    }
-    
-    private func addNewIngredient(isMain: Bool, isHeading: Bool) {
-        let newIngredient = Ingredient(
-            id: UUIDV7().uuidString,
-            isHeading: isMain ? false : isHeading,
-            isMain: isMain,
-            text: ""
-        )
-        withAnimation(.easeIn)  {
-            editingIngredients.append(newIngredient)
-        }
-        scrollToNewItem = newIngredient.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedIngredientID = newIngredient.id
-        }
-    }
-    
-    private func addNewIngredient() {
-        addNewIngredient(isMain: false, isHeading: false)
-    }
-    
-    private func addNewMainIngredient() {
-        addNewIngredient(isMain: true, isHeading: false)
-    }
-    
-    private func addNewHeading() {
-        addNewIngredient(isMain: false, isHeading: true)
     }
 }
 
 // MARK: - Supporting Views
 
 struct IngredientsContentView: View {
-    @Binding var editingIngredients: [Ingredient]
-    let showToolbar: Bool
+    @Binding var ingredients: [Ingredient]
+    @Binding var dropTarget: RecipeItemListEditor.DropTarget?
     @Binding var scrollToNewItem: String?
     var focusedIngredientID: FocusState<String?>.Binding
-    @Binding var dropTargetIndex: Int?
-    @Binding var draggedItem: Ingredient?
-    let onAddIngredientAfter: (Int) -> Void
-    let onDeleteIngredient: (Int) -> Void
-    let onMoveIngredient: (Int, Int) -> Void
-    
+    let showToolbar: Bool
+
     var body: some View {
         ScrollViewReader { proxy in
-            Group {
-                if showToolbar {
-                    // Standalone view - add padding
-                    IngredientsListView(
-                        editingIngredients: $editingIngredients,
-                        dropTargetIndex: $dropTargetIndex,
-                        focusedIngredientID: focusedIngredientID,
-                        onAddIngredientAfter: onAddIngredientAfter,
-                        onDeleteIngredient: onDeleteIngredient,
-                        onMoveIngredient: onMoveIngredient,
-                        draggedItem: $draggedItem
-                    )
-                    .padding(.horizontal)
-                    .padding(.top)
-                } else {
-                    // Embedded view - no extra padding
-                    IngredientsListView(
-                        editingIngredients: $editingIngredients,
-                        dropTargetIndex: $dropTargetIndex,
-                        focusedIngredientID: focusedIngredientID,
-                        onAddIngredientAfter: onAddIngredientAfter,
-                        onDeleteIngredient: onDeleteIngredient,
-                        onMoveIngredient: onMoveIngredient,
-                        draggedItem: $draggedItem
-                    )
-                }
-            }
+            IngredientsListView(
+                ingredients: $ingredients,
+                dropTarget: $dropTarget,
+                scrollToNewItem: $scrollToNewItem,
+                focusedIngredientID: focusedIngredientID
+            )
+            // Standalone gets its own padding; embedded takes the host's.
+            .padding(.horizontal, showToolbar ? nil : 0)
+            .padding(.top, showToolbar ? nil : 0)
             .onChange(of: scrollToNewItem) { _, newID in
-                if let newID = newID {
-                    withAnimation(.easeOut) {
-                        proxy.scrollTo(newID, anchor: .center)
-                    }
-                    // Set focus after scrolling
-                    Task {
-                        try? await Task.sleep(for: .seconds(0.2))
-                        focusedIngredientID.wrappedValue = newID
-                        scrollToNewItem = nil
-                    }
+                guard let newID else { return }
+                withAnimation(.easeOut) {
+                    proxy.scrollTo(newID, anchor: .center)
+                }
+                // Focus once the row has been laid out.
+                Task {
+                    try? await Task.sleep(for: .seconds(0.2))
+                    focusedIngredientID.wrappedValue = newID
+                    scrollToNewItem = nil
                 }
             }
         }
@@ -243,7 +142,7 @@ struct BottomActionButtonsView: View {
     let onAddNewIngredient: () -> Void
     let onAddNewMainIngredient: () -> Void
     let onAddNewHeading: () -> Void
-    
+
     var body: some View {
         HStack {
             ComboButtonRepresentable(
@@ -256,14 +155,14 @@ struct BottomActionButtonsView: View {
             )
             .fixedSize()
             .keyboardShortcut("n", modifiers: [.command])
-            
+
             Button {
                 onAddNewHeading()
             } label: {
                 Label("New Heading", systemImage: "folder.badge.plus")
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
-            
+
             Spacer()
         }
         .padding(.top, 2)
@@ -277,125 +176,69 @@ struct MenuItem {
 }
 
 struct IngredientsListView: View {
-    @Binding var editingIngredients: [Ingredient]
-    @Binding var dropTargetIndex: Int?
+    @Binding var ingredients: [Ingredient]
+    @Binding var dropTarget: RecipeItemListEditor.DropTarget?
+    @Binding var scrollToNewItem: String?
     var focusedIngredientID: FocusState<String?>.Binding
-    let onAddIngredientAfter: (Int) -> Void
-    let onDeleteIngredient: (Int) -> Void
-    let onMoveIngredient: (Int, Int) -> Void
-    @Binding var draggedItem: Ingredient?
-    
+
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(editingIngredients, id: \.id) { ingredient in
-                if let index = editingIngredients.firstIndex(where: { $0.id == ingredient.id }),
-                   index < editingIngredients.count {
-                    DropIndicatorView(dropTargetIndex: $dropTargetIndex, index: index)
-                    IngredientRowView(
-                        editingIngredients: $editingIngredients,
-                        index: index,
-                        focusedIngredientID: focusedIngredientID,
-                        dropTargetIndex: $dropTargetIndex,
-                        draggedItem: $draggedItem,
-                        onAddIngredientAfter: onAddIngredientAfter,
-                        onDeleteIngredient: onDeleteIngredient,
-                        onMoveIngredient: onMoveIngredient
-                    )
-                }
+            ForEach($ingredients) { $ingredient in
+                let id = ingredient.id
+                RecipeListDropIndicator(isActive: dropTarget == .above(id))
+                IngredientEditRowView(
+                    ingredient: $ingredient,
+                    isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: ingredients),
+                    focusedIngredientID: focusedIngredientID,
+                    onAdd: { addIngredient(below: id) },
+                    onDelete: { delete(id: id) },
+                    onDrop: { droppedID in move(droppedID, to: .above(id)) },
+                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) }
+                )
+                .id(id)
             }
-            DropIndicatorAtEndView(
-                editingIngredients: $editingIngredients,
-                dropTargetIndex: $dropTargetIndex
+            RecipeListEndDropZone(
+                isActive: dropTarget == .end,
+                onDrop: { droppedID in move(droppedID, to: .end) },
+                onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
         }
     }
-}
 
-struct DropIndicatorView: View {
-    @Binding var dropTargetIndex: Int?
-    let index: Int
-    
-    var body: some View {
-        if let dropTarget = dropTargetIndex, dropTarget == index {
-            Rectangle()
-                .fill(Color.accentColor)
-                .frame(height: 3)
-                .padding(.horizontal, 20)
-                .transition(.opacity.combined(with: .scale))
+    // MARK: - Editing
+
+    private func addIngredient(below id: String) {
+        withAnimation(.easeIn) {
+            scrollToNewItem = RecipeItemListEditor.insert(
+                .emptyRow(isHeading: false),
+                below: id,
+                in: &ingredients
+            )
         }
     }
-}
 
-struct DropIndicatorAtEndView: View {
-    @Binding var editingIngredients: [Ingredient]
-    @Binding var dropTargetIndex: Int?
-    
-    var body: some View {
-        let currentCount = editingIngredients.count
-        if let dropTarget = dropTargetIndex, dropTarget == currentCount, currentCount >= 0 {
-            Rectangle()
-                .fill(Color.primary)
-                .frame(height: 2)
-                .padding(.horizontal, 20)
-                .transition(.opacity.combined(with: .scale))
+    private func delete(id: String) {
+        withAnimation(.easeIn) {
+            RecipeItemListEditor.delete(id: id, from: &ingredients)
         }
     }
-}
 
-struct IngredientRowView: View {
-    @Binding var editingIngredients: [Ingredient]
-    let index: Int
-    var focusedIngredientID: FocusState<String?>.Binding
-    @Binding var dropTargetIndex: Int?
-    @Binding var draggedItem: Ingredient?
-    let onAddIngredientAfter: (Int) -> Void
-    let onDeleteIngredient: (Int) -> Void
-    let onMoveIngredient: (Int, Int) -> Void
-    
-    var body: some View {
-        // Ensure index is valid before accessing - double check to prevent race conditions
-        if index >= 0 && index < editingIngredients.count {
-            let ingredient = editingIngredients[index]
-            // Create a safe binding that checks bounds
-            let ingredientBinding = Binding<Ingredient>(
-                get: {
-                    guard index >= 0 && index < editingIngredients.count else {
-                        return ingredient
-                    }
-                    return editingIngredients[index]
-                },
-                set: { newValue in
-                    guard index >= 0 && index < editingIngredients.count else { return }
-                    editingIngredients[index] = newValue
-                }
-            )
-            // Alternating background colors for list effect
-            let backgroundColor = (index % 2 == 0 || editingIngredients.count < 3)
-                ? Color.clear
-                : Color(nsColor: .tertiarySystemFill)
-            IngredientEditRowView(
-                ingredient: ingredientBinding,
-                index: index,
-                backgroundColor: backgroundColor,
-                focusedIngredientID: focusedIngredientID,
-                ingredientID: ingredient.id,
-                onAdd: { onAddIngredientAfter(index) },
-                onDelete: { onDeleteIngredient(index) },
-                onMove: { fromIndex, toIndex in
-                    onMoveIngredient(fromIndex, toIndex)
-                },
-                onDragStart: {
-                    draggedItem = ingredient
-                },
-                onDragEnd: {
-                    draggedItem = nil
-                    dropTargetIndex = nil
-                },
-                onDropTargetChanged: { targetIndex in
-                    dropTargetIndex = targetIndex
-                }
-            )
-            .id(ingredient.id)
+    private func move(_ id: String, to target: RecipeItemListEditor.DropTarget) -> Bool {
+        var moved = false
+        withAnimation(.snappy) {
+            moved = RecipeItemListEditor.move(id: id, to: target, in: &ingredients)
+            dropTarget = nil
+        }
+        return moved
+    }
+
+    /// Only the row currently being hovered clears the indicator: dragging from one row to the next
+    /// reports the new row as targeted before the old one reports that it isn't.
+    private func setDropTarget(_ target: RecipeItemListEditor.DropTarget, isTargeted: Bool) {
+        if isTargeted {
+            dropTarget = target
+        } else if dropTarget == target {
+            dropTarget = nil
         }
     }
 }
@@ -404,37 +247,32 @@ struct IngredientRowView: View {
 
 struct IngredientEditRowView: View {
     @Binding var ingredient: Ingredient
-    let index: Int
-    let backgroundColor: Color
+    let isAlternateRow: Bool
     var focusedIngredientID: FocusState<String?>.Binding
-    let ingredientID: String
     let onAdd: () -> Void
     let onDelete: () -> Void
-    let onMove: (Int, Int) -> Void
-    let onDragStart: () -> Void
-    let onDragEnd: () -> Void
-    let onDropTargetChanged: (Int?) -> Void
-    
-    @State private var isDragging = false
-    @State private var isDropTarget = false
-    
+    /// Returns whether the drop was accepted. Nil when the row's container handles reordering
+    /// itself -- a List with `onMove` -- in which case the drag handle is dropped too.
+    var onDrop: ((String) -> Bool)?
+    var onDropTargetChanged: ((Bool) -> Void)?
+
     var body: some View {
         HStack(alignment: .center, spacing: 3) {
             // Text field column - flexible width
-            TextField(ingredient.isHeading ? "Heading Title" : "Ingredient", text: $ingredient.text, axis: .vertical)
-                .font(ingredient.isHeading == true ? .headline : .body)
-                .fontWeight(ingredient.isHeading == true ? .semibold : .regular)
+            TextField(ingredient.isHeadingRow ? "Heading Title" : "Ingredient", text: $ingredient.text, axis: .vertical)
+                .font(ingredient.isHeadingRow ? .headline : .body)
+                .fontWeight(ingredient.isHeadingRow ? .semibold : .regular)
                 .lineLimit(1...3)
                 .textFieldStyle(.plain)
-                .focused(focusedIngredientID, equals: ingredientID)
+                .focused(focusedIngredientID, equals: ingredient.id)
                 .padding([.top, .bottom], 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            
+
             // Icon columns
             HStack(alignment: .center, spacing: 0) {
                 // "Is main?" column
                 Group {
-                    if !ingredient.isHeading {
+                    if !ingredient.isHeadingRow {
                         Toggle(isOn: $ingredient.isMain) {
                             Label("Is main ingredient?", systemImage: ingredient.isMain ? "medal.fill" : "medal")
                         }
@@ -451,7 +289,7 @@ struct IngredientEditRowView: View {
                     }
                 }
                 .frame(width: 30)
-                
+
                 // Add button column
                 Button {
                     onAdd()
@@ -462,7 +300,7 @@ struct IngredientEditRowView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.green)
                 .frame(width: 24)
-                
+
                 // Delete button column
                 Button {
                     onDelete()
@@ -473,49 +311,29 @@ struct IngredientEditRowView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
                 .frame(width: 24)
-                
-                // Drag handle column - fixed width
-                Label("Drag to Move", systemImage: "line.3.horizontal")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 24)
-                    .draggable(String(index)) {
-                        Label("Drag to Move", systemImage: "line.3.horizontal")
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .onDrag {
-                        isDragging = true
-                        onDragStart()
-                        return NSItemProvider(object: String(index) as NSString)
-                    }
+
+                // Drag handle column - fixed width. The payload is the row's id, so a drop can tell a
+                // real row from a stray text drag and never acts on a stale index.
+                if onDrop != nil {
+                    Label("Drag to Move", systemImage: "line.3.horizontal")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 24)
+                        .draggable(ingredient.id) {
+                            Label("Drag to Move", systemImage: "line.3.horizontal")
+                                .labelStyle(.iconOnly)
+                                .foregroundStyle(.tertiary)
+                        }
+                }
             }
         }
         .padding(.vertical, 2)
         .padding(.horizontal, 0)
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(backgroundColor)
+                .fill(isAlternateRow ? Color(nsColor: .tertiarySystemFill) : .clear)
         }
-        .opacity(isDragging ? 0.4 : 1.0)
-        .scaleEffect(isDragging ? 0.95 : 1.0)
-        .animation(.spring, value: isDragging)
-        .dropDestination(for: String.self) { draggedIndices, location in
-            guard let draggedIndexString = draggedIndices.first,
-                  let draggedIndex = Int(draggedIndexString),
-                  draggedIndex != index else {
-                isDragging = false
-                onDragEnd()
-                return false
-            }
-            onMove(draggedIndex, draggedIndex < index ? index + 1 : index)
-            isDragging = false
-            onDragEnd()
-            return true
-        } isTargeted: { isTargeted in
-            isDropTarget = isTargeted
-            onDropTargetChanged(isTargeted ? index : nil)
-        }
+        .modifier(RecipeRowDropDestination(onDrop: onDrop, onDropTargetChanged: onDropTargetChanged))
     }
 }
 
@@ -526,15 +344,15 @@ struct ComboButtonRepresentable: NSViewRepresentable {
     var style: NSComboButton.Style = .split // or .unified
     var menuItems: [MenuItem]
     var onPrimaryAction: () -> Void
-    
+
     // Helper to create an image with leading padding -- matches SwiftUI button labels with images better:
     private func paddedImage(from image: NSImage?, leadingPadding: CGFloat = 6) -> NSImage? {
         guard let originalImage = image else { return image }
-        
+
         let padding: CGFloat = leadingPadding
         let newSize = NSSize(width: originalImage.size.width + padding, height: originalImage.size.height)
         let paddedImage = NSImage(size: newSize)
-        
+
         paddedImage.lockFocus()
         originalImage.draw(
             at: NSPoint(x: padding, y: 0),
@@ -543,7 +361,7 @@ struct ComboButtonRepresentable: NSViewRepresentable {
             fraction: 1.0
         )
         paddedImage.unlockFocus()
-        
+
         return paddedImage
     }
 
@@ -557,7 +375,7 @@ struct ComboButtonRepresentable: NSViewRepresentable {
             menu.addItem(nsMenuItem)
         }
         context.coordinator.menuActions = menuItems.map { $0.action }
-        
+
         let comboButton = NSComboButton(title: title, menu: menu, target: context.coordinator, action: #selector(Coordinator.primaryAction))
         comboButton.style = style
         if let image = image {
@@ -570,7 +388,7 @@ struct ComboButtonRepresentable: NSViewRepresentable {
         nsView.title = title
         nsView.image = paddedImage(from: image)
         nsView.style = style
-        
+
         // Update menu
         let menu = NSMenu()
         for (index, menuItem) in menuItems.enumerated() {
@@ -601,7 +419,7 @@ struct ComboButtonRepresentable: NSViewRepresentable {
         @objc func primaryAction() {
             onPrimaryAction()
         }
-        
+
         @objc func menuItemAction(_ sender: NSMenuItem) {
             let index = sender.tag
             if index >= 0 && index < menuActions.count {
@@ -616,4 +434,3 @@ struct ComboButtonRepresentable: NSViewRepresentable {
 }
 
 #endif
-

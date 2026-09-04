@@ -6,23 +6,22 @@
 //
 
 import SaltyCore
-import UUIDV7
 #if os(macOS)
 
 import SwiftUI
 
 struct DirectionsEditView: View {
     @Binding var recipe: Recipe
-    @State private var editingDirections: [Direction] = []
-    @State private var draggedItem: Direction?
-    @State private var dropTargetIndex: Int?
+    /// Where a dragged row would land, or nil when nothing is being dragged over the list.
+    @State private var dropTarget: RecipeItemListEditor.DropTarget?
+    /// A row that was just added: scrolled to and focused, then cleared.
     @State private var scrollToNewItem: String?
     @FocusState private var focusedDirectionID: String?
     @Environment(\.dismiss) private var dismiss
-    
+
     var showToolbar: Bool = true
     var showBottomButtons: Bool = false
-    
+
     var body: some View {
         Group {
             if showToolbar {
@@ -32,20 +31,20 @@ struct DirectionsEditView: View {
                     .toolbar {
                         ToolbarItemGroup(placement: .automatic) {
                             Button {
-                                addNewStep()
+                                addStep()
                             } label: {
                                 Label("New Step", systemImage: "plus.circle")
                             }
                             .keyboardShortcut("n", modifiers: [.command])
-                            
+
                             Button {
-                                addNewHeading()
+                                addHeading()
                             } label: {
                                 Label("New Heading", systemImage: "folder.badge.plus")
                             }
                             .keyboardShortcut("n", modifiers: [.command, .shift])
                         }
-                        
+
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done") {
                                 dismiss()
@@ -55,9 +54,7 @@ struct DirectionsEditView: View {
                     }
                     .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
                            minHeight: 500, idealHeight: 600, maxHeight: 800)
-                    #if os(macOS)
                     .presentationSizing(.fitted)
-                    #endif
             } else {
                 // Embedded view (no toolbar, no frame constraints)
                 VStack(spacing: 0) {
@@ -69,230 +66,122 @@ struct DirectionsEditView: View {
                 }
             }
         }
-        .onAppear {
-            editingDirections = recipe.directions
-        }
-        .onChange(of: recipe.directions) { _, newValue in
-            // Update local state when recipe changes (e.g., from bulk edit)
-            if editingDirections != newValue {
-                editingDirections = newValue
-            }
-        }
-        .onChange(of: editingDirections) { _, newValue in
-            recipe.directions = newValue
-        }
-        .onDisappear {
-            recipe.directions = editingDirections
-        }
     }
-    
+
     private var directionsContent: some View {
         ScrollViewReader { proxy in
-            Group {
-                if showToolbar {
-                    // Standalone view - add padding
-                    directionsList
-                        .padding(.horizontal)
-                        .padding(.top)
-                } else {
-                    // Embedded view - no extra padding
-                    directionsList
-                }
-            }
-            .onChange(of: scrollToNewItem) { _, newID in
-                if let newID = newID {
+            directionsList
+                // Standalone gets its own padding; embedded takes the host's.
+                .padding(.horizontal, showToolbar ? nil : 0)
+                .padding(.top, showToolbar ? nil : 0)
+                .onChange(of: scrollToNewItem) { _, newID in
+                    guard let newID else { return }
                     withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
-                    // Set focus after scrolling
+                    // Focus once the row has been laid out.
                     Task {
-                        try? await Task.sleep(for: .seconds(0.1))
+                        try? await Task.sleep(for: .seconds(0.2))
                         focusedDirectionID = newID
                         scrollToNewItem = nil
                     }
                 }
-            }
         }
     }
-    
+
     private var bottomActionButtons: some View {
         HStack {
             Button {
-                addNewStep()
+                addStep()
             } label: {
                 Label("New Step", systemImage: "plus.circle")
             }
             .keyboardShortcut("n", modifiers: [.command])
-            
+
             Button {
-                addNewHeading()
+                addHeading()
             } label: {
                 Label("New Heading", systemImage: "folder.badge.plus")
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
-            
+
             Spacer()
         }
     }
-    
+
     private var directionsList: some View {
         VStack(spacing: 0) {
-            ForEach(editingDirections, id: \.id) { direction in
-                if let index = editingDirections.firstIndex(where: { $0.id == direction.id }),
-                   index < editingDirections.count {
-                    dropIndicator(for: index)
-                    directionRow(at: index)
-                }
+            ForEach($recipe.directions) { $direction in
+                let id = direction.id
+                RecipeListDropIndicator(isActive: dropTarget == .above(id))
+                DirectionEditRowView(
+                    direction: $direction,
+                    stepNumber: RecipeItemListEditor.stepNumber(forDirectionWith: id, in: recipe.directions),
+                    isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: recipe.directions),
+                    focusedDirectionID: $focusedDirectionID,
+                    onAdd: { addStep(below: id) },
+                    onDelete: { delete(id: id) },
+                    onDrop: { droppedID in move(droppedID, to: .above(id)) },
+                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) }
+                )
+                .id(id)
             }
-            dropIndicatorAtEnd
-        }
-    }
-    
-    @ViewBuilder
-    private func dropIndicator(for index: Int) -> some View {
-        if let dropTarget = dropTargetIndex, dropTarget == index {
-            Rectangle()
-                .fill(Color.accentColor)
-                .frame(height: 3)
-                .padding(.horizontal, 20)
-                .transition(.opacity.combined(with: .scale))
-        }
-    }
-    
-    @ViewBuilder
-    private var dropIndicatorAtEnd: some View {
-        let currentCount = editingDirections.count
-        if let dropTarget = dropTargetIndex, dropTarget == currentCount, currentCount >= 0 {
-            Rectangle()
-                .fill(Color.primary)
-                .frame(height: 2)
-                .padding(.horizontal, 20)
-                .transition(.opacity.combined(with: .scale))
-        }
-    }
-    
-    @ViewBuilder
-    private func directionRow(at index: Int) -> some View {
-        // Ensure index is valid before accessing - double check to prevent race conditions
-        if index >= 0 && index < editingDirections.count {
-            let direction = editingDirections[index]
-            // Create a safe binding that checks bounds
-            let directionBinding = Binding<Direction>(
-                get: {
-                    guard index >= 0 && index < editingDirections.count else {
-                        return direction
-                    }
-                    return editingDirections[index]
-                },
-                set: { newValue in
-                    guard index >= 0 && index < editingDirections.count else { return }
-                    editingDirections[index] = newValue
-                }
+            RecipeListEndDropZone(
+                isActive: dropTarget == .end,
+                onDrop: { droppedID in move(droppedID, to: .end) },
+                onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
-            // Calculate step number by counting non-heading directions before this index
-            let stepNumber = editingDirections.prefix(index).filter { !($0.isHeading ?? false) }.count + 1
-            // Alternating background colors for list effect
-            let backgroundColor = (index % 2 == 0 || editingDirections.count < 3)
-                ? Color.clear
-                : Color(nsColor: .tertiarySystemFill)
-            DirectionEditRowView(
-                direction: directionBinding,
-                index: index,
-                stepNumber: (direction.isHeading ?? false) ? nil : stepNumber,
-                backgroundColor: backgroundColor,
-                onAdd: { addStepAfter(index) },
-                onDelete: { deleteStep(at: index) },
-                onMove: { fromIndex, toIndex in
-                    moveStep(from: fromIndex, to: toIndex)
-                },
-                onDragStart: {
-                    draggedItem = direction
-                },
-                onDragEnd: {
-                    draggedItem = nil
-                    dropTargetIndex = nil
-                },
-                onDropTargetChanged: { targetIndex in
-                    dropTargetIndex = targetIndex
-                }
+        }
+    }
+
+    // MARK: - Editing
+
+    private func addStep(below id: String) {
+        withAnimation(.easeIn) {
+            scrollToNewItem = RecipeItemListEditor.insert(
+                .emptyRow(isHeading: false),
+                below: id,
+                in: &recipe.directions
             )
-            .focused($focusedDirectionID, equals: direction.id)
-            .id(direction.id)
         }
     }
-    
-    private func addStepAfter(_ index: Int) {
-        let newDirection = Direction(
-            id: UUIDV7().uuidString,
-            isHeading: false,
-            text: ""
-        )
+
+    private func addStep() {
+        append(.emptyRow(isHeading: false))
+    }
+
+    private func addHeading() {
+        append(.emptyRow(isHeading: true))
+    }
+
+    private func append(_ direction: Direction) {
         withAnimation(.easeIn) {
-            editingDirections.insert(newDirection, at: index + 1)
-        }
-        scrollToNewItem = newDirection.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedDirectionID = newDirection.id
+            scrollToNewItem = RecipeItemListEditor.append(direction, to: &recipe.directions)
         }
     }
-    
-    private func deleteStep(at index: Int) {
-        guard index >= 0 && index < editingDirections.count else { return }
-        // Clear or adjust drop target if needed
-        if let dropTarget = dropTargetIndex {
-            if dropTarget == index {
-                // Clear if deleting the drop target itself
-                dropTargetIndex = nil
-            } else if dropTarget > index {
-                // Adjust drop target index if item before it is deleted
-                dropTargetIndex = dropTarget - 1
-            }
-            // If dropTarget < index, no adjustment needed
-        }
+
+    private func delete(id: String) {
         withAnimation(.easeIn) {
-            _ = editingDirections.remove(at: index)
+            RecipeItemListEditor.delete(id: id, from: &recipe.directions)
         }
     }
-    
-    private func moveStep(from fromIndex: Int, to toIndex: Int) {
+
+    private func move(_ id: String, to target: RecipeItemListEditor.DropTarget) -> Bool {
+        var moved = false
         withAnimation(.easeIn) {
-            editingDirections.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
+            moved = RecipeItemListEditor.move(id: id, to: target, in: &recipe.directions)
+            dropTarget = nil
         }
+        return moved
     }
-    
-    private func addNewStep() {
-        let newDirection = Direction(
-            id: UUIDV7().uuidString,
-            isHeading: false,
-            text: ""
-        )
-        withAnimation(.easeIn) {
-            editingDirections.append(newDirection)
-        }
-        scrollToNewItem = newDirection.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedDirectionID = newDirection.id
-        }
-    }
-    
-    private func addNewHeading() {
-        let newDirection = Direction(
-            id: UUIDV7().uuidString,
-            isHeading: true,
-            text: ""
-        )
-        withAnimation(.easeIn) {
-            editingDirections.append(newDirection)
-        }
-        scrollToNewItem = newDirection.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedDirectionID = newDirection.id
+
+    /// Only the row currently being hovered clears the indicator: dragging from one row to the next
+    /// reports the new row as targeted before the old one reports that it isn't.
+    private func setDropTarget(_ target: RecipeItemListEditor.DropTarget, isTargeted: Bool) {
+        if isTargeted {
+            dropTarget = target
+        } else if dropTarget == target {
+            dropTarget = nil
         }
     }
 }
@@ -301,30 +190,26 @@ struct DirectionsEditView: View {
 
 struct DirectionEditRowView: View {
     @Binding var direction: Direction
-    let index: Int
     let stepNumber: Int?
-    let backgroundColor: Color
+    let isAlternateRow: Bool
+    var focusedDirectionID: FocusState<String?>.Binding
     let onAdd: () -> Void
     let onDelete: () -> Void
-    let onMove: (Int, Int) -> Void
-    let onDragStart: () -> Void
-    let onDragEnd: () -> Void
-    let onDropTargetChanged: (Int?) -> Void
-    
-    @State private var isDragging = false
-    @State private var isDropTarget = false
-    
+    /// Returns whether the drop was accepted.
+    let onDrop: (String) -> Bool
+    let onDropTargetChanged: (Bool) -> Void
+
     private var directionDragPreview: some View {
         HStack(alignment: .center, spacing: 8) {
-            if let stepNumber = stepNumber {
+            if let stepNumber {
                 Text("\(stepNumber).")
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
-            
+
             Text(direction.text)
-                .font(direction.isHeading == true ? .headline : .body)
-                .fontWeight(direction.isHeading == true ? .semibold : .regular)
+                .font(direction.isHeadingRow ? .headline : .body)
+                .fontWeight(direction.isHeadingRow ? .semibold : .regular)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
         }
@@ -337,10 +222,10 @@ struct DirectionEditRowView: View {
         )
         .frame(maxWidth: 300)
     }
-    
+
     var body: some View {
         HStack(alignment: .center, spacing: 2) {
-            if let stepNumber = stepNumber {
+            if let stepNumber {
                 Text("\(stepNumber).")
                     .font(.title2)
                     .frame(minWidth: 18, alignment: .trailing)
@@ -350,17 +235,17 @@ struct DirectionEditRowView: View {
                 Spacer()
                     .frame(width: 18)
             }
-            
-            TextField(direction.isHeading == true ? "Heading Name" : "Direction text", text: $direction.text, axis: .vertical)
-                .font(direction.isHeading == true ? .headline : .body)
-                .fontWeight(direction.isHeading == true ? .semibold : .regular)
-                .lineLimit(direction.isHeading == true ? 1...2 : 3...13)
+
+            TextField(direction.isHeadingRow ? "Heading Name" : "Direction text", text: $direction.text, axis: .vertical)
+                .font(direction.isHeadingRow ? .headline : .body)
+                .fontWeight(direction.isHeadingRow ? .semibold : .regular)
+                .lineLimit(direction.isHeadingRow ? 1...2 : 3...13)
                 .textFieldStyle(.squareBorder)
-                //.padding()
-            
+                .focused(focusedDirectionID, equals: direction.id)
+
             Spacer()
                 .frame(width: 2)
-            
+
             // Action buttons - centered vertically
             VStack {
                 HStack(spacing: 4) {
@@ -372,7 +257,7 @@ struct DirectionEditRowView: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.green)
-                    
+
                     Button {
                         onDelete()
                     } label: {
@@ -381,20 +266,14 @@ struct DirectionEditRowView: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
                     .foregroundStyle(.red)
-                    
-                    // Drag handle - only this can drag
+
+                    // Drag handle - only this can drag. The payload is the row's id, so a drop can
+                    // tell a real row from a stray text drag and never acts on a stale index.
                     Label("Drag to Move", systemImage: "line.3.horizontal")
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.tertiary)
-                        .draggable(String(index)) {
-                            Label("Drag to Move", systemImage: "line.3.horizontal")
-                                .labelStyle(.iconOnly)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .onDrag {
-                            isDragging = true
-                            onDragStart()
-                            return NSItemProvider(object: String(index) as NSString)
+                        .draggable(direction.id) {
+                            directionDragPreview
                         }
                 }
             }
@@ -402,26 +281,13 @@ struct DirectionEditRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
-        .background(backgroundColor)
+        .background(isAlternateRow ? Color(nsColor: .tertiarySystemFill) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .opacity(isDragging ? 0.4 : 1.0)
-        .scaleEffect(isDragging ? 0.95 : 1.0)
-        .animation(.spring, value: isDragging)
-        .dropDestination(for: String.self) { draggedIndices, location in
-            guard let draggedIndexString = draggedIndices.first,
-                  let draggedIndex = Int(draggedIndexString),
-                  draggedIndex != index else {
-                isDragging = false
-                onDragEnd()
-                return false
-            }
-            onMove(draggedIndex, draggedIndex < index ? index + 1 : index)
-            isDragging = false
-            onDragEnd()
-            return true
+        .dropDestination(for: String.self) { droppedIDs, _ in
+            guard let droppedID = droppedIDs.first else { return false }
+            return onDrop(droppedID)
         } isTargeted: { isTargeted in
-            isDropTarget = isTargeted
-            onDropTargetChanged(isTargeted ? index : nil)
+            onDropTargetChanged(isTargeted)
         }
     }
 }
