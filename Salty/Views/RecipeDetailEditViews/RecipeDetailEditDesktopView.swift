@@ -25,20 +25,34 @@ struct RecipeDetailEditDesktopView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                BasicInformationView(viewModel: viewModel)
-                IntroductionView(viewModel: viewModel)
-                IngredientsView(viewModel: viewModel)
-                DirectionsView(viewModel: viewModel)
-                PreparationTimesView(viewModel: viewModel)
-                NotesView(viewModel: viewModel)
-                VariationsView(viewModel: viewModel)
-                TagsView(viewModel: viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
-                NutritionView(viewModel: viewModel)
-                PhotoView(viewModel: viewModel)
-            }
-            .padding()
+        // A List rather than a ScrollView so the ingredient editor's rows can be the List's own rows:
+        // `onMove` reorders a ForEach only when the List is its direct parent. Every other section is
+        // one row of the List and keeps the look it had in the VStack.
+        List {
+            BasicInformationView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            IntroductionView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            IngredientsView(viewModel: viewModel)
+            DirectionsView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            PreparationTimesView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            NotesView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            VariationsView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            TagsView(viewModel: viewModel, showingAddTagAlert: $showingAddTagAlert, newTagName: $newTagName)
+                .modifier(DesktopFormRowStyle())
+            NutritionView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+            PhotoView(viewModel: viewModel)
+                .modifier(DesktopFormRowStyle())
+        }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
+        .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
+            RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
         }
         .toolbar {
             ToolbarItemGroup {
@@ -217,17 +231,19 @@ struct RecipeDetailEditDesktopView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
         
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            Section {
+                IngredientsListSectionView(recipe: $viewModel.recipe)
+            } header: {
                 HStack {
                     Text("Ingredients:")
                         .modifier(TitleDesktopEditorStyle())
                     Spacer()
-                    
+
                     Menu {
                         Button("Edit as Text (Bulk Edit)") {
                             viewModel.showingBulkEditIngredientsSheet.toggle()
                         }
-                        
+
                         Button("Scan Text") {
                             viewModel.scanTextTarget = .ingredients
                             viewModel.showingScanTextSheet.toggle()
@@ -238,13 +254,7 @@ struct RecipeDetailEditDesktopView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                
-                IngredientsEditView(recipe: $viewModel.recipe, showToolbar: false, showBottomButtons: true)
             }
-            .sheet(isPresented: $viewModel.showingBulkEditIngredientsSheet) {
-                RecipeIngredientsBulkEditView(recipe: $viewModel.recipe)
-            }
-            .padding(.bottom, 8)
         }
     }
     
@@ -419,6 +429,18 @@ struct RecipeDetailEditDesktopView: View {
         }
     }
     
+    // MARK: - Form Row Style Modifier
+
+    /// Restores what the sections had as VStack children: full-bleed width, no separators, and the
+    /// gap that `VStack(spacing: 24)` used to provide.
+    struct DesktopFormRowStyle: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
+        }
+    }
+
     // MARK: - Title Style Modifier
     struct TitleDesktopEditorStyle: ViewModifier {
         func body(content: Content) -> some View {
