@@ -1345,6 +1345,11 @@ private struct RootPresentationsModifier: ViewModifier {
                 viewModel.performHTMLExport()
             }
         }
+        .sheet(isPresented: $viewModel.showingPrintOptions) {
+            PrintOptionsView(options: $viewModel.printOptions, recipeCount: viewModel.pendingPrintRecipeCount) {
+                viewModel.performPrint()
+            }
+        }
         // One alert serves every lightweight sync trigger (pull-to-refresh, footer rows, menu command);
         // benign outcomes never set errorMessage, so this only appears for real failures.
         .alert("Sync Failed", isPresented: showingSyncErrorAlert) {

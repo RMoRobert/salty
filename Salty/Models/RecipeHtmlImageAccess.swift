@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 import SQLiteData
@@ -24,38 +25,54 @@ extension Recipe {
     }
 
     public var imageAsBase64: String? {
-        // Modified from https://www.reddit.com/r/iOSProgramming/comments/10odrf5/convert_coregraphics_cgimage_and_base64_string
-        guard let imageData = fullImageData else {
+        Self.jpegBase64(from: fullImageData, grayscale: false)
+    }
+
+    /// The photo as base64 JPEG, optionally desaturated (for grayscale printing — WebKit drops CSS image
+    /// filters when paginating to PDF, so the pixels themselves have to be gray).
+    func imageAsBase64(grayscale: Bool) -> String? {
+        Self.jpegBase64(from: fullImageData, grayscale: grayscale)
+    }
+
+    /// Re-encodes `imageData` (any ImageIO-readable format) as base64 JPEG, converting to grayscale on request.
+    static func jpegBase64(from imageData: Data?, grayscale: Bool) -> String? {
+        guard let imageData,
+              let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+              var cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
             return nil
         }
-        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil) else {
-            return nil
+        if grayscale, let gray = Self.grayscaleCopy(of: cgImage) {
+            cgImage = gray
         }
-        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-            return nil
-        }
-        // For compression, but unsure if need to manually "releae" CFDictionary, and default is easier for now (and may be perfectly fine)
-        //let properties: [CFString : Any] = ([kCGImageDestinationLossyCompressionQuality: 0.8 as CFNumber] as CFDictionary) as! [CFString : Any]
         guard let mutableData = CFDataCreateMutable(nil, 0),
-              //let dest = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, properties as CFDictionary)
-              let dest = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, nil)
-        else {
+              let dest = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, nil) else {
             return nil
         }
         CGImageDestinationAddImage(dest, cgImage, nil)
         guard CGImageDestinationFinalize(dest) else {
             return nil
         }
-        let data = mutableData as Foundation.Data
-        return data.base64EncodedString()
+        return (mutableData as Foundation.Data).base64EncodedString()
+    }
+
+    /// `image` redrawn into an 8-bit device-gray bitmap.
+    private static func grayscaleCopy(of image: CGImage) -> CGImage? {
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue) else {
+            return nil
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage()
     }
 
     /// This recipe as one page of a `RecipeHtmlDocument`: photo inlined, course / category / tag names
     /// resolved from the library.
-    func htmlPage(database: any DatabaseReader) -> RecipeHtmlPage {
+    /// - Parameter grayscaleImage: desaturate the photo (grayscale printing).
+    func htmlPage(database: any DatabaseReader, grayscaleImage: Bool = false) -> RecipeHtmlPage {
         let names = libraryNames(database: database)
         return RecipeHtmlPage(recipe: self, course: names.course, categories: names.categories, tags: names.tags,
-                              imageBase64: imageAsBase64)
+                              imageBase64: imageAsBase64(grayscale: grayscaleImage))
     }
 
     /// Renders to HTML with the recipe's own photo inlined.
