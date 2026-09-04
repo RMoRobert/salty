@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct HTMLExportOptions {
+public struct HTMLExportOptions: Codable, Equatable, Sendable {
     public var includeIntroduction: Bool = true
     public var includeIngredients: Bool = true
     public var includeDirections: Bool = true

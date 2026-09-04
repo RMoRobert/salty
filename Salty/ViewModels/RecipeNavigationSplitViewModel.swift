@@ -183,6 +183,11 @@ class RecipeNavigationSplitViewModel {
     var showingHTMLExportSettings = false
     var htmlExportOptions = HTMLExportOptions()
     var htmlExportRecipeId: String? // Store recipe ID for single recipe export
+
+    // Print options sheet: the recipes waiting on it, and the choices (remembered between prints).
+    var showingPrintOptions = false
+    var printOptions = RecipePrintOptions.loadFromDefaults()
+    private var pendingPrintRecipes: [Recipe] = []
     
     
 
@@ -725,15 +730,34 @@ class RecipeNavigationSplitViewModel {
         printRecipes([recipe])
     }
 
+    /// Shows the print options sheet for `recipesToPrint`; `performPrint()` runs when it's confirmed.
     private func printRecipes(_ recipesToPrint: [Recipe]) {
-        // Print with the user's selected recipe theme (matches the web detail view), and with everything
-        // included — the HTML export sheet's options are for exports, not printouts.
+        pendingPrintRecipes = recipesToPrint
+        showingPrintOptions = true
+    }
+
+    var pendingPrintRecipeCount: Int { pendingPrintRecipes.count }
+
+    /// Prints the recipes the options sheet was shown for, with its current choices.
+    func performPrint() {
+        let recipesToPrint = pendingPrintRecipes
+        pendingPrintRecipes = []
+        guard !recipesToPrint.isEmpty else { return }
+        printOptions.saveToDefaults()
+        let options = printOptions
+        // Print with the user's selected recipe theme (matches the web detail view).
         let theme = RecipeHtmlTheme(rawValue: UserDefaults.standard.string(forKey: "recipeHtmlTheme") ?? "") ?? .modern
         let title = recipesToPrint.count == 1 ? recipesToPrint[0].name : "\(recipesToPrint.count) Recipes"
-        let html = RecipeHtmlDocument.render(recipesToPrint.map { $0.htmlPage(database: database) },
-                                             options: HTMLExportOptions(), theme: theme, title: title)
-        logger.info("Printing: \(title)")
-        RecipePrinter.print(html: html, jobTitle: title)
+        let jobs = recipesToPrint.map { recipe -> RecipePrintJob in
+            let page = recipe.htmlPage(database: database, grayscaleImage: options.colorMode == .grayscale)   // names + photo, once
+            let footer = [recipe.source, recipe.sourceDetails].filter { !$0.isEmpty }.joined(separator: " — ")
+            return RecipePrintJob(headerText: recipe.name, footerText: footer) { scale in
+                RecipeHtmlDocument.render([page], options: options.content, theme: theme, title: recipe.name,
+                                          printOptions: options, printScale: scale)
+            }
+        }
+        logger.info("Printing: \(title) (\(options.paperSize.rawValue) \(options.orientation.rawValue))")
+        RecipePrinter.print(jobs: jobs, options: options, jobTitle: title)
     }
 
     /// Imports sample recipes from the app Resources directory

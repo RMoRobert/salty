@@ -66,8 +66,10 @@ public extension Recipe {
 
     /// The `<main>` element for this recipe — everything between the document's `<body>` tags for a
     /// single-recipe page. `RecipeHtmlDocument` wraps one or more of these in a shared `<head>`.
+    /// - Parameter ingredientColumns: 2 lays the ingredients out for a two-column printout (see
+    ///   `ingredientsInColumnReadingOrder` and the `.columns-2` print rule); anything else is one list.
     func htmlMainElement(options: HTMLExportOptions, course: String?, categories: [String],
-                         tags: [String], imageBase64: String?) -> Main {   // SaltyCore has its own `Tag` type
+                         tags: [String], imageBase64: String?, ingredientColumns: Int = 1) -> Main {   // SaltyCore has its own `Tag` type
         Main {
             Section {
                 Div {
@@ -170,7 +172,7 @@ public extension Recipe {
                 Section {
                     H2("Ingredients").id("recipe-ingredients-heading")
                         Ul {
-                            for ingredient in ingredients {
+                            for ingredient in ingredientsInColumnReadingOrder(columns: ingredientColumns) {
                                 if ingredient.isHeading {
                                     Li(ingredient.text.htmlEscaped)
                                         .class("recipe-ingredient-heading")
@@ -181,7 +183,7 @@ public extension Recipe {
                                 }
                             }
                         }
-                        .class("recipe-ingredients-list")
+                        .class(ingredientColumns == 2 ? "recipe-ingredients-list columns-2" : "recipe-ingredients-list")
                 }
                 .id("recipe-ingredients-container")
             }
@@ -269,6 +271,39 @@ public extension Recipe {
         }
     }
 
+}
+
+public extension Recipe {
+    /// Ingredients reordered for a multi-column print layout that is *rendered* row by row (inline-block
+    /// cells) but should *read* down each column. Headings stay where they are and start a new group;
+    /// within a group of n items laid out in `columns` columns of ceil(n / columns) rows, row r holds the
+    /// items at r, r + rows, r + 2·rows… — so displaying that order in rows reads column-first.
+    /// `columns` ≤ 1 returns the ingredients unchanged.
+    func ingredientsInColumnReadingOrder(columns: Int) -> [Ingredient] {
+        guard columns > 1 else { return ingredients }
+        var result: [Ingredient] = []
+        var group: [Ingredient] = []
+        func flushGroup() {
+            let rows = Int((Double(group.count) / Double(columns)).rounded(.up))
+            for row in 0..<rows {
+                for column in 0..<columns {
+                    let index = column * rows + row
+                    if index < group.count { result.append(group[index]) }
+                }
+            }
+            group.removeAll()
+        }
+        for ingredient in ingredients {
+            if ingredient.isHeading {
+                flushGroup()
+                result.append(ingredient)
+            } else {
+                group.append(ingredient)
+            }
+        }
+        flushGroup()
+        return result
+    }
 }
 
 public func getDefaultCSS() -> String {
@@ -1439,7 +1474,15 @@ body {
         margin: 0.5em 0 !important;
     }
     
-    /* Keep section headers with the content that follows (no orphaned heading at a page bottom). */
+    /* Keep headings with the content that follows (no orphaned heading at a page bottom).
+       WebKit's paginator does not honor break-after:avoid (a "Directions" heading was left alone at the
+       foot of a page with its first step on the next), but it does honor break-inside:avoid. So each
+       heading's box is stretched 3em downward with bottom padding: if those 3em — roughly the next two
+       lines — don't fit, the whole unsplittable heading moves to the next page. The space is then taken
+       back with a negative TOP margin on the element that follows (see the `+` rules below), so nothing
+       moves visually. It must be the follower's margin: WebKit measures an unsplittable box as height
+       plus its own margins, so a negative bottom margin on the heading itself would cancel the padding
+       and the trick silently does nothing (verified 2026-09). */
     #recipe-ingredients-container h2,
     #recipe-directions-container h2,
     #recipe-notes-container h2,
@@ -1448,15 +1491,38 @@ body {
     #recipe-prep-times-heading {
         break-after: avoid !important;
         page-break-after: avoid !important;
-        break-inside: avoid !important; /* Don't break headers themselves */
+        break-inside: avoid !important;
         page-break-inside: avoid !important;
-        margin-top: 0.5em !important; /* Reduce top margin */
-        margin-bottom: 0.25em !important; /* Reduce bottom margin */
+        margin-top: 0.5em !important;
+        margin-bottom: 0.25em !important;
+        padding-bottom: 3em !important;
     }
 
-    /* Likewise the sub-headings inside lists, notes, and variations travel with what follows them. */
-    .recipe-ingredient-heading,
-    .recipe-directions-heading,
+    #recipe-ingredients-container h2 + ul,
+    #recipe-directions-container h2 + ul,
+    #recipe-notes-container h2 + div,
+    #recipe-variations-container h2 + div,
+    #recipe-meta-container h2 + ul,
+    #recipe-prep-times-heading + ul {
+        margin-top: -3em !important; /* collapses with the heading's 0.25em to -2.75em */
+    }
+
+    /* Likewise the sub-headings inside the direction list and the single-column ingredient list. (In the
+       two-column layout the follower is an inline-block cell, where a negative top margin would misalign
+       the row, so those headings keep no extra padding and may end a page.) The list ancestor in the
+       selectors is there for specificity: the generic `.recipe-*-list li` padding rules above would
+       otherwise override the padding. */
+    .recipe-directions-list .recipe-directions-heading,
+    .recipe-ingredients-list:not(.columns-2) .recipe-ingredient-heading {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        margin-bottom: 0.25em !important;
+        padding-bottom: 3em !important;
+    }
+
+    /* Note and variation headings sit inside containers that are already kept whole. */
     .recipe-note-heading,
     .recipe-variation-heading {
         break-after: avoid !important;
@@ -1521,6 +1587,18 @@ body {
     .recipe-ingredient {
         padding-left: 1.2em !important; /* Ensure enough space for bullet */
     }
+
+    /* Two-column ingredients (print option). CSS multi-column is out: WebKit's paginator slices lines
+       under a multicol container just as it does under grid/flex (verified 2026-09). Inline-block cells
+       in ordinary block flow paginate row by row instead; the markup is pre-ordered so rows read down
+       the columns (Recipe.ingredientsInColumnReadingOrder). Headings stay full-width block rows. */
+    .recipe-ingredients-list.columns-2 li.recipe-ingredient {
+        display: inline-block !important;
+        width: 49% !important;
+        box-sizing: border-box !important;
+        vertical-align: top !important;
+        padding-right: 1em !important;
+    }
     
     .recipe-ingredient::before {
         content: '•' !important;
@@ -1557,11 +1635,16 @@ body {
         padding: 0.5em 1em !important; /* Reduce padding */
     }
     
-    /* Reduce spacing for ingredient headings */
+    /* Reduce spacing for ingredient headings (bottom spacing is set with the keep-with-next rule above) */
     .recipe-ingredient-heading,
     .recipe-directions-heading {
         margin-top: 0.5em !important;
-        margin-bottom: 0.25em !important;
+    }
+
+    /* Followers of the list sub-headings take back the keep-with-next padding (see above). */
+    .recipe-directions-list .recipe-directions-heading + li,
+    .recipe-ingredients-list:not(.columns-2) .recipe-ingredient-heading + li {
+        margin-top: -3em !important;
     }
     
     /* Reduce spacing for introduction */

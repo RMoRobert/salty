@@ -47,11 +47,47 @@ struct RecipeHtmlPrintTests {
         #expect(rule(".recipe-directions-list li", in: css).contains("break-inside: avoid"))
         #expect(rule(".recipe-ingredients-list li", in: css).contains("break-inside: avoid"))
         #expect(rule("""
-            .recipe-ingredient-heading,
-            .recipe-directions-heading,
             .recipe-note-heading,
             .recipe-variation-heading
         """.replacing("        ", with: "    "), in: css).contains("break-after: avoid"))
+    }
+
+    /// WebKit ignores break-after:avoid, so headings are kept with what follows by padding the
+    /// (unsplittable) heading 3em downward and pulling the follower back up with a negative top margin.
+    /// The margin must be on the follower: WebKit counts an element's own margins in its unsplittable
+    /// height, so a negative margin on the heading itself cancels the padding.
+    @Test func printKeepsHeadingsWithTheirFollowers() {
+        let css = printCSS()
+        let sectionHeadings = rule("""
+            #recipe-ingredients-container h2,
+            #recipe-directions-container h2,
+            #recipe-notes-container h2,
+            #recipe-variations-container h2,
+            #recipe-meta-container h2,
+            #recipe-prep-times-heading
+        """.replacing("        ", with: "    "), in: css)
+        #expect(sectionHeadings.contains("break-inside: avoid"))
+        #expect(sectionHeadings.contains("padding-bottom: 3em"))
+        #expect(!sectionHeadings.contains("margin-bottom: calc"), "no negative margin on the heading itself")
+        #expect(rule("""
+            #recipe-ingredients-container h2 + ul,
+            #recipe-directions-container h2 + ul,
+            #recipe-notes-container h2 + div,
+            #recipe-variations-container h2 + div,
+            #recipe-meta-container h2 + ul,
+            #recipe-prep-times-heading + ul
+        """.replacing("        ", with: "    "), in: css).contains("margin-top: -3em"))
+
+        let listHeadings = rule("""
+            .recipe-directions-list .recipe-directions-heading,
+            .recipe-ingredients-list:not(.columns-2) .recipe-ingredient-heading
+        """.replacing("        ", with: "    "), in: css)
+        #expect(listHeadings.contains("padding-bottom: 3em"))
+        #expect(listHeadings.contains("break-inside: avoid"))
+        #expect(rule("""
+            .recipe-directions-list .recipe-directions-heading + li,
+            .recipe-ingredients-list:not(.columns-2) .recipe-ingredient-heading + li
+        """.replacing("        ", with: "    "), in: css).contains("margin-top: -3em"))
     }
 
     @Test func printFlattensChipRows() {
