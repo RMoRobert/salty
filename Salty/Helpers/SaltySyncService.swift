@@ -123,13 +123,21 @@ class SaltySyncService {
         hasUnspentSavedPassword = false
     }
     
-    /// Unique device ID for sync tracking (generated once, persisted)
+    /// Unique device ID for sync tracking (generated once, persisted).
+    ///
+    /// Kept in the credential store beside the token, but unlike the token it is *portable*: it follows
+    /// an encrypted backup or device transfer, so a replacement phone carries on as the same device
+    /// and keeps its sync history. The token does not follow, so the restored phone asks for the
+    /// password once and re-enrols under this id -- which supersedes the previous phone's token
+    /// server-side (one token per device id). That supersession is what keeps two live devices from
+    /// quietly sharing one server-side watermark: the old phone is signed out and has to be
+    /// reconnected deliberately. (The one-time move from UserDefaults is `KeychainHelper`'s job.)
     private var deviceId: String {
-        if let existing = UserDefaults.standard.string(forKey: "syncDeviceId") {
+        if let existing = credentials.deviceId(), !existing.isEmpty {
             return existing
         }
         let newId = UUID().uuidString
-        UserDefaults.standard.set(newId, forKey: "syncDeviceId")
+        credentials.setDeviceId(newId)
         logger.info("Generated new device ID: \(newId)")
         return newId
     }
@@ -275,8 +283,12 @@ class SaltySyncService {
             throw SyncError.authenticationFailed("Invalid response from server")
         }
 
-        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-            logger.warning("Device token rejected (HTTP \(httpResponse.statusCode)); clearing it")
+        // Only a verdict from Salty Server itself may kill the token. A 401 is always that. A 403 is
+        // only that when the body is the server's JSON: NGINX access lists answer 403 with an HTML page,
+        // and a user who has simply left the home network must not be silently un-enrolled by it.
+        let statusCode = httpResponse.statusCode
+        if statusCode == 401 || (statusCode == 403 && SyncError.bodyIsServerJSON(data)) {
+            logger.warning("Device token rejected (HTTP \(statusCode)); clearing it")
             deviceToken = nil
             throw SyncError.enrolmentRequired
         }
@@ -599,13 +611,42 @@ class SaltySyncService {
             let serverShoppingLists = try await fetchListFromServer(ServerShoppingList.self, endpoint: "/api/shoppingLists")
             let serverRecipes = try await fetchRecipeDeltaPaged(modifiedSince: nil) // nil → all recipes
 
-            // Wipe the local database + local image files.
-            syncProgress.currentStep = "Clearing local data..."
-            let (oldImageFilenames, oldShoppingListIds) = try await database.read { db in
-                (try Recipe.fetchAll(db).compactMap { $0.imageFilename },
-                 try ShoppingList.fetchAll(db).map { $0.id })
+            // Anything the server sent that would trip the local filesystem or primary keys is refused
+            // before the wipe, so a hostile or corrupt server can't leave an empty library behind.
+            for serverRecipe in serverRecipes where !RecipeImageManager.isSafeFilenameComponent(serverRecipe.id) {
+                throw SyncError.downloadFailed("Server sent a recipe with an invalid id")
             }
-            try await database.write { db in
+
+            // Shopping-list rows land with their sync bookkeeping (revision + snapshot) so the next
+            // regular sync starts revision-based instead of legacy-seeding every row.
+            let shoppingListRows = try serverShoppingLists.map { try syncedLocalRow(for: $0) }
+
+            // The server's lists can carry a duplicated id (see the same guard in the ordinary sync
+            // paths); collapse them here so the strict inserts below can't fail on a UNIQUE clash.
+            let courseRows = Self.deduplicated(serverCourses.map {
+                Course(id: $0.id, name: $0.name ?? "", lastModifiedDate: $0.lastModifiedDate ?? Date())
+            }, by: \.id)
+            let categoryRows = Self.deduplicated(serverCategories.map {
+                Category(id: $0.id, name: $0.name ?? "", lastModifiedDate: $0.lastModifiedDate ?? Date())
+            }, by: \.id)
+            let tagRows = Self.deduplicated(serverTags.map {
+                Tag(id: $0.id, name: $0.name ?? "", lastModifiedDate: $0.lastModifiedDate ?? Date())
+            }, by: \.id)
+            let listRows = Self.deduplicated(shoppingListRows, by: \.id)
+            let recipeRows = Self.deduplicated(serverRecipes, by: \.id)
+
+            let oldShoppingListIds = try await database.read { db in
+                try ShoppingList.fetchAll(db).map { $0.id }
+            }
+
+            // Wipe and repopulate in ONE transaction. Anything that fails from here to the commit --
+            // a decode error, a foreign-key clash, the app being killed -- rolls the wipe back too, so
+            // the worst outcome is the library the user already had, never an empty one. Image files
+            // are deleted only after the commit, for the same reason.
+            syncProgress.currentStep = "Replacing local data..."
+            let oldImageFilenames = try await database.write { db -> [String] in
+                let previousImages = try Recipe.fetchAll(db).compactMap { $0.imageFilename }
+
                 try RecipeCategory.delete().execute(db)
                 try RecipeTag.delete().execute(db)
                 try Recipe.delete().execute(db)
@@ -613,52 +654,40 @@ class SaltySyncService {
                 try Category.delete().execute(db)
                 try Tag.delete().execute(db)
                 try ShoppingList.delete().execute(db)
+
+                // Courses/categories/tags first -- a downloaded recipe only links to ones that exist.
+                for row in courseRows { try Course.insert { row }.execute(db) }
+                for row in categoryRows { try Category.insert { row }.execute(db) }
+                for row in tagRows { try Tag.insert { row }.execute(db) }
+                for row in listRows { try ShoppingList.insert { row }.execute(db) }
+
+                for serverRecipe in recipeRows {
+                    try self.writeDownloadedRecipe(serverRecipe, in: db)
+                }
+
+                // Every recipe here came from the server moments ago, so the two sides agree by
+                // construction. Recording that stops the next ordinary sync from reading the whole
+                // restored library as never-agreed and uploading all of it straight back (SHARED-V0005).
+                try RecipeAgreementStore.markAllAgreed(in: db)
+                try ClassifierAgreementStore.markAllAgreed(in: db)
+
+                return previousImages
             }
+
+            // Committed. The old image files are unreferenced now, and the image pass below refetches
+            // every photo the server has.
             for filename in oldImageFilenames {
                 RecipeImageManager.shared.deleteImage(filename: filename)
             }
 
-            // Shopping-list rows land with their sync bookkeeping (revision + snapshot) so the next
-            // regular sync starts revision-based instead of legacy-seeding every row.
-            let shoppingListRows = try serverShoppingLists.map { try syncedLocalRow(for: $0) }
-
-            // Insert courses/categories/tags first -- downloadRecipe only links categories/tags that already exist locally.
-            try await database.write { db in
-                for c in serverCourses {
-                    try Course.insert { Course(id: c.id, name: c.name ?? "", lastModifiedDate: c.lastModifiedDate ?? Date()) }.execute(db)
-                }
-                for c in serverCategories {
-                    try Category.insert { Category(id: c.id, name: c.name ?? "", lastModifiedDate: c.lastModifiedDate ?? Date()) }.execute(db)
-                }
-                for t in serverTags {
-                    try Tag.insert { Tag(id: t.id, name: t.name ?? "", lastModifiedDate: t.lastModifiedDate ?? Date()) }.execute(db)
-                }
-                for row in shoppingListRows {
-                    try ShoppingList.insert { row }.execute(db)
-                }
-            }
             // Every list was replaced (or removed) wholesale; any open editor must reload rather
             // than save its pre-wipe content back.
-            for id in Set(oldShoppingListIds).union(shoppingListRows.map { $0.id }) {
+            for id in Set(oldShoppingListIds).union(listRows.map { $0.id }) {
                 ShoppingListChangeNotifier.shared.noteExternalChange(listId: id)
             }
-            syncProgress.itemsDownloaded += serverCourses.count + serverCategories.count + serverTags.count + serverShoppingLists.count
-
-            // Download recipes (marking them downloaded so syncImages pulls their images).
-            syncProgress.currentStep = "Downloading recipes..."
-            for serverRecipe in serverRecipes {
-                try await downloadRecipe(serverRecipe)
-                syncProgress.itemsDownloaded += 1
-                syncProgress.downloadedRecipeIds.insert(serverRecipe.id)
-            }
-
-            // Every recipe here came from the server moments ago, so the two sides agree by
-            // construction. Recording that stops the next ordinary sync from reading the whole restored
-            // library as never-agreed and uploading all of it straight back (SHARED-V0005).
-            try await database.write { db in
-                try RecipeAgreementStore.markAllAgreed(in: db)
-                try ClassifierAgreementStore.markAllAgreed(in: db)
-            }
+            syncProgress.itemsDownloaded += courseRows.count + categoryRows.count + tagRows.count + listRows.count
+            syncProgress.itemsDownloaded += recipeRows.count
+            syncProgress.downloadedRecipeIds.formUnion(recipeRows.map { $0.id })
 
             // Images: local files were wiped, so this only downloads (nothing to upload).
             syncProgress.currentStep = "Downloading images..."
@@ -1928,9 +1957,37 @@ class SaltySyncService {
             syncProgress.uploadedRecipeIds.insert(recipeId)
         }
 
-        // 6. Downloads — use the delta body when present, otherwise fetch that single recipe (covers the
-        //    rare case where the server copy is newer than local but predates lastSync).
-        for recipeId in plan.toDownload {
+        /*
+         * 6. Downloads — the plan's, PLUS everything it wanted deleted from the SERVER.
+         *
+         * The plan's rule for a row the server has and we do not is a clock comparison: older than our
+         * watermark means "we had it and deleted it". That is the reasoning SHARED-V0005 replaced on the
+         * local side with a recorded fact, and it is no better here. A deliberate deletion does not reach
+         * this branch at all — it travels as a TOMBSTONE, pushed and cleared above, and filtered out of
+         * the manifest — so what lands here is a row we cannot prove we deleted.
+         *
+         * What produces one is the library losing its memory rather than a clock disagreeing. Point the
+         * app at a different bundle (FileHelper keeps a security-scoped bookmark for exactly that) and
+         * the device id, which is per install, brings the previous library's watermark with it: every
+         * recipe the new library lacks reads as one this device deleted. Restoring an older library over
+         * a current watermark does the same. Neither is caught by the empty-library guard, because the
+         * library is not empty — it is simply a different one.
+         *
+         * So the row is taken rather than destroyed. The cost is a deletion whose tombstone was lost
+         * coming back, to be deleted again; the cost of the alternative is recipes nobody deleted going
+         * from every device at once. SYNC-008 already states the preference — "losing a recipe is worse
+         * than resurrecting one" — and SYNC-007 applies it in the local direction. This is the same rule
+         * in the direction that was missing it. Downloading rather than merely skipping also CONVERGES:
+         * the row exists here afterwards, so the next sync sees an ordinary two-sided row.
+         *
+         * Deliberately NOT a change to RecipeSyncReconciler.plan, which is the cross-client contract
+         * SaltyKMP implements too and the corpus pins. SaltyKMP declines the same list at the same point.
+         *
+         * Use the delta body when present, otherwise fetch that single recipe (covers the rare case
+         * where the server copy is newer than local but predates lastSync).
+         */
+        let toDownload = plan.toDownload + plan.toDeleteOnServer
+        for recipeId in toDownload {
             try Task.checkCancellation()
             let serverRecipe: ServerRecipe
             if let body = deltaById[recipeId] {
@@ -1950,29 +2007,25 @@ class SaltySyncService {
         if serverResponseAllowsLocalDeletions(serverItemCount: fullManifest.count, pendingLocalDeletions: plan.toDeleteLocally.count, entity: "recipe") {
             for recipeId in plan.toDeleteLocally {
                 logger.info("Deleting recipe \(recipeId) locally (was deleted on another device)")
-                if let recipe = localRecipesById[recipeId], let filename = recipe.imageFilename {
-                    RecipeImageManager.shared.deleteImage(filename: filename)
-                }
             }
             try await database.write { db in
                 for recipeId in plan.toDeleteLocally {
                     _ = try Recipe.deleteOne(db, key: recipeId)
                 }
             }
+            // Rows are gone; only now are their files unreferenced.
+            for recipeId in plan.toDeleteLocally {
+                if let recipe = localRecipesById[recipeId], let filename = recipe.imageFilename {
+                    RecipeImageManager.shared.deleteImage(filename: filename)
+                }
+            }
             syncProgress.itemsDownloaded += plan.toDeleteLocally.count // Count as sync actions
         }
 
-        // Delete recipes on server that were deleted locally.
-        // And the mirror: an empty library must not ask the server to delete everything it has.
-        let mayDeleteRecipesOnServer = localLibraryAllowsServerDeletions(
-            localItemCount: localEntries.count, pendingServerDeletions: plan.toDeleteOnServer.count, entity: "recipe")
-        if !plan.toDeleteOnServer.isEmpty && mayDeleteRecipesOnServer {
-            logger.info("Deleting \(plan.toDeleteOnServer.count) recipe(s) on server (were deleted locally)")
-            try await deleteRecipesOnServer(recipeIds: plan.toDeleteOnServer)
-        }
-
+        // Nothing is deleted on the server here. A deliberate deletion is a tombstone, pushed above; the
+        // plan's guess is downloaded instead. See the note on `toDownload`.
         if !plan.toDeleteLocally.isEmpty || !plan.toDeleteOnServer.isEmpty {
-            logger.info("Deletion sync: \(plan.toDeleteLocally.count) deleted locally, \(plan.toDeleteOnServer.count) deleted on server")
+            logger.info("Deletion sync: \(plan.toDeleteLocally.count) deleted locally, \(plan.toDeleteOnServer.count) taken from the server rather than deleted")
         }
 
         // 8. Record what this pass agreed on, so the next one needn't guess (SHARED-V0005). Three groups
@@ -1984,7 +2037,7 @@ class SaltySyncService {
             let manifestIds = Set(manifest.map { $0.id })
             var agreed = Set(localRecipes.map { $0.id }).intersection(manifestIds)
             agreed.formUnion(plan.toUpload)
-            agreed.formUnion(plan.toDownload)
+            agreed.formUnion(toDownload)
             agreed.subtract(plan.toDeleteLocally)
 
             // A `let` snapshot: the write closure runs off this actor and cannot capture a var.
@@ -1997,7 +2050,7 @@ class SaltySyncService {
         }
 
         // 9. "Last made on" dates, which the body plan above is blind to by design.
-        try await syncPreparedDates(manifest: manifest, plan: plan)
+        try await syncPreparedDates(manifest: manifest, plan: plan, downloaded: toDownload)
     }
 
     /// Independent "last made on" reconciliation, keyed on `lastModifiedPreparedDate` — the same decoupling
@@ -2020,13 +2073,18 @@ class SaltySyncService {
     ///     only a push can still be owed.
     /// Skipping such ids entirely (the obvious simplification) leaves the losing side stale until the
     /// NEXT sync. Mirror of SaltyKMP's `SyncService.syncPreparedDates`.
+    /// - Parameter downloaded: what was ACTUALLY downloaded, which is the plan's list plus the rows it
+    ///   wanted deleted from the server (see the note at the call site). Passed in rather than read off
+    ///   the plan so that a resurrected row counts as downloaded — it is a live row on both sides, and
+    ///   calling it deleted here would be the one place this file still described it as gone.
     private func syncPreparedDates(
         manifest: [ServerRecipeManifestEntry],
-        plan: RecipeSyncReconciler.Plan
+        plan: RecipeSyncReconciler.Plan,
+        downloaded: [String]
     ) async throws {
         let uploadedBodies = Set(plan.toUpload)
-        let downloadedBodies = Set(plan.toDownload)
-        let deleted = Set(plan.toDeleteLocally).union(plan.toDeleteOnServer)
+        let downloadedBodies = Set(downloaded)
+        let deleted = Set(plan.toDeleteLocally)
         // Read AFTER the body plan ran, so downloaded rows show their post-merge prepared pair.
         let localRecipes = try await database.read { db in try Recipe.fetchAll(db) }
         let localById = Dictionary(localRecipes.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
@@ -2129,112 +2187,132 @@ class SaltySyncService {
         logger.info("Uploaded recipe: \(recipe.name) with \(categoryIds.count) categories (IDs: \(categoryIds)) and \(tagIds.count) tags (IDs: \(tagIds))")
     }
     
+    /// Keeps the first row for each key, so a server list that repeats an id can't fail a strict insert.
+    nonisolated private static func deduplicated<Row, Key: Hashable>(_ rows: [Row], by key: KeyPath<Row, Key>) -> [Row] {
+        var seen = Set<Key>()
+        return rows.filter { seen.insert($0[keyPath: key]).inserted }
+    }
+
     private func downloadRecipe(_ serverRecipe: ServerRecipe) async throws {
-        let recipe = serverRecipe.toLocalRecipe()
+        // The id becomes the image file's name on disk, so it has to be a plain file name -- a server
+        // could otherwise write outside the images folder through the image pass.
+        guard RecipeImageManager.isSafeFilenameComponent(serverRecipe.id) else {
+            throw SyncError.downloadFailed("Server sent a recipe with an invalid id")
+        }
 
         logger.info("downloadRecipe called for '\(serverRecipe.name)' with categoryIds: \(serverRecipe.categoryIds ?? []), tagIds: \(serverRecipe.tagIds ?? [])")
 
         try await database.write { db in
-            // The server has no FK on course_id, so it can serve a recipe whose course was deleted.
-            // Writing that dangling courseId would fail the local `courseId → course` FK, so null it on a
-            // local copy. (Courses sync before recipes, so a still-valid course is already present here.)
-            var toWrite = recipe
-            if let cid = toWrite.courseId,
-               try Int.fetchOne(db, sql: #"SELECT 1 FROM "course" WHERE "id" = ?"#, arguments: [cid]) == nil {
-                logger.warning("Recipe '\(toWrite.name)' references missing course \(cid); clearing it.")
-                toWrite.courseId = nil
-            }
+            try self.writeDownloadedRecipe(serverRecipe, in: db)
+        }
+        logger.info("Downloaded recipe complete: \(serverRecipe.name)")
+    }
 
-            // Check if recipe already exists
-            let existing = try Recipe.where { $0.id.eq(recipe.id) }.fetchOne(db)
+    /// Upserts one server recipe and its category/tag links inside the caller's transaction.
+    ///
+    /// Nonisolated so it can run inside a `database.write` closure: the ordinary sync wraps one recipe
+    /// per transaction, while a force pull writes the whole library in a single one.
+    nonisolated private func writeDownloadedRecipe(_ serverRecipe: ServerRecipe, in db: Database) throws {
+        let recipe = serverRecipe.toLocalRecipe()
 
-            // Image state (filename, thumbnail, image timestamp) is owned ENTIRELY by the image-sync pass,
-            // never the body. Preserve the local image for an existing recipe so a text-only body update
-            // can't wipe it; leave a brand-new recipe imageless so the image pass sees the server image as
-            // newer and downloads its bytes.
-            toWrite.imageFilename = existing?.imageFilename
-            toWrite.imageThumbnailData = existing?.imageThumbnailData
-            toWrite.lastModifiedImageDate = existing?.lastModifiedImageDate
+        // The server has no FK on course_id, so it can serve a recipe whose course was deleted.
+        // Writing that dangling courseId would fail the local `courseId → course` FK, so null it on a
+        // local copy. (Courses sync before recipes, so a still-valid course is already present here.)
+        var toWrite = recipe
+        if let cid = toWrite.courseId,
+           try Int.fetchOne(db, sql: #"SELECT 1 FROM "course" WHERE "id" = ?"#, arguments: [cid]) == nil {
+            logger.warning("Recipe '\(toWrite.name)' references missing course \(cid); clearing it.")
+            toWrite.courseId = nil
+        }
 
-            // The "last made on" pair rides along with the body, but the body's clock doesn't decide it:
-            // keep whichever side's lastModifiedPreparedDate is newer. Without this, downloading a body
-            // edit made elsewhere would silently undo a mark-as-made this device hasn't uploaded yet.
-            // (The server applies the same merge on upsert, so both directions agree.)
-            if let existing,
-               (existing.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
-                 > (toWrite.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis {
-                toWrite.lastPrepared = existing.lastPrepared
-                toWrite.lastModifiedPreparedDate = existing.lastModifiedPreparedDate
-            }
+        // Check if recipe already exists
+        let existing = try Recipe.where { $0.id.eq(recipe.id) }.fetchOne(db)
 
-            if existing != nil {
-                try Recipe.update(toWrite).execute(db)
-                logger.debug("Updated existing recipe: \(recipe.name)")
-            } else {
-                try Recipe.insert { toWrite }.execute(db)
-                logger.debug("Inserted new recipe: \(recipe.name)")
-            }
-            
-            // Update category relationships
-            // First delete existing relationships for this recipe
-            try RecipeCategory
-                .where { $0.recipeId.eq(recipe.id) }
-                .delete()
-                .execute(db)
-            logger.debug("Deleted existing category relationships for recipe \(recipe.id)")
-            
-            // Insert new category relationships
-            if let categoryIds = serverRecipe.categoryIds {
-                logger.info("Inserting \(categoryIds.count) category relationships for \(recipe.name)")
-                for categoryId in categoryIds {
-                    // Check if category exists locally
-                    let categoryExists = try Category.where { $0.id.eq(categoryId) }.fetchOne(db) != nil
-                    if !categoryExists {
-                        logger.warning("Category \(categoryId) does not exist locally - skipping relationship")
-                        continue
-                    }
-                    
-                    let rc = RecipeCategory(
-                        id: SaltyId.new(),
-                        recipeId: recipe.id,
-                        categoryId: categoryId
-                    )
-                    if try RecipeCategory.insertIfAbsent(rc, in: db) {
-                        logger.debug("Inserted RecipeCategory: recipe=\(recipe.id), category=\(categoryId)")
-                    }
+        // Image state (filename, thumbnail, image timestamp) is owned ENTIRELY by the image-sync pass,
+        // never the body. Preserve the local image for an existing recipe so a text-only body update
+        // can't wipe it; leave a brand-new recipe imageless so the image pass sees the server image as
+        // newer and downloads its bytes.
+        toWrite.imageFilename = existing?.imageFilename
+        toWrite.imageThumbnailData = existing?.imageThumbnailData
+        toWrite.lastModifiedImageDate = existing?.lastModifiedImageDate
+
+        // The "last made on" pair rides along with the body, but the body's clock doesn't decide it:
+        // keep whichever side's lastModifiedPreparedDate is newer. Without this, downloading a body
+        // edit made elsewhere would silently undo a mark-as-made this device hasn't uploaded yet.
+        // (The server applies the same merge on upsert, so both directions agree.)
+        if let existing,
+           (existing.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
+             > (toWrite.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis {
+            toWrite.lastPrepared = existing.lastPrepared
+            toWrite.lastModifiedPreparedDate = existing.lastModifiedPreparedDate
+        }
+
+        if existing != nil {
+            try Recipe.update(toWrite).execute(db)
+            logger.debug("Updated existing recipe: \(recipe.name)")
+        } else {
+            try Recipe.insert { toWrite }.execute(db)
+            logger.debug("Inserted new recipe: \(recipe.name)")
+        }
+        
+        // Update category relationships
+        // First delete existing relationships for this recipe
+        try RecipeCategory
+            .where { $0.recipeId.eq(recipe.id) }
+            .delete()
+            .execute(db)
+        logger.debug("Deleted existing category relationships for recipe \(recipe.id)")
+        
+        // Insert new category relationships
+        if let categoryIds = serverRecipe.categoryIds {
+            logger.info("Inserting \(categoryIds.count) category relationships for \(recipe.name)")
+            for categoryId in categoryIds {
+                // Check if category exists locally
+                let categoryExists = try Category.where { $0.id.eq(categoryId) }.fetchOne(db) != nil
+                if !categoryExists {
+                    logger.warning("Category \(categoryId) does not exist locally - skipping relationship")
+                    continue
                 }
-            }
-            
-            // Update tag relationships
-            try RecipeTag
-                .where { $0.recipeId.eq(recipe.id) }
-                .delete()
-                .execute(db)
-            logger.debug("Deleted existing tag relationships for recipe \(recipe.id)")
-            
-            // Insert new tag relationships
-            if let tagIds = serverRecipe.tagIds {
-                logger.info("Inserting \(tagIds.count) tag relationships for \(recipe.name)")
-                for tagId in tagIds {
-                    // Check if tag exists locally
-                    let tagExists = try Tag.where { $0.id.eq(tagId) }.fetchOne(db) != nil
-                    if !tagExists {
-                        logger.warning("Tag \(tagId) does not exist locally - skipping relationship")
-                        continue
-                    }
-                    
-                    let rt = RecipeTag(
-                        id: SaltyId.new(),
-                        recipeId: recipe.id,
-                        tagId: tagId
-                    )
-                    if try RecipeTag.insertIfAbsent(rt, in: db) {
-                        logger.debug("Inserted RecipeTag: recipe=\(recipe.id), tag=\(tagId)")
-                    }
+                
+                let rc = RecipeCategory(
+                    id: SaltyId.new(),
+                    recipeId: recipe.id,
+                    categoryId: categoryId
+                )
+                if try RecipeCategory.insertIfAbsent(rc, in: db) {
+                    logger.debug("Inserted RecipeCategory: recipe=\(recipe.id), category=\(categoryId)")
                 }
             }
         }
-        logger.info("Downloaded recipe complete: \(recipe.name)")
+        
+        // Update tag relationships
+        try RecipeTag
+            .where { $0.recipeId.eq(recipe.id) }
+            .delete()
+            .execute(db)
+        logger.debug("Deleted existing tag relationships for recipe \(recipe.id)")
+        
+        // Insert new tag relationships
+        if let tagIds = serverRecipe.tagIds {
+            logger.info("Inserting \(tagIds.count) tag relationships for \(recipe.name)")
+            for tagId in tagIds {
+                // Check if tag exists locally
+                let tagExists = try Tag.where { $0.id.eq(tagId) }.fetchOne(db) != nil
+                if !tagExists {
+                    logger.warning("Tag \(tagId) does not exist locally - skipping relationship")
+                    continue
+                }
+                
+                let rt = RecipeTag(
+                    id: SaltyId.new(),
+                    recipeId: recipe.id,
+                    tagId: tagId
+                )
+                if try RecipeTag.insertIfAbsent(rt, in: db) {
+                    logger.debug("Inserted RecipeTag: recipe=\(recipe.id), tag=\(tagId)")
+                }
+            }
+        }
     }
     
     // MARK: - Image Sync
@@ -2394,7 +2472,15 @@ class SaltySyncService {
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
 
-        let (data, response) = try await session.data(for: request)
+        // Streamed under the cap rather than buffered then measured: a response with no
+        // Content-Length would otherwise be held in full before the size check could run.
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request, maxBytes: maxBytes)
+        } catch let tooLarge as ResponseTooLargeError {
+            throw SyncError.downloadFailed("Image '\(filename)' is over the \(tooLarge.limit)-byte sync limit (\(tooLarge.observed) bytes); skipping")
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.downloadFailed("No HTTP response for image download: \(filename)")
@@ -2402,10 +2488,6 @@ class SaltySyncService {
 
         guard httpResponse.statusCode == 200 else {
             throw SyncError.downloadFailed("Image download failed for '\(filename)': \(SyncError.httpMessage(status: httpResponse.statusCode, body: data))")
-        }
-
-        guard data.count <= maxBytes else {
-            throw SyncError.downloadFailed("Image '\(filename)' is \(data.count) bytes, over the \(maxBytes)-byte sync limit; skipping")
         }
 
         logger.debug("Downloaded image '\(filename)': \(data.count) bytes")
@@ -2428,6 +2510,8 @@ class SaltySyncService {
                     arguments: [result.filename, result.thumbnailData, imageDate, recipeId]
                 )
             }
+            // Row committed; an older file under another extension is unreferenced now.
+            RecipeImageManager.shared.deleteImages(for: recipeId, except: result.filename)
             logger.info("Updated recipe \(recipeId) with downloaded image")
         } else {
             throw SyncError.downloadFailed("Failed to save downloaded image for recipe \(recipeId)")
@@ -2458,7 +2542,6 @@ class SaltySyncService {
         let filename = try await database.read { db in
             try Recipe.where { $0.id.eq(recipeId) }.fetchOne(db)?.imageFilename
         }
-        if let filename { RecipeImageManager.shared.deleteImage(filename: filename) }
         try await database.write { db in
             try db.execute(sql: """
                 UPDATE recipe
@@ -2468,6 +2551,8 @@ class SaltySyncService {
                 arguments: [imageDate, recipeId]
             )
         }
+        // Row no longer references the file; delete it only now.
+        if let filename { RecipeImageManager.shared.deleteImage(filename: filename) }
     }
 
     /// The wire timestamp format the server expects (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`, milliseconds).
@@ -2821,6 +2906,14 @@ extension SyncError {
         default:
             return "The server returned an unexpected response (HTTP \(status))."
         }
+    }
+
+    /// True when the body is a JSON object, which is what Salty Server itself answers with. A reverse
+    /// proxy or captive portal that intercepted the request answers with HTML (or nothing), so this is
+    /// how a verdict *from the server* is told apart from a network in the way.
+    static func bodyIsServerJSON(_ data: Data) -> Bool {
+        guard !data.isEmpty, !bodyLooksLikeHTML(data) else { return false }
+        return (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
     }
 
     /// True when the body looks like an HTML/markup page rather than our JSON API response. Our API always

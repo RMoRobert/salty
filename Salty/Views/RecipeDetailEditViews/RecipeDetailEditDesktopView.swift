@@ -414,7 +414,7 @@ struct RecipeDetailEditDesktopView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Photo:")
                     .modifier(TitleDesktopEditorStyle())
-                RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 150)
+                RecipeImageEditView(recipe: $viewModel.recipe, pendingImage: $viewModel.pendingImage, imageFrameSize: 150)
             }
         }
     }

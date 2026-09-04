@@ -81,8 +81,8 @@ final class DuplicateRecipesViewModel {
         showingDeleteConfirmation = true
     }
 
-    /// Deletes the recipes a confirmed delete applies to, removing their image files first (the same
-    /// order the main recipe list uses — the row is what makes the file reachable).
+    /// Deletes the recipes a confirmed delete applies to, then their image files (the same order the
+    /// main recipe list uses — a failed row delete must leave the recipe with its photo).
     func deleteConfirmedRecipes() async {
         let ids = deleteCandidateIDs
         guard !ids.isEmpty else { return }
@@ -93,15 +93,15 @@ final class DuplicateRecipesViewModel {
                     .where { $0.id.in(ids) }
                     .fetchAll(db)
             }
-            for case let filename? in imageFilenames {
-                RecipeImageManager.shared.deleteImage(filename: filename)
-            }
             try await database.write { db in
                 try Recipe.where { $0.id.in(ids) }.delete().execute(db)
                 // Tombstoned like any other deletion: consolidating duplicates is still a deletion, and
                 // without this the copies come back on the next sync from a peer. See
                 // RecipeTombstoneWriter.
                 try RecipeTombstoneWriter.recordDeletions(Array(ids), in: db)
+            }
+            for case let filename? in imageFilenames {
+                RecipeImageManager.shared.deleteImage(filename: filename)
             }
             selectedRecipeIDs.subtract(ids)
             deleteCandidateIDs.removeAll()

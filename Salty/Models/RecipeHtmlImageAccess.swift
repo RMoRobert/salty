@@ -14,6 +14,7 @@
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+import SQLiteData
 import SaltyCore
 
 extension Recipe {
@@ -47,6 +48,14 @@ extension Recipe {
         }
         let data = mutableData as Foundation.Data
         return data.base64EncodedString()
+    }
+
+    /// This recipe as one page of a `RecipeHtmlDocument`: photo inlined, course / category / tag names
+    /// resolved from the library.
+    func htmlPage(database: any DatabaseReader) -> RecipeHtmlPage {
+        let names = libraryNames(database: database)
+        return RecipeHtmlPage(recipe: self, course: names.course, categories: names.categories, tags: names.tags,
+                              imageBase64: imageAsBase64)
     }
 
     /// Renders to HTML with the recipe's own photo inlined.

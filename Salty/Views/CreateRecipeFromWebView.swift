@@ -926,7 +926,7 @@ struct RecipeWebImportEditView: View {
                     Text("Photo")
                         .font(.headline)
                     
-                    RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 120)
+                    RecipeImageEditView(recipe: $viewModel.recipe, pendingImage: $viewModel.pendingImage, imageFrameSize: 120)
                 }
                 .padding(.bottom, 16)
             }

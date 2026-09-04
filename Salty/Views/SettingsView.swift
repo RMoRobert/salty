@@ -646,7 +646,7 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text("Salty automatically creates and stores up to a three recent backups of your recipe library.")
+                Text("Salty automatically backs up your recipe library about every day and a half, keeping the two most recent backups plus a few older ones spaced days to weeks apart.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -709,19 +709,24 @@ struct AdvancedSettingsView: View {
     private func createBackupNow() {
         isCreatingBackup = true
         backupMessage = "Creating backup..."
-        
-        backupManager.createBackupNow()
-        
-        // Wait a moment and then update the message
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            isCreatingBackup = false
-            backupMessage = "Backup created successfully!"
 
-            // Clear the message after a couple seconds
-            Task {
-                try? await Task.sleep(for: .seconds(2))
-                backupMessage = ""
+        Task {
+            // Report what actually happened: the message used to say "success" on a timer, whether or
+            // not the backup had been written.
+            do {
+                let backupURL = try await backupManager.createBackupNow()
+                backupMessage = "Backup created: \(backupURL.lastPathComponent)"
+            } catch {
+                backupMessage = "Backup failed: \(error.localizedDescription)"
+            }
+            isCreatingBackup = false
+
+            // Clear a success message after a few seconds; leave a failure showing.
+            if backupMessage.hasPrefix("Backup created") {
+                try? await Task.sleep(for: .seconds(4))
+                if backupMessage.hasPrefix("Backup created") {
+                    backupMessage = ""
+                }
             }
         }
     }

@@ -93,7 +93,33 @@ final class RecipeImageManager: @unchecked Sendable {
         }
     }
     
+    // MARK: - Filename safety
+
+    /// Whether `name` can be used as a single file name inside the images directory.
+    ///
+    /// Recipe ids and image filenames reach this class from the sync server as well as from the
+    /// app's own database, and `URL.appending(component:)` does NOT neutralise `..` -- a value like
+    /// `../../Library/Preferences/x` resolves straight out of the images folder. Anything that could
+    /// name a directory, climb out of one, or hide as a dotfile is refused here, and every entry point
+    /// below checks before touching the filesystem.
+    static func isSafeFilenameComponent(_ name: String) -> Bool {
+        guard !name.isEmpty, name.utf8.count <= 255 else { return false }
+        guard !name.hasPrefix(".") else { return false }
+        return !name.contains("/") && !name.contains("\\") && !name.contains("\0")
+    }
+
+    /// Writes `imageData` as this recipe's image and returns the stored filename with a thumbnail.
+    ///
+    /// The write is atomic and nothing is deleted here: an older file under a different extension
+    /// stays until `deleteImages(for:except:)` is called, which callers do only after the database row
+    /// pointing at the new file has been committed. A same-extension replacement overwrites in place,
+    /// which is the intended outcome of a save.
     func saveImage(_ imageData: Data, for recipeId: String) -> (filename: String, thumbnailData: Data)? {
+        guard Self.isSafeFilenameComponent(recipeId) else {
+            logger.error("Refusing to save an image for an unsafe recipe id")
+            return nil
+        }
+
         // Ensure the images directory exists before saving
         do {
             try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true, attributes: nil)
@@ -101,17 +127,16 @@ final class RecipeImageManager: @unchecked Sendable {
             logger.error("Failed to create images directory: \(error)")
             return nil
         }
-        
-        // Delete any existing images for this recipe (handles extension changes)
-        deleteAllImages(for: recipeId)
-        
+
         // Determine file extension from image data
         let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
         let filename = "\(recipeId).\(fileExtension)"
         let fileURL = imagesDirectory.appending(component: filename)
-        
+
         do {
-            try imageData.write(to: fileURL)
+            // Atomic: written to a temporary file and renamed into place, so a failure mid-write can't
+            // leave a truncated image under the final name.
+            try imageData.write(to: fileURL, options: .atomic)
             logger.debug("Saved image '\(filename)' (\(imageData.count) bytes)")
             let thumbnailData = generateThumbnail(from: imageData, size: CGSize(width: 300, height: 300))
             
@@ -129,14 +154,24 @@ final class RecipeImageManager: @unchecked Sendable {
         }
     }
     
-    /// Deletes all image files for a given recipe ID (any filename starting with "recipeId.")
-    private func deleteAllImages(for recipeId: String) {
+    /// Deletes the image files stored for a recipe (any filename starting with "recipeId."), keeping
+    /// only `keep` -- normally the filename the recipe's database row now references, or nil to
+    /// remove them all.
+    ///
+    /// This is the "delete" half of every image change, and it belongs AFTER the database write that
+    /// made the change durable: called earlier, a failed write would leave the row pointing at a file
+    /// that no longer exists.
+    func deleteImages(for recipeId: String, except keep: String?) {
+        guard Self.isSafeFilenameComponent(recipeId) else {
+            logger.error("Refusing to delete images for an unsafe recipe id")
+            return
+        }
         let prefix = "\(recipeId)."
         guard let contents = try? FileManager.default.contentsOfDirectory(at: imagesDirectory, includingPropertiesForKeys: nil) else { return }
-        
+
         for fileURL in contents where fileURL.isFileURL {
             let filename = fileURL.lastPathComponent
-            guard filename.hasPrefix(prefix) else { continue }
+            guard filename.hasPrefix(prefix), filename != keep else { continue }
             do {
                 try FileManager.default.removeItem(at: fileURL)
                 logger.debug("Deleted old image: \(filename)")
@@ -147,6 +182,10 @@ final class RecipeImageManager: @unchecked Sendable {
     }
     
     func loadImage(filename: String) -> Data? {
+        guard Self.isSafeFilenameComponent(filename) else {
+            logger.error("Refusing to load an image with an unsafe filename")
+            return nil
+        }
         let fileURL = imagesDirectory.appending(component: filename)
         let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
         
@@ -166,6 +205,10 @@ final class RecipeImageManager: @unchecked Sendable {
     }
     
     func deleteImage(filename: String) {
+        guard Self.isSafeFilenameComponent(filename) else {
+            logger.error("Refusing to delete an image with an unsafe filename")
+            return
+        }
         let fileURL = imagesDirectory.appending(component: filename)
         do {
             try FileManager.default.removeItem(at: fileURL)

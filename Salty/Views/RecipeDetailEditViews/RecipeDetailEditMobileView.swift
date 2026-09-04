@@ -547,7 +547,7 @@ struct RecipeDetailEditMobileView: View {
         
         var body: some View {
             Section("Photo") {
-                RecipeImageEditView(recipe: $viewModel.recipe, imageFrameSize: 100)
+                RecipeImageEditView(recipe: $viewModel.recipe, pendingImage: $viewModel.pendingImage, imageFrameSize: 100)
             }
         }
     }

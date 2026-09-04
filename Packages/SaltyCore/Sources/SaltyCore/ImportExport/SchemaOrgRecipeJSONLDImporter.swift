@@ -15,8 +15,8 @@
 //
 
 import Foundation
-import ImageIO
 import SwiftSoup
+import ImageIO
 import OSLog
 import UUIDV7
 
@@ -616,22 +616,16 @@ public extension SchemaOrgRecipeJSONLDImporter {
         request.timeoutInterval = Limits.requestTimeout
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            // expectedContentLength is -1 when unknown; only enforce when the server advertises a size.
-            if response.expectedContentLength > Int64(Limits.maxInputBytes) {
-                logger.error("Response content length \(response.expectedContentLength) exceeds limit; refusing to parse")
-                return []
-            }
-            guard data.count <= Limits.maxInputBytes else {
-                logger.error("Fetched \(data.count) bytes, exceeds \(Limits.maxInputBytes) limit; refusing to parse")
-                return []
-            }
+            // Streamed under the cap: a page that sends no Content-Length is cut off at the limit
+            // rather than buffered in full and measured afterwards.
+            let (data, _) = try await URLSession.shared.data(for: request, maxBytes: Limits.maxInputBytes)
             if let html = String(data: data, encoding: .utf8) {
                 // The address is passed through so a page that declares no `url` still records where
                 // it came from. See scanRecipes(from:pageURL:).
                 return scanRecipes(from: html, pageURL: url.absoluteString).map(\.recipe)
             }
+        } catch let tooLarge as ResponseTooLargeError {
+            logger.error("Page exceeds the \(tooLarge.limit)-byte limit (\(tooLarge.observed) bytes seen); refusing to parse")
         } catch {
             logger.error("Error fetching URL \(url): \(error)")
         }
@@ -654,23 +648,17 @@ public extension SchemaOrgRecipeJSONLDImporter {
         request.timeoutInterval = Limits.requestTimeout
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            // expectedContentLength is -1 when unknown; only enforce when the server advertises a size.
-            if response.expectedContentLength > Int64(Limits.maxImageBytes) {
-                logger.error("Image content length \(response.expectedContentLength) exceeds limit; skipping")
-                return nil
-            }
-            guard data.count <= Limits.maxImageBytes else {
-                logger.error("Image is \(data.count) bytes, exceeds \(Limits.maxImageBytes) limit; skipping")
-                return nil
-            }
+            // Streamed under the cap; see parseRecipes(from:).
+            let (data, _) = try await URLSession.shared.data(for: request, maxBytes: Limits.maxImageBytes)
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                   CGImageSourceGetCount(source) > 0 else {
                 logger.error("Downloaded image data is not a decodable image; skipping")
                 return nil
             }
             return data
+        } catch let tooLarge as ResponseTooLargeError {
+            logger.error("Image exceeds the \(tooLarge.limit)-byte limit (\(tooLarge.observed) bytes seen); skipping")
+            return nil
         } catch {
             logger.error("Error downloading recipe image: \(error)")
             return nil

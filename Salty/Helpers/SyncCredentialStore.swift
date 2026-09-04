@@ -26,6 +26,11 @@ protocol SyncCredentialStore: Sendable {
     func setPassword(_ password: String)
     func deviceToken() -> String?
     func setDeviceToken(_ token: String?)
+    /// The id this device registers and enrols under. Not a secret (the server lists it), but it is
+    /// kept here so it stays on this device: see `SaltySyncService.deviceId`.
+    func deviceId() -> String?
+    @discardableResult
+    func setDeviceId(_ id: String) -> Bool
 }
 
 extension KeychainHelper: SyncCredentialStore {
@@ -33,4 +38,6 @@ extension KeychainHelper: SyncCredentialStore {
     func setPassword(_ password: String) { savePassword(password) }
     func deviceToken() -> String? { getDeviceToken() }
     func setDeviceToken(_ token: String?) { saveDeviceToken(token) }
+    func deviceId() -> String? { getDeviceId() }
+    func setDeviceId(_ id: String) -> Bool { saveDeviceId(id) }
 }

@@ -270,14 +270,22 @@ struct SaltySyncServiceServerEditTests {
     /// finished bringing it down. This direction loses the shared copy rather than one device's, and
     /// the workflow that reaches it most directly is replacing a device by deleting the local library
     /// and pulling the server's copy back with an ordinary sync.
+    ///
+    /// SYNC-021 now makes the recipe half of this unconditional — no library, empty or not, deletes a
+    /// recipe on the server — so what this pins for recipes is the outcome rather than the guard. The
+    /// SYNC-016 guard itself is still live and still needed for courses, categories and tags, which
+    /// have no tombstones and so keep the inference SYNC-021 removed from recipes.
     @Test func anEmptyLibraryDoesNotAskTheServerToDeleteEveryRecipe() async throws {
         let database = try makeTestDatabase() // seeds classifiers; no recipes
         let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
 
         // Routed BEFORE baseRoutes, which stubs the manifest as empty: the matcher takes the first hit.
+        // The row is fetched now rather than deleted (SYNC-021), so it needs a body to fetch.
         var routes: [SyncRouteStubURLProtocol.Route] = [
             .init(method: "GET", path: "/api/recipes/sync/manifest",
-                  body: #"[{"id": "r-only-on-server", "lastModifiedDate": "\#(staleWire)"}]"#)
+                  body: #"[{"id": "r-only-on-server", "lastModifiedDate": "\#(staleWire)"}]"#),
+            .init(method: "GET", path: "/api/recipes/r-only-on-server",
+                  body: #"{"id": "r-only-on-server", "name": "Kept", "lastModifiedDate": "\#(staleWire)"}"#),
         ]
         routes.append(contentsOf: baseRoutes(lastSync: Date().addingTimeInterval(-3600)))
         SyncRouteStubURLProtocol.reset(routes: routes)
@@ -291,6 +299,71 @@ struct SaltySyncServiceServerEditTests {
 
         let deletes = SyncRouteStubURLProtocol.recorded.filter { $0.path == "/api/recipes/sync/delete" }
         #expect(deletes.isEmpty, "an empty library cannot vouch for a mass deletion on the server")
+    }
+
+    // MARK: - A server-only recipe is taken, not deleted
+
+    /// A recipe the server has and this library does not, stamped BEFORE this device's last sync, is
+    /// DOWNLOADED — never deleted from the server.
+    ///
+    /// The plan reads "older than my watermark" as "I had it and deleted it", which is a guess. A
+    /// deliberate deletion never reaches that branch: it travels as a tombstone and is filtered out of
+    /// the manifest. What does reach it is a library that lost its memory — pointed at a different
+    /// bundle, or restored from a copy older than the watermark the device id carries — and there the
+    /// guess destroys recipes nobody deleted. Unlike the case above, the library here is NOT empty, so
+    /// the SYNC-016 guard has nothing to object to; this is the gap that guard never covered.
+    ///
+    /// Mirrors SaltyKMP's `aServerRecipeOlderThanTheWatermarkIsTakenNotDeleted`.
+    @Test func aServerRecipeOlderThanTheWatermarkIsTakenNotDeleted() async throws {
+        let database = try makeTestDatabase()
+        let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
+
+        // A local recipe, so "everything is missing" is not what saves the server's copy.
+        //
+        // Every column the Swift model treats as non-optional is given a value — the same set
+        // `coalesceNullRecipeColumns` repairs, and for the same reason: the sync reads every row back
+        // as a `Recipe` while reconciling prepared dates, and a NULL in one of these fails that decode.
+        // `createdDate` is the easy one to miss. The genuinely-optional columns (nutrition, lastPrepared,
+        // image*, servings, courseId) are left NULL, which is what a real library holds.
+        try await database.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO "recipe"
+                    ("id", "name", "createdDate", "lastModifiedDate", "source", "sourceDetails",
+                     "introduction", "difficulty", "rating", "isFavorite", "wantToMake", "yield",
+                     "directions", "ingredients", "notes", "variations", "preparationTimes")
+                    VALUES (?, ?, ?, ?, '', '', '', 0, 0, 0, 0, '', '[]', '[]', '[]', '[]', '[]')
+                    """,
+                arguments: ["mine", "Mine", Date().addingTimeInterval(-120), Date().addingTimeInterval(-60)]
+            )
+        }
+
+        var routes: [SyncRouteStubURLProtocol.Route] = [
+            .init(method: "GET", path: "/api/recipes/sync/manifest",
+                  body: #"[{"id": "theirs", "lastModifiedDate": "\#(staleWire)"}]"#),
+            .init(method: "GET", path: "/api/recipes/theirs",
+                  body: #"{"id": "theirs", "name": "From the other library", "lastModifiedDate": "\#(staleWire)"}"#),
+        ]
+        routes.append(contentsOf: baseRoutes(lastSync: Date().addingTimeInterval(-3600)))
+        SyncRouteStubURLProtocol.reset(routes: routes)
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.syncNow(force: true)
+        }
+
+        let deletes = SyncRouteStubURLProtocol.recorded.filter { $0.path == "/api/recipes/sync/delete" }
+        #expect(deletes.isEmpty, "a recipe this library cannot prove it deleted stays on the server")
+
+        // Read the column, not the struct: `Recipe` decoding is beside the point here, and a downloaded
+        // row leaves the genuinely-optional `nutrition` NULL, which this suite has been seen to trip over
+        // when it runs alongside others.
+        let landedName = try await database.read { db in
+            try String.fetchOne(db, sql: #"SELECT "name" FROM "recipe" WHERE "id" = ?"#, arguments: ["theirs"])
+        }
+        #expect(landedName == "From the other library", "and is taken, so the next sync sees an ordinary row")
     }
 
     // MARK: - Force re-sync marks its overwrites

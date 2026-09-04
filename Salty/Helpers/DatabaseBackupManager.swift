@@ -24,42 +24,89 @@ public final class DatabaseBackupManager: @unchecked Sendable {
     // MARK: - Constants
     private static let backupFileExtension = "zip"
     private static let backupRecencyThreshold: TimeInterval = 36 * 60 * 60 // 36 hours
-    // Keep additional backups farthe apart:
-    private static let backupRecencyThresholdFirstToSecond: TimeInterval = 120 * 60 * 6 * 2 // 120 hours (5 days)
-    private static let backupRecencyThresholdSecondToThird: TimeInterval = backupRecencyThresholdFirstToSecond * 4 // 20 days
-    private static let maxBackupsToKeep = 3
-    
+
+    // MARK: - Retention policy
+
+    /// How many of the newest backups are always kept, whatever their spacing.
+    ///
+    /// Bad data is usually noticed a few launches after it happened, and each launch past the recency
+    /// threshold takes a new backup *of the bad state*. Keeping several recent ones means the last
+    /// good backup survives those launches instead of being the one deleted to make room.
+    static let recentBackupsToKeep = 2
+
+    /// Ages (measured from the newest backup) that divide the older backups into bands. One backup
+    /// survives per band; see `retainedBackupIndices(ages:)` for which.
+    static let retentionBandBoundaries: [TimeInterval] = [
+        5 * 24 * 60 * 60,   // 5 days
+        20 * 24 * 60 * 60,  // 20 days
+    ]
+
+    /// Decides which backups to keep. `ages` are seconds older than the newest backup, sorted
+    /// ascending (so `ages[0] == 0` is the newest); the result is the indices to keep.
+    ///
+    /// The rules, and why each one is there:
+    /// - The newest `recentBackupsToKeep` are always kept.
+    /// - Inside each band except the last, the *oldest* backup is kept. That backup is the one that
+    ///   will cross into the next band as time passes, so bands further out actually get populated.
+    ///   (The previous policy kept the *newest* candidate, which, with a backup every ~36 hours,
+    ///   was deleted before it could ever become 5 days old; the older tiers never filled.)
+    /// - In the last band the *newest* backup is kept, so that band rolls forward and the very first
+    ///   backup ever taken doesn't live forever.
+    ///
+    /// Pure and static so it can be tested without touching the filesystem.
+    static func retainedBackupIndices(ages: [TimeInterval]) -> Set<Int> {
+        guard !ages.isEmpty else { return [] }
+        var keep = Set(0..<min(recentBackupsToKeep, ages.count))
+
+        let lowerBounds = [0] + retentionBandBoundaries
+        for (bandIndex, lower) in lowerBounds.enumerated() {
+            let isLastBand = bandIndex == lowerBounds.count - 1
+            let upper = isLastBand ? TimeInterval.infinity : lowerBounds[bandIndex + 1]
+            let members = ages.indices.filter { ages[$0] >= lower && ages[$0] < upper }
+            guard !members.isEmpty else { continue }
+            // Ascending ages: the newest member has the smallest index, the oldest the largest.
+            keep.insert(isLastBand ? members.min()! : members.max()!)
+        }
+        return keep
+    }
+
     // MARK: - Backup Directory
     private var backupDirectory: URL {
         return FileManager.backupDirectory
     }
-    
+
     // MARK: - Public Methods
-    
-    /// Creates a backup if one doesn't exist from the last few hours
+
+    /// Creates a backup if one doesn't exist from the last few hours. Fire-and-forget: meant for app
+    /// launch, where nobody is waiting on the result and a failure is only worth a log line.
     public func createBackupIfNeeded() {
         Task {
             await createBackupIfNeededAsync()
         }
     }
-    
-    /// Creates a backup immediately, regardless of when the last one was created
-    public func createBackupNow() {
-        Task {
-            await createBackupAsync()
-        }
+
+    /// Creates a backup immediately, regardless of when the last one was created, and returns the
+    /// file it wrote. Throws when the backup could not be made, so a caller reporting to the user
+    /// can say what actually happened.
+    @discardableResult
+    public func createBackupNow() async throws -> URL {
+        try await createBackup()
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func createBackupIfNeededAsync() async {
         // Check if we need a backup
         guard await shouldCreateBackup() else {
             logger.info("Recent backup exists, skipping backup creation")
             return
         }
-        
-        await createBackupAsync()
+
+        do {
+            try await createBackup()
+        } catch {
+            logger.error("Failed to create database backup: \(error)")
+        }
     }
     
     private func shouldCreateBackup() async -> Bool {
@@ -98,36 +145,33 @@ public final class DatabaseBackupManager: @unchecked Sendable {
         }
     }
     
-    private func createBackupAsync() async {
-        do {
-            logger.info("Starting database backup...")
-            
-            // Create backup directory if it doesn't exist
-            try FileManager.default.createDirectory(at: backupDirectory, withIntermediateDirectories: true, attributes: nil)
-            
-            // Generate backup filename with timestamp
-            let timestamp = Date().formatted(.iso8601
-                .year()
-                .month()
-                .day()
-                .dateSeparator(.dash)
-                .time(includingFractionalSeconds: false)
-                .timeSeparator(.omitted)
-            )
-            let backupFilename = "salty-backup-\(timestamp).\(Self.backupFileExtension)"
-            let backupURL = backupDirectory.appendingPathComponent(backupFilename)
-            
-            // Create the backup
-            try await createBackupZip(at: backupURL)
-            
-            // Clean up old backups
-            await cleanupOldBackups()
-            
-            logger.info("Database backup completed successfully: \(backupURL.lastPathComponent)")
-            
-        } catch {
-            logger.error("Failed to create database backup: \(error)")
-        }
+    @discardableResult
+    private func createBackup() async throws -> URL {
+        logger.info("Starting database backup...")
+
+        // Create backup directory if it doesn't exist
+        try FileManager.default.createDirectory(at: backupDirectory, withIntermediateDirectories: true, attributes: nil)
+
+        // Generate backup filename with timestamp
+        let timestamp = Date().formatted(.iso8601
+            .year()
+            .month()
+            .day()
+            .dateSeparator(.dash)
+            .time(includingFractionalSeconds: false)
+            .timeSeparator(.omitted)
+        )
+        let backupFilename = "salty-backup-\(timestamp).\(Self.backupFileExtension)"
+        let backupURL = backupDirectory.appendingPathComponent(backupFilename)
+
+        // Create the backup
+        try await createBackupZip(at: backupURL)
+
+        // Clean up old backups
+        await cleanupOldBackups()
+
+        logger.info("Database backup completed successfully: \(backupURL.lastPathComponent)")
+        return backupURL
     }
     
     private func createBackupZip(at backupURL: URL) async throws {
@@ -218,34 +262,12 @@ public final class DatabaseBackupManager: @unchecked Sendable {
                 return (url, date)
             }
 
-            var keepSet = Set<URL>()
-
-            // Always keep the most recent backup
-            let mostRecent = backupsWithDates[0]
-            keepSet.insert(mostRecent.url)
-
-            // Find the second backup at least backupRecencyThresholdFirstToSecond older than the first
-            var secondKept: (url: URL, date: Date)? = nil
-            for candidate in backupsWithDates.dropFirst() {
-                if mostRecent.date.timeIntervalSince(candidate.date) >= Self.backupRecencyThresholdFirstToSecond {
-                    keepSet.insert(candidate.url)
-                    secondKept = candidate
-                    break
-                }
-            }
-
-            // Find the third backup at least backupRecencyThresholdSecondToThird older than the second (if any)
-            if let second = secondKept {
-                for candidate in backupsWithDates.drop(while: { $0.url != second.url }).dropFirst() {
-                    if second.date.timeIntervalSince(candidate.date) >= Self.backupRecencyThresholdSecondToThird {
-                        keepSet.insert(candidate.url)
-                        break
-                    }
-                }
-            }
+            let newestDate = backupsWithDates[0].date
+            let ages = backupsWithDates.map { newestDate.timeIntervalSince($0.date) }
+            let keep = Self.retainedBackupIndices(ages: ages)
 
             // Delete any backups not in the keep set
-            for backup in backupsWithDates where !keepSet.contains(backup.url) {
+            for (index, backup) in backupsWithDates.enumerated() where !keep.contains(index) {
                 try FileManager.default.removeItem(at: backup.url)
                 logger.info("Deleted old backup: \(backup.url.lastPathComponent)")
             }

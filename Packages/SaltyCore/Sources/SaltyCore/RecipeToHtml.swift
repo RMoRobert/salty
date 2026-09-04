@@ -59,222 +59,214 @@ public extension Recipe {
     public func asHtmlWithOptions(options: HTMLExportOptions, theme: RecipeHtmlTheme = .modern,
                            course: String? = nil, categories: [String] = [], tags: [String] = [],
                            imageBase64: String?) -> String {
-        let doc = Document(.html) {
-            Html {
-                Head {
-                    Title(name.htmlEscaped)
-                    Meta().charset("utf-8")
-                    Meta().name("viewport").content("width=device-width, initial-scale=1.0")
-                    Style(getDefaultCSS() + "\n\n" + theme.overrideCSS)
-                }
-                Body {
-                    Main {
+        let page = RecipeHtmlPage(recipe: self, course: course, categories: categories, tags: tags,
+                                  imageBase64: imageBase64)
+        return RecipeHtmlDocument.render([page], options: options, theme: theme, title: name)
+    }
+
+    /// The `<main>` element for this recipe — everything between the document's `<body>` tags for a
+    /// single-recipe page. `RecipeHtmlDocument` wraps one or more of these in a shared `<head>`.
+    func htmlMainElement(options: HTMLExportOptions, course: String?, categories: [String],
+                         tags: [String], imageBase64: String?) -> Main {   // SaltyCore has its own `Tag` type
+        Main {
+            Section {
+                Div {
+                    H1(name.htmlEscaped).id("recipe-name")
+                    if !source.isEmpty { P(source.htmlEscaped).id("recipe-source") }
+                    if !sourceDetails.isEmpty { P(sourceDetails.htmlEscaped).id("recipe-sourceDetails") }
+                    
+                    if let course = course, !course.isEmpty {
+                        P {
+                            Span("Course:").id("recipe-course-label")
+                            Span(course.htmlEscaped).id("recipe-course-text")
+                        }
+                        .id("recipe-course-container")
+                    }
+
+                    Div {
+                        if !yield.isEmpty {
+                            P(yield.htmlEscaped).id("recipe-yield-item")
+                        }
+                        if let servings = servings, servings > 0 {
+                            P("\(servings)").id("recipe-servings-item")
+                        }
+                    }
+                    .class("recipe-yield-and-servings-container")
+                    
+                    if options.includeRating && rating != .notSet {
+                        Div {
+                            Span("\(rating.rawValue)")
+                                .id("recipe-rating-raw-number")
+                            Span("/")
+                                .id("recipe-rating-raw-slash")
+                            Span("5")
+                                .id("recipe-rating-raw-max")
+                        }
+                        .id("recipe-rating-raw-container")
+                        Div {
+                            for _ in 1...Int(rating.rawValue) {
+                                Span("★")
+                                    .class("recipe-rating-star-filled")
+                                    .attribute("aria-hidden", "true")
+                            }
+                            for _ in Int(rating.rawValue)..<5 {
+                                    Span("☆")
+                                        .class("recipe-rating-star-empty")
+                                        .attribute("aria-hidden", "true")
+                            }
+                        }
+                        .attribute("role", "img")
+                        .attribute("aria-label", "Rating: " + ((rating != .notSet) ? "\(rating.rawValue) of 5" : "none"))
+                        .id("recipe-rating-star-container")
+                    }
+
+                    if options.includeDifficulty && difficulty != .notSet {
+                        P {
+                            Span("Difficulty:")
+                                .id("recipe-difficulty-label")
+                            Span("\(difficulty.stringValue())")
+                                .id("recipe-difficulty-text")
+                        }
+                        .id("recipe-difficulty-container")
+                    }
+                    
+                    if options.includePreparationTimes && preparationTimes.count > 0 {
                         Section {
-                            Div {
-                                H1(name.htmlEscaped).id("recipe-name")
-                                if !source.isEmpty { P(source.htmlEscaped).id("recipe-source") }
-                                if !sourceDetails.isEmpty { P(sourceDetails.htmlEscaped).id("recipe-sourceDetails") }
-                                
-                                if let course = course, !course.isEmpty {
-                                    P {
-                                        Span("Course:").id("recipe-course-label")
-                                        Span(course.htmlEscaped).id("recipe-course-text")
-                                    }
-                                    .id("recipe-course-container")
-                                }
-
-                                Div {
-                                    if !yield.isEmpty {
-                                        P(yield.htmlEscaped).id("recipe-yield-item")
-                                    }
-                                    if let servings = servings, servings > 0 {
-                                        P("\(servings)").id("recipe-servings-item")
+                        H2("Preparation Time").id("recipe-prep-times-heading")
+                            Ul {
+                                for prepTime in preparationTimes {
+                                    Li {
+                                        Span(prepTime.type.htmlEscaped).class("recipe-prep-time-type")
+                                        Span("").class("recipe-prep-time-separator")
+                                        Span(prepTime.timeString.htmlEscaped).class("recipe-prep-time-time")
                                     }
                                 }
-                                .class("recipe-yield-and-servings-container")
-                                
-                                if options.includeRating && rating != .notSet {
-                                    Div {
-                                        Span("\(rating.rawValue)")
-                                            .id("recipe-rating-raw-number")
-                                        Span("/")
-                                            .id("recipe-rating-raw-slash")
-                                        Span("5")
-                                            .id("recipe-rating-raw-max")
-                                    }
-                                    .id("recipe-rating-raw-container")
-                                    Div {
-                                        for _ in 1...Int(rating.rawValue) {
-                                            Span("★")
-                                                .class("recipe-rating-star-filled")
-                                                .attribute("aria-hidden", "true")
-                                        }
-                                        for _ in Int(rating.rawValue)..<5 {
-                                                Span("☆")
-                                                    .class("recipe-rating-star-empty")
-                                                    .attribute("aria-hidden", "true")
-                                        }
-                                    }
-                                    .attribute("role", "img")
-                                    .attribute("aria-label", "Rating: " + ((rating != .notSet) ? "\(rating.rawValue) of 5" : "none"))
-                                    .id("recipe-rating-star-container")
-                                }
-
-                                if options.includeDifficulty && difficulty != .notSet {
-                                    P {
-                                        Span("Difficulty:")
-                                            .id("recipe-difficulty-label")
-                                        Span("\(difficulty.stringValue())")
-                                            .id("recipe-difficulty-text")
-                                    }
-                                    .id("recipe-difficulty-container")
-                                }
-                                
-                                if options.includePreparationTimes && preparationTimes.count > 0 {
-                                    Section {
-                                    H2("Preparation Time").id("recipe-prep-times-heading")
-                                        Ul {
-                                            for prepTime in preparationTimes {
-                                                Li {
-                                                    Span(prepTime.type.htmlEscaped).class("recipe-prep-time-type")
-                                                    Span("").class("recipe-prep-time-separator")
-                                                    Span(prepTime.timeString.htmlEscaped).class("recipe-prep-time-time")
-                                                }
-                                            }
-                                        }.id("recipe-prep-time-list")
-                                    }
-                                    .id("recipe-prep-time-container")
-                                }
-                            }
-                            .class("recipe-content-area")
-                            
-                            if options.includeImage, let imageAsBase64 = imageBase64 {
-                                Section {
-                                    Img(src: "data:image/jpeg;base64, \(imageAsBase64)", alt: "User-provided photograph of recipe")
-                                        .id("recipe-image")
-                                }
-                                .id("recipe-image-container")
-                            }
+                            }.id("recipe-prep-time-list")
                         }
-                        .id("recipe-info-container")
-                        
-                        if options.includeIntroduction && !introduction.isEmpty {
-                            Section {
-                                P(introduction.htmlEscaped)
-                                    .class("recipe-introduction")
-                            }
-                            .id("recipe-introduction-container")
-                        }
-
-                        if options.includeIngredients {
-                            Section {
-                                H2("Ingredients").id("recipe-ingredients-heading")
-                                    Ul {
-                                        for ingredient in ingredients {
-                                            if ingredient.isHeading {
-                                                Li(ingredient.text.htmlEscaped)
-                                                    .class("recipe-ingredient-heading")
-                                            }
-                                            else {
-                                                Li(ingredient.text.htmlEscaped)
-                                                    .class("recipe-ingredient")
-                                            }
-                                        }
-                                    }
-                                    .class("recipe-ingredients-list")
-                            }
-                            .id("recipe-ingredients-container")
-                        }
-                        
-                        if options.includeDirections {
-                            Section {
-                                H2("Directions").id("recipe-directions-heading")
-                                Ul {
-                                    for (index, direction) in directions.enumerated() {
-                                        if let isHeading = direction.isHeading, isHeading {
-                                                Li(direction.text.htmlEscaped)
-                                                    .class("recipe-directions-heading")
-                                        }
-                                        else {
-                                            let stepNumber = directions.prefix(index + 1).filter { $0.isHeading != true }.count
-                                            Li {
-                                                Span("\(stepNumber).")
-                                                    .class("recipe-directions-step-number")
-                                                Span(direction.text.htmlEscaped)
-                                                    .class("recipe-directions-step-text")
-                                            }
-                                            .class("recipe-directions-step")
-                                        }
-                                    }
-                                }
-                                .class("recipe-directions-list")
-                            }
-                            .id("recipe-directions-container")
-                        }
-                        
-                        
-                        if options.includeNotes && notes.count > 0 {
-                            Section {
-                                H2("Notes").id("recipe-notes")
-                                for note in notes {
-                                    Div {
-                                        H3(note.title.htmlEscaped)
-                                            .class("recipe-note-heading")
-                                        P(note.content.htmlEscaped)
-                                            .class("recipe-note-text")
-                                    }
-                                    .class("recipe-note-container")
-                                }
-                            }
-                            .id("recipe-notes-container")
-                        }
-                        
-                        if options.includeVariations && variations.count > 0 {
-                            Section {
-                                H2("Variations").id("recipe-variations-heading")
-                                for variation in variations {
-                                    Div {
-                                        H3(variation.variationName.htmlEscaped)
-                                            .class("recipe-variation-heading")
-                                        P(variation.text.htmlEscaped)
-                                            .class("recipe-variation-text")
-                                    }
-                                    .class("recipe-variation-container")
-                                }
-                            }
-                            .id("recipe-variations-container")
-                        }
-                        
-                        if !categories.isEmpty || !tags.isEmpty {
-                            Section {
-                                if !categories.isEmpty {
-                                    H2("Categories").id("recipe-categories")
-                                    Ul {
-                                        for category in categories {
-                                            Li(category.htmlEscaped).class("recipe-category")
-                                        }
-                                    }.id("categories-list")
-                                }
-                                if !tags.isEmpty {
-                                    H2("Tags").id("recipe-tags")
-                                    Ul {
-                                        for tag in tags {
-                                            Li(tag.htmlEscaped).class("recipe-tag")
-                                        }
-                                    }.id("tags-list")
-                                }
-                            }
-                            .id("recipe-meta-container")
-                        }
-
+                        .id("recipe-prep-time-container")
                     }
                 }
+                .class("recipe-content-area")
+                
+                if options.includeImage, let imageAsBase64 = imageBase64 {
+                    Section {
+                        Img(src: "data:image/jpeg;base64, \(imageAsBase64)", alt: "User-provided photograph of recipe")
+                            .id("recipe-image")
+                    }
+                    .id("recipe-image-container")
+                }
+            }
+            .id("recipe-info-container")
+            
+            if options.includeIntroduction && !introduction.isEmpty {
+                Section {
+                    P(introduction.htmlEscaped)
+                        .class("recipe-introduction")
+                }
+                .id("recipe-introduction-container")
+            }
+
+            if options.includeIngredients {
+                Section {
+                    H2("Ingredients").id("recipe-ingredients-heading")
+                        Ul {
+                            for ingredient in ingredients {
+                                if ingredient.isHeading {
+                                    Li(ingredient.text.htmlEscaped)
+                                        .class("recipe-ingredient-heading")
+                                }
+                                else {
+                                    Li(ingredient.text.htmlEscaped)
+                                        .class("recipe-ingredient")
+                                }
+                            }
+                        }
+                        .class("recipe-ingredients-list")
+                }
+                .id("recipe-ingredients-container")
+            }
+            
+            if options.includeDirections {
+                Section {
+                    H2("Directions").id("recipe-directions-heading")
+                    Ul {
+                        for (index, direction) in directions.enumerated() {
+                            if let isHeading = direction.isHeading, isHeading {
+                                    Li(direction.text.htmlEscaped)
+                                        .class("recipe-directions-heading")
+                            }
+                            else {
+                                let stepNumber = directions.prefix(index + 1).filter { $0.isHeading != true }.count
+                                Li {
+                                    Span("\(stepNumber).")
+                                        .class("recipe-directions-step-number")
+                                    Span(direction.text.htmlEscaped)
+                                        .class("recipe-directions-step-text")
+                                }
+                                .class("recipe-directions-step")
+                            }
+                        }
+                    }
+                    .class("recipe-directions-list")
+                }
+                .id("recipe-directions-container")
+            }
+            
+            
+            if options.includeNotes && notes.count > 0 {
+                Section {
+                    H2("Notes").id("recipe-notes")
+                    for note in notes {
+                        Div {
+                            H3(note.title.htmlEscaped)
+                                .class("recipe-note-heading")
+                            P(note.content.htmlEscaped)
+                                .class("recipe-note-text")
+                        }
+                        .class("recipe-note-container")
+                    }
+                }
+                .id("recipe-notes-container")
+            }
+            
+            if options.includeVariations && variations.count > 0 {
+                Section {
+                    H2("Variations").id("recipe-variations-heading")
+                    for variation in variations {
+                        Div {
+                            H3(variation.variationName.htmlEscaped)
+                                .class("recipe-variation-heading")
+                            P(variation.text.htmlEscaped)
+                                .class("recipe-variation-text")
+                        }
+                        .class("recipe-variation-container")
+                    }
+                }
+                .id("recipe-variations-container")
+            }
+            
+            if !categories.isEmpty || !tags.isEmpty {
+                Section {
+                    if !categories.isEmpty {
+                        H2("Categories").id("recipe-categories")
+                        Ul {
+                            for category in categories {
+                                Li(category.htmlEscaped).class("recipe-category")
+                            }
+                        }.id("categories-list")
+                    }
+                    if !tags.isEmpty {
+                        H2("Tags").id("recipe-tags")
+                        Ul {
+                            for tag in tags {
+                                Li(tag.htmlEscaped).class("recipe-tag")
+                            }
+                        }.id("tags-list")
+                    }
+                }
+                .id("recipe-meta-container")
             }
         }
-        
-        
-        let html: String = DocumentRenderer(minify: false, indent: 2).render(doc)
-        return html
     }
 
 }
@@ -792,6 +784,13 @@ main {
     grid-template-columns: 1fr;
     gap: 2rem;
     padding: 1rem;
+}
+
+/* A combined document (multi-recipe export / print) holds one main element per recipe; rule them
+   apart on screen. In print each one starts on a new page instead (see @media print). */
+main + main {
+    margin-top: 2rem;
+    border-top: 2px solid var(--salty-border);
 }
 
 @media (min-width: 750px) {
@@ -1394,19 +1393,33 @@ body {
         line-height: 1.4 !important;
     }
     
-    /* Reduce margins and padding throughout */
+    /* Print as ONE block-flow column. WebKit's paginator loses track of page offsets for content
+       under a grid (or flex) ancestor: break-inside:avoid on list items is ignored and a line of text
+       gets sliced mid-glyph across the page boundary. Verified against the app's own WKWebView print
+       path (macOS 26, 2026-09): with `main` left as a grid, ingredient lines split in half; as a block,
+       every keep-together rule below works. Never put grid/flex above the lists in print. */
     main {
-        grid-template-columns: 1fr !important;
-        gap: 0.5rem !important; /* Reduced from 1rem */
-        padding: 0;
+        display: block !important;
+        min-height: 0 !important;
+        padding: 0 !important;
     }
-    
-    /* Prevent lines of text from being cut in half - avoid breaking inside text elements */
-    p, span, .recipe-introduction, .recipe-directions-step-text, .recipe-note-text, .recipe-variation-text {
-        break-inside: avoid !important;
-        page-break-inside: avoid !important;
-        orphans: 2 !important; /* Keep at least 2 lines together */
-        widows: 2 !important; /* Keep at least 2 lines together */
+
+    /* Each further recipe in a combined document starts on a fresh page. */
+    main + main {
+        break-before: page !important;
+        page-break-before: always !important;
+        border-top: none !important;
+        margin-top: 0 !important;
+    }
+
+    /* Paragraphs (introduction, notes, variations) may break between lines — forcing a long paragraph
+       whole onto the next page leaves a large gap — but never strand fewer than 3 lines on either side
+       of the break. */
+    p, .recipe-introduction, .recipe-note-text, .recipe-variation-text {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        orphans: 3 !important;
+        widows: 3 !important;
     }
     
     /* Allow page breaks inside all containers - but prevent breaking text lines */
@@ -1430,13 +1443,46 @@ body {
     #recipe-ingredients-container h2,
     #recipe-directions-container h2,
     #recipe-notes-container h2,
-    #recipe-variations-container h2 {
+    #recipe-variations-container h2,
+    #recipe-meta-container h2,
+    #recipe-prep-times-heading {
         break-after: avoid !important;
         page-break-after: avoid !important;
         break-inside: avoid !important; /* Don't break headers themselves */
         page-break-inside: avoid !important;
         margin-top: 0.5em !important; /* Reduce top margin */
         margin-bottom: 0.25em !important; /* Reduce bottom margin */
+    }
+
+    /* Likewise the sub-headings inside lists, notes, and variations travel with what follows them. */
+    .recipe-ingredient-heading,
+    .recipe-directions-heading,
+    .recipe-note-heading,
+    .recipe-variation-heading {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+    }
+
+    /* Chip rows (prep times, categories, tags) are flex containers on screen. In print lay them out as
+       inline-block runs so the paginator sees ordinary block flow (see the note on `main` above), and
+       keep each short row on one page. */
+    #recipe-prep-time-list,
+    #categories-list,
+    #tags-list {
+        display: block !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    #recipe-prep-time-list li {
+        display: inline-block !important;
+        vertical-align: top !important;
+        margin: 0.25em 0.5em 0.25em 0 !important;
+    }
+
+    .recipe-prep-time-type,
+    .recipe-prep-time-time {
+        display: block !important;
     }
     
     /* Make Ingredients and Directions headings larger */
@@ -1530,11 +1576,6 @@ body {
         page-break-after: auto;
     }
     
-    #recipe-ingredients-container,
-    #recipe-directions-container {
-        grid-column: 1 !important;
-    }
-    
     body,
     main {
         background: white !important;
@@ -1592,13 +1633,16 @@ body {
         padding: 0 !important;
     }
 
-    /* Smaller photo for the top-right corner. */
-    #recipe-image {
+    /* Smaller photo for the top-right corner. The extra ancestor in the selector outranks a theme's
+       own `#recipe-image` sizing (themes are appended after this stylesheet), so the print size holds
+       regardless of theme. */
+    #recipe-image-container #recipe-image {
         max-width: 2in !important;
         max-height: 2in !important;
-        width: auto;
-        height: auto;
-        object-fit: contain;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        box-shadow: none !important; /* a shadow straddling a page boundary paints onto the page before */
     }
 }
 """

@@ -47,7 +47,12 @@ class RecipeDetailEditViewModel {
     
     // MARK: - Category State
     var selectedCategoryIDs: Set<String> = []
-    
+
+    // MARK: - Image State
+    /// The image change the editor is holding until Save. Nothing touches the image file on disk
+    /// before then, which is what lets Cancel actually cancel. See `PendingRecipeImage`.
+    var pendingImage: PendingRecipeImage = .unchanged
+
     // Caches for tags and categories
     private var recipeTags: [Tag] = []
     private var recipeCategories: [Category] = []
@@ -77,6 +82,7 @@ class RecipeDetailEditViewModel {
     
     // MARK: - Computed Properties
     var hasUnsavedChanges: Bool {
+        if pendingImage.isChange { return true }
         if isNewRecipe {
             // New recipes are considered to have unsaved changes if they have meaningful content
             return !recipe.name.isEmpty || !recipe.source.isEmpty || !recipe.introduction.isEmpty ||
@@ -125,9 +131,20 @@ class RecipeDetailEditViewModel {
         recipe.lastModifiedDate = Date()
         // Snapshot main-actor state into locals: the async write closure is @Sendable and runs
         // off the main actor, so it must not touch `self`.
-        let recipeToSave = recipe
+        var recipeDraft = recipe
         let isNew = isNewRecipe
         let categoryIDs = selectedCategoryIDs
+
+        // Apply the held image change now, on the copy that is about to be written: the new file goes
+        // to disk first, the row pointing at it second, and the old file is removed last (below), so no
+        // failure in between can leave the recipe without an image it still references.
+        guard pendingImage.apply(to: &recipeDraft) else {
+            logger.error("Could not write the recipe image; save aborted")
+            saveErrorMessage = "The photo couldn't be saved to the recipe library."
+            showingSaveErrorAlert = true
+            return false
+        }
+        let recipeToSave = recipeDraft
         do {
             try await database.write { db in
                 if isNew {
@@ -158,6 +175,11 @@ class RecipeDetailEditViewModel {
                 }
             }
 
+            // The row is durable; now the file it stopped referencing (if any) can go.
+            if pendingImage.isChange {
+                recipeToSave.deleteStaleImageFiles()
+            }
+
             // Handle successful save of new recipe
             if isNew {
                 onNewRecipeSaved?(recipeToSave.id)
@@ -165,7 +187,9 @@ class RecipeDetailEditViewModel {
 
             // After successful save, this is no longer a new recipe
             isNewRecipe = false
+            recipe = recipeToSave
             originalRecipe = recipeToSave
+            pendingImage = .unchanged
             return true
 
         } catch {
@@ -251,6 +275,7 @@ class RecipeDetailEditViewModel {
     
     func discardChanges() {
         recipe = originalRecipe
+        pendingImage = .unchanged
     }
     
     private func refreshRecipeFromDatabase() {

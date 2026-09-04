@@ -46,6 +46,9 @@ struct SaltyApp: App {
             // afterwards uses the data-protection keychain. See migrateLegacyMacKeychainIfNeeded().
             KeychainHelper.shared.migrateLegacyMacKeychainIfNeeded()
 #endif
+            // One-shot as well: re-saves older items under the ThisDeviceOnly class and moves the sync
+            // device id out of UserDefaults. See upgradeItemProtectionIfNeeded().
+            KeychainHelper.shared.upgradeItemProtectionIfNeeded()
             do {
                 // Begin (and hold) security-scoped access to the database location before opening it.
                 FileManager.beginAccessingDatabaseLocation()

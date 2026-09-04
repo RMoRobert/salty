@@ -151,9 +151,10 @@ final class SyncDeviceEnrolmentTests {
 
     /// Builds a service wired to the stub, with the given starting credentials.
     ///
-    /// `syncDeviceId` is pinned so tests can assert the exact id enrolment sends -- and so they assert
-    /// the *existing* sync id is reused rather than a fresh one, which is what keeps one physical
-    /// device from appearing twice on the server's devices page.
+    /// The device id is pinned (in the credential store, where the service now keeps it) so tests can
+    /// assert the exact id enrolment sends -- and so they assert the *existing* sync id is reused
+    /// rather than a fresh one, which is what keeps one physical device from appearing twice on the
+    /// server's devices page.
     private func makeService(
         responses: [String: AuthRouteStubURLProtocol.Response],
         username: String = "cook",
@@ -161,13 +162,12 @@ final class SyncDeviceEnrolmentTests {
         deviceToken: String? = nil
     ) -> (SaltySyncService, InMemorySyncCredentialStore) {
         UserDefaults.standard.set("https://stub.local", forKey: "serverUrl")
-        UserDefaults.standard.set(Self.deviceId, forKey: "syncDeviceId")
         UserDefaults.standard.set(username, forKey: "serverUsername")
         AuthRouteStubURLProtocol.reset(responses)
 
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AuthRouteStubURLProtocol.self]
-        let store = InMemorySyncCredentialStore(password: password, deviceToken: deviceToken)
+        let store = InMemorySyncCredentialStore(password: password, deviceToken: deviceToken, deviceId: Self.deviceId)
         let service = SaltySyncService(session: URLSession(configuration: config), credentials: store)
         return (service, store)
     }
@@ -306,6 +306,44 @@ final class SyncDeviceEnrolmentTests {
 
     /// The mirror case, and the more damaging one to get wrong: the server being down says nothing
     /// about the token. Discarding it here would cost a password prompt for what is a network blip.
+    /// An NGINX access list answers 403 with an HTML page. That is the network saying no, not the
+    /// server disowning the device, so the token must survive it -- otherwise every trip away from
+    /// the home network silently un-enrols the phone and auto-sync stops for good.
+    @Test func aProxyForbiddenPageLeavesTheTokenInPlace() async {
+        let (service, store) = makeService(
+            responses: ["/api/auth/token/verify": .init(status: 403, body: "<html><body>403 Forbidden</body></html>")],
+            deviceToken: "salty_stored"
+        )
+
+        do {
+            try await service.ensureAuthenticated()
+            Issue.record("expected the verify to fail")
+        } catch SyncError.enrolmentRequired {
+            Issue.record("an HTML 403 must not be read as a revocation")
+        } catch {
+            // Any other failure is the right shape: reported, and retried next time.
+        }
+        #expect(store.deviceToken() == "salty_stored")
+    }
+
+    /// The server's own 403 is a verdict, and is treated like a 401.
+    @Test func aServerForbiddenVerdictDiscardsTheToken() async {
+        let (service, store) = makeService(
+            responses: ["/api/auth/token/verify": .init(status: 403, body: #"{"error":"device disabled"}"#)],
+            deviceToken: "salty_disabled"
+        )
+
+        do {
+            try await service.ensureAuthenticated()
+            Issue.record("expected the verify to fail")
+        } catch SyncError.enrolmentRequired {
+            // expected
+        } catch {
+            Issue.record("expected .enrolmentRequired, got \(error)")
+        }
+        #expect(store.deviceToken() == nil)
+    }
+
     @Test func aServerOutageLeavesTheTokenInPlace() async {
         let (service, store) = makeService(
             responses: ["/api/auth/token/verify": .init(status: 503, body: #"{"error":"maintenance"}"#)],
