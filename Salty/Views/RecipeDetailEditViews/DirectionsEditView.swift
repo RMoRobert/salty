@@ -111,18 +111,20 @@ struct DirectionsEditView: View {
 
     private var directionsList: some View {
         VStack(spacing: 0) {
-            ForEach($recipe.directions) { $direction in
+            ForEach(recipe.directions) { direction in
                 let id = direction.id
                 RecipeListDropIndicator(isActive: dropTarget == .above(id))
                 DirectionEditRowView(
-                    direction: $direction,
+                    direction: RecipeItemListEditor.binding(for: id, in: $recipe.directions, fallback: direction),
                     stepNumber: RecipeItemListEditor.stepNumber(forDirectionWith: id, in: recipe.directions),
                     isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: recipe.directions),
                     focusedDirectionID: $focusedDirectionID,
                     onAdd: { addStep(below: id) },
                     onDelete: { delete(id: id) },
                     onDrop: { droppedID in move(droppedID, to: .above(id)) },
-                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) }
+                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) },
+                    onMoveUp: { moveUp(id: id) },
+                    onMoveDown: { moveDown(id: id) }
                 )
                 .id(id)
             }
@@ -175,6 +177,18 @@ struct DirectionsEditView: View {
         return moved
     }
 
+    private func moveUp(id: String) -> Bool {
+        withAnimation(.easeIn) {
+            RecipeItemListEditor.moveUp(id: id, in: &recipe.directions)
+        }
+    }
+
+    private func moveDown(id: String) -> Bool {
+        withAnimation(.easeIn) {
+            RecipeItemListEditor.moveDown(id: id, in: &recipe.directions)
+        }
+    }
+
     /// Only the row currently being hovered clears the indicator: dragging from one row to the next
     /// reports the new row as targeted before the old one reports that it isn't.
     private func setDropTarget(_ target: RecipeItemListEditor.DropTarget, isTargeted: Bool) {
@@ -198,6 +212,9 @@ struct DirectionEditRowView: View {
     /// Returns whether the drop was accepted.
     let onDrop: (String) -> Bool
     let onDropTargetChanged: (Bool) -> Void
+    /// Each returns whether the row actually moved.
+    let onMoveUp: () -> Bool
+    let onMoveDown: () -> Bool
 
     private var directionDragPreview: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -242,6 +259,7 @@ struct DirectionEditRowView: View {
                 .lineLimit(direction.isHeadingRow ? 1...2 : 3...13)
                 .textFieldStyle(.squareBorder)
                 .focused(focusedDirectionID, equals: direction.id)
+                .modifier(RecipeRowKeyboardReordering(onMoveUp: onMoveUp, onMoveDown: onMoveDown))
 
             Spacer()
                 .frame(width: 2)

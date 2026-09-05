@@ -13,8 +13,24 @@
 
 import Testing
 import Foundation
+import SwiftUI
 @testable import Salty
 import SaltyCore
+
+/// Stands in for the view state a row's binding writes back into, so the binding tests can mutate
+/// the list out from under a binding the way a delete or a drag does.
+@MainActor
+private final class Storage {
+    var items: [Ingredient]
+
+    init(_ items: [Ingredient]) {
+        self.items = items
+    }
+
+    var binding: Binding<[Ingredient]> {
+        Binding(get: { self.items }, set: { self.items = $0 })
+    }
+}
 
 /// Ingredients named after their position, so a reordered list reads as its expected order.
 private func ingredients(_ names: String...) -> [Ingredient] {
@@ -157,6 +173,122 @@ private func names(_ items: [Ingredient]) -> [String] {
 
         #expect(RecipeItemListEditor.move(id: "two", to: .above("one"), in: &items))
         #expect(items.map(\.id) == ["two", "one"])
+    }
+
+    // MARK: - Keyboard reordering
+
+    @Test func moveUpSwapsTheRowWithTheOneAboveIt() {
+        var items = ingredients("a", "b", "c")
+
+        #expect(RecipeItemListEditor.moveUp(id: "b", in: &items))
+        #expect(names(items) == ["b", "a", "c"])
+    }
+
+    @Test func moveDownSwapsTheRowWithTheOneBelowIt() {
+        var items = ingredients("a", "b", "c")
+
+        #expect(RecipeItemListEditor.moveDown(id: "b", in: &items))
+        #expect(names(items) == ["a", "c", "b"])
+    }
+
+    @Test func repeatedMoveDownWalksARowToTheEnd() {
+        var items = ingredients("a", "b", "c")
+
+        #expect(RecipeItemListEditor.moveDown(id: "a", in: &items))
+        #expect(RecipeItemListEditor.moveDown(id: "a", in: &items))
+        #expect(names(items) == ["b", "c", "a"])
+    }
+
+    /// The false return is what lets the key press fall through instead of being swallowed at the
+    /// ends of the list.
+    @Test func theFirstRowCannotMoveUp() {
+        var items = ingredients("a", "b")
+
+        #expect(!RecipeItemListEditor.moveUp(id: "a", in: &items))
+        #expect(names(items) == ["a", "b"])
+    }
+
+    @Test func theLastRowCannotMoveDown() {
+        var items = ingredients("a", "b")
+
+        #expect(!RecipeItemListEditor.moveDown(id: "b", in: &items))
+        #expect(names(items) == ["a", "b"])
+    }
+
+    @Test func movingARowThatIsNotInTheListDoesNothing() {
+        var items = ingredients("a", "b")
+
+        #expect(!RecipeItemListEditor.moveUp(id: "gone", in: &items))
+        #expect(!RecipeItemListEditor.moveDown(id: "gone", in: &items))
+        #expect(names(items) == ["a", "b"])
+    }
+
+    @Test func theOnlyRowCannotMoveEitherWay() {
+        var items = ingredients("a")
+
+        #expect(!RecipeItemListEditor.moveUp(id: "a", in: &items))
+        #expect(!RecipeItemListEditor.moveDown(id: "a", in: &items))
+    }
+
+    // MARK: - Row bindings
+
+    /// The crash this guards against: a row outlives its own deletion for the length of the removal
+    /// animation, and a position-based binding reads past the end of the array when that row was the
+    /// last one -- which a just-added row always is.
+    @MainActor
+    @Test func aRowsBindingSurvivesThatRowBeingDeleted() {
+        let storage = Storage(ingredients("a", "b", "c"))
+        let last = storage.items[2]
+        let binding = RecipeItemListEditor.binding(for: "c", in: storage.binding, fallback: last)
+
+        storage.items.removeLast()
+
+        #expect(binding.wrappedValue == last)
+    }
+
+    @MainActor
+    @Test func writingThroughADeletedRowsBindingDoesNotLandOnAnotherRow() {
+        let storage = Storage(ingredients("a", "b", "c"))
+        let last = storage.items[2]
+        let binding = RecipeItemListEditor.binding(for: "c", in: storage.binding, fallback: last)
+
+        storage.items.removeLast()
+        binding.wrappedValue.text = "typed after the row was gone"
+
+        #expect(storage.items.map(\.text) == ["a", "b"])
+    }
+
+    @MainActor
+    @Test func aRowsBindingFollowsThatRowWhenTheListIsReordered() {
+        let storage = Storage(ingredients("a", "b", "c"))
+        let binding = RecipeItemListEditor.binding(for: "a", in: storage.binding, fallback: storage.items[0])
+
+        RecipeItemListEditor.moveDown(id: "a", in: &storage.items)
+        binding.wrappedValue.text = "still a"
+
+        #expect(storage.items.map(\.id) == ["b", "a", "c"])
+        #expect(storage.items[1].text == "still a")
+    }
+
+    // MARK: - The other recipe lists
+
+    @Test func theSameEditorDrivesNotesPreparationTimesAndVariations() {
+        var notes = [Note(id: "n1", title: "One", content: ""), Note(id: "n2", title: "Two", content: "")]
+        #expect(RecipeItemListEditor.moveDown(id: "n1", in: &notes))
+        #expect(notes.map(\.id) == ["n2", "n1"])
+
+        var times = [
+            PreparationTime(id: "t1", type: "Prep", timeString: "10 min"),
+            PreparationTime(id: "t2", type: "Bake", timeString: "1 hr"),
+        ]
+        #expect(RecipeItemListEditor.move(id: "t2", to: .above("t1"), in: &times))
+        #expect(times.map(\.id) == ["t2", "t1"])
+
+        var variations = [Variation(id: "v1", variationName: "Spicy", text: "")]
+        let newID = RecipeItemListEditor.insert(.emptyRow(), below: "v1", in: &variations)
+        #expect(variations.map(\.id) == ["v1", newID])
+        #expect(RecipeItemListEditor.delete(id: "v1", from: &variations))
+        #expect(variations.map(\.id) == [newID])
     }
 
     // MARK: - Step numbers

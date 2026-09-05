@@ -6,23 +6,22 @@
 //
 
 import SaltyCore
-import UUIDV7
 #if os(macOS)
 
 import SwiftUI
 
 struct VariationsEditView: View {
     @Binding var recipe: Recipe
-    @State private var editingVariations: [Variation] = []
-    @State private var draggedItem: Variation?
-    @State private var dropTargetIndex: Int?
+    /// Where a dragged row would land, or nil when nothing is being dragged over the list.
+    @State private var dropTarget: RecipeItemListEditor.DropTarget?
+    /// A row that was just added: scrolled to and focused, then cleared.
     @State private var scrollToNewItem: String?
     @FocusState private var focusedVariationID: String?
     @Environment(\.dismiss) private var dismiss
-    
+
     var showToolbar: Bool = true
     var showBottomButtons: Bool = false
-    
+
     var body: some View {
         Group {
             if showToolbar {
@@ -32,13 +31,13 @@ struct VariationsEditView: View {
                     .toolbar {
                         ToolbarItemGroup(placement: .automatic) {
                             Button {
-                                addNewVariation()
+                                addVariation()
                             } label: {
                                 Label("New Variation", systemImage: "plus.circle")
                             }
                             .keyboardShortcut("n", modifiers: [.command])
                         }
-                        
+
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done") {
                                 dismiss()
@@ -60,189 +59,115 @@ struct VariationsEditView: View {
                 }
             }
         }
-        .onAppear {
-            editingVariations = recipe.variations
-        }
-        .onChange(of: editingVariations) { _, newValue in
-            recipe.variations = newValue
-        }
-        .onDisappear {
-            recipe.variations = editingVariations
-        }
     }
-    
+
     private var variationsContent: some View {
         ScrollViewReader { proxy in
-            Group {
-                if showToolbar {
-                    // Standalone view - add padding
-                    variationsList
-                        .padding(.horizontal)
-                        .padding(.top)
-                } else {
-                    // Embedded view - no extra padding
-                    variationsList
-                }
-            }
-            .onChange(of: scrollToNewItem) { _, newID in
-                if let newID = newID {
+            variationsList
+                // Standalone gets its own padding; embedded takes the host's.
+                .padding(.horizontal, showToolbar ? nil : 0)
+                .padding(.top, showToolbar ? nil : 0)
+                .onChange(of: scrollToNewItem) { _, newID in
+                    guard let newID else { return }
                     withAnimation(.easeOut) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
-                    // Set focus after scrolling
+                    // Focus once the row has been laid out.
                     Task {
-                        try? await Task.sleep(for: .seconds(0.1))
+                        try? await Task.sleep(for: .seconds(0.2))
                         focusedVariationID = newID
                         scrollToNewItem = nil
                     }
                 }
-            }
         }
     }
-    
+
     private var bottomActionButtons: some View {
         HStack {
             Button {
-                addNewVariation()
+                addVariation()
             } label: {
                 Label("New Variation", systemImage: "plus.circle")
             }
             .keyboardShortcut("n", modifiers: [.command])
-            
+
             Spacer()
         }
     }
-    
+
     private var variationsList: some View {
         VStack(spacing: 0) {
-            ForEach(editingVariations, id: \.id) { variation in
-                if let index = editingVariations.firstIndex(where: { $0.id == variation.id }),
-                   index < editingVariations.count {
-                    dropIndicator(for: index)
-                    variationRow(at: index)
-                }
+            ForEach(recipe.variations) { variation in
+                let id = variation.id
+                RecipeListDropIndicator(isActive: dropTarget == .above(id))
+                VariationEditRowView(
+                    variation: RecipeItemListEditor.binding(for: id, in: $recipe.variations, fallback: variation),
+                    focusedVariationID: $focusedVariationID,
+                    onAdd: { addVariation(below: id) },
+                    onDelete: { delete(id: id) },
+                    onDrop: { droppedID in move(droppedID, to: .above(id)) },
+                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) },
+                    onMoveUp: { moveUp(id: id) },
+                    onMoveDown: { moveDown(id: id) }
+                )
+                .id(id)
             }
-            dropIndicatorAtEnd
-        }
-    }
-    
-    @ViewBuilder
-    private func dropIndicator(for index: Int) -> some View {
-        if let dropTarget = dropTargetIndex, dropTarget == index {
-            Rectangle()
-                .fill(Color.accentColor)
-                .frame(height: 3)
-                .padding(.horizontal, 20)
-                .transition(.opacity.combined(with: .scale))
-        }
-    }
-    
-    @ViewBuilder
-    private var dropIndicatorAtEnd: some View {
-        let currentCount = editingVariations.count
-        if let dropTarget = dropTargetIndex, dropTarget == currentCount, currentCount >= 0 {
-            Rectangle()
-                .fill(Color.primary)
-                .frame(height: 2)
-                .padding(.horizontal, 20)
-                .transition(.opacity.combined(with: .scale))
-        }
-    }
-    
-    @ViewBuilder
-    private func variationRow(at index: Int) -> some View {
-        // Ensure index is valid before accessing
-        if index >= 0 && index < editingVariations.count {
-            let variation = editingVariations[index]
-            // Create a safe binding that checks bounds
-            let variationBinding = Binding<Variation>(
-                get: {
-                    guard index >= 0 && index < editingVariations.count else {
-                        return variation
-                    }
-                    return editingVariations[index]
-                },
-                set: { newValue in
-                    guard index >= 0 && index < editingVariations.count else { return }
-                    editingVariations[index] = newValue
-                }
+            RecipeListEndDropZone(
+                isActive: dropTarget == .end,
+                onDrop: { droppedID in move(droppedID, to: .end) },
+                onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
-            VariationEditRowView(
-                variation: variationBinding,
-                index: index,
-                onAdd: { addVariationAfter(index) },
-                onDelete: { deleteVariation(at: index) },
-                onMove: { fromIndex, toIndex in
-                    moveVariation(from: fromIndex, to: toIndex)
-                },
-                onDragStart: {
-                    draggedItem = variation
-                },
-                onDragEnd: {
-                    draggedItem = nil
-                    dropTargetIndex = nil
-                },
-                onDropTargetChanged: { targetIndex in
-                    dropTargetIndex = targetIndex
-                }
-            )
-            .focused($focusedVariationID, equals: variation.id)
-            .id(variation.id)
         }
     }
-    
-    private func addVariationAfter(_ index: Int) {
-        let newVariation = Variation(
-            id: UUIDV7().uuidString,
-            variationName: "",
-            text: ""
-        )
+
+    // MARK: - Editing
+
+    private func addVariation(below id: String) {
         withAnimation(.easeIn) {
-            editingVariations.insert(newVariation, at: index + 1)
-        }
-        scrollToNewItem = newVariation.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedVariationID = newVariation.id
+            scrollToNewItem = RecipeItemListEditor.insert(.emptyRow(), below: id, in: &recipe.variations)
         }
     }
-    
-    private func deleteVariation(at index: Int) {
-        guard index >= 0 && index < editingVariations.count else { return }
-        // Clear or adjust drop target if needed
-        if let dropTarget = dropTargetIndex {
-            if dropTarget == index {
-                dropTargetIndex = nil
-            } else if dropTarget > index {
-                dropTargetIndex = dropTarget - 1
-            }
-        }
+
+    private func addVariation() {
         withAnimation(.easeIn) {
-            _ = editingVariations.remove(at: index)
+            scrollToNewItem = RecipeItemListEditor.append(.emptyRow(), to: &recipe.variations)
         }
     }
-    
-    private func moveVariation(from fromIndex: Int, to toIndex: Int) {
+
+    private func delete(id: String) {
         withAnimation(.easeIn) {
-            editingVariations.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex)
+            RecipeItemListEditor.delete(id: id, from: &recipe.variations)
         }
     }
-    
-    private func addNewVariation() {
-        let newVariation = Variation(
-            id: UUIDV7().uuidString,
-            variationName: "",
-            text: ""
-        )
+
+    private func move(_ id: String, to target: RecipeItemListEditor.DropTarget) -> Bool {
+        var moved = false
         withAnimation(.easeIn) {
-            editingVariations.append(newVariation)
+            moved = RecipeItemListEditor.move(id: id, to: target, in: &recipe.variations)
+            dropTarget = nil
         }
-        scrollToNewItem = newVariation.id
-        // Set focus after a brief delay to ensure the view is rendered
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            focusedVariationID = newVariation.id
+        return moved
+    }
+
+    private func moveUp(id: String) -> Bool {
+        withAnimation(.easeIn) {
+            RecipeItemListEditor.moveUp(id: id, in: &recipe.variations)
+        }
+    }
+
+    private func moveDown(id: String) -> Bool {
+        withAnimation(.easeIn) {
+            RecipeItemListEditor.moveDown(id: id, in: &recipe.variations)
+        }
+    }
+
+    /// Only the row currently being hovered clears the indicator: dragging from one row to the next
+    /// reports the new row as targeted before the old one reports that it isn't.
+    private func setDropTarget(_ target: RecipeItemListEditor.DropTarget, isTargeted: Bool) {
+        if isTargeted {
+            dropTarget = target
+        } else if dropTarget == target {
+            dropTarget = nil
         }
     }
 }
@@ -251,17 +176,16 @@ struct VariationsEditView: View {
 
 struct VariationEditRowView: View {
     @Binding var variation: Variation
-    let index: Int
+    var focusedVariationID: FocusState<String?>.Binding
     let onAdd: () -> Void
     let onDelete: () -> Void
-    let onMove: (Int, Int) -> Void
-    let onDragStart: () -> Void
-    let onDragEnd: () -> Void
-    let onDropTargetChanged: (Int?) -> Void
-    
-    @State private var isDragging = false
-    @State private var isDropTarget = false
-    
+    /// Returns whether the drop was accepted.
+    let onDrop: (String) -> Bool
+    let onDropTargetChanged: (Bool) -> Void
+    /// Each returns whether the row actually moved.
+    let onMoveUp: () -> Bool
+    let onMoveDown: () -> Bool
+
     var body: some View {
         HStack {
             VStack {
@@ -274,6 +198,8 @@ struct VariationEditRowView: View {
                     TextField("Variation Name", text: $variation.variationName)
                         .textFieldStyle(.squareBorder)
                         .font(.headline)
+                        .focused(focusedVariationID, equals: variation.id)
+                        .modifier(RecipeRowKeyboardReordering(onMoveUp: onMoveUp, onMoveDown: onMoveDown))
                 }
                 HStack {
                     // Icon
@@ -285,6 +211,7 @@ struct VariationEditRowView: View {
                     TextField("Text", text: $variation.text, axis: .vertical)
                         .textFieldStyle(.squareBorder)
                         .lineLimit(2...6)
+                        .modifier(RecipeRowKeyboardReordering(onMoveUp: onMoveUp, onMoveDown: onMoveDown))
                 }
             }
             // Action buttons
@@ -297,7 +224,7 @@ struct VariationEditRowView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.green)
-                
+
                 Button {
                     onDelete()
                 } label: {
@@ -306,43 +233,26 @@ struct VariationEditRowView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
-                
-                // Drag handle
+
+                // Drag handle. The payload is the row's id, so a drop can tell a real row from a
+                // stray text drag and never acts on a stale index.
                 Label("Drag to Move", systemImage: "line.3.horizontal")
                     .labelStyle(.iconOnly)
                     .foregroundStyle(.tertiary)
-                    .draggable(String(index)) {
+                    .draggable(variation.id) {
                         Label("Drag to Move", systemImage: "line.3.horizontal")
                             .labelStyle(.iconOnly)
                             .foregroundStyle(.tertiary)
-                    }
-                    .onDrag {
-                        isDragging = true
-                        onDragStart()
-                        return NSItemProvider(object: String(index) as NSString)
                     }
             }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
-        .opacity(isDragging ? 0.4 : 1.0)
-        .scaleEffect(isDragging ? 0.95 : 1.0)
-        .animation(.spring, value: isDragging)
-        .dropDestination(for: String.self) { draggedIndices, location in
-            guard let draggedIndexString = draggedIndices.first,
-                  let draggedIndex = Int(draggedIndexString),
-                  draggedIndex != index else {
-                isDragging = false
-                onDragEnd()
-                return false
-            }
-            onMove(draggedIndex, draggedIndex < index ? index + 1 : index)
-            isDragging = false
-            onDragEnd()
-            return true
+        .dropDestination(for: String.self) { droppedIDs, _ in
+            guard let droppedID = droppedIDs.first else { return false }
+            return onDrop(droppedID)
         } isTargeted: { isTargeted in
-            isDropTarget = isTargeted
-            onDropTargetChanged(isTargeted ? index : nil)
+            onDropTargetChanged(isTargeted)
         }
     }
 }
