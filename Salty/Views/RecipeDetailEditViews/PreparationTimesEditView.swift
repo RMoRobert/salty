@@ -12,6 +12,8 @@ import SwiftUI
 
 struct PreparationTimesEditView: View {
     @Binding var recipe: Recipe
+    /// The list's own width, measured so a dragged row's preview can match it.
+    @State private var listWidth: CGFloat = 0
     /// Where a dragged row would land, or nil when nothing is being dragged over the list.
     @State private var dropTarget: RecipeItemListEditor.DropTarget?
     /// A row that was just added: scrolled to and focused, then cleared.
@@ -127,7 +129,8 @@ struct PreparationTimesEditView: View {
 
                         // Action buttons
                         PreparationTimeActionButtons(
-                            preparationTimeID: id,
+                            preparationTime: preparationTime,
+                            dragPreviewWidth: listWidth,
                             onAdd: { addPreparationTime(below: id) },
                             onDelete: { delete(id: id) },
                             onDrop: { droppedID in move(droppedID, to: .above(id)) },
@@ -145,6 +148,11 @@ struct PreparationTimesEditView: View {
                 onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
         }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                listWidth = width
+            }
     }
 
     // MARK: - Editing
@@ -202,12 +210,21 @@ struct PreparationTimesEditView: View {
 // MARK: - Preparation Time Action Buttons
 
 struct PreparationTimeActionButtons: View {
-    let preparationTimeID: String
+    let preparationTime: PreparationTime
+    /// Width of the list, so the drag preview can match it.
+    let dragPreviewWidth: CGFloat
     let onAdd: () -> Void
     let onDelete: () -> Void
     /// Returns whether the drop was accepted.
     let onDrop: (String) -> Bool
     let onDropTargetChanged: (Bool) -> Void
+
+    /// The two fields read as one line while dragging: "Bake -- 1 hr, 30 min".
+    private var previewText: String {
+        [preparationTime.type, preparationTime.timeString]
+            .filter { !$0.isEmpty }
+            .joined(separator: " -- ")
+    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -234,10 +251,8 @@ struct PreparationTimeActionButtons: View {
             Label("Drag to Move", systemImage: "line.3.horizontal")
                 .labelStyle(.iconOnly)
                 .foregroundStyle(.tertiary)
-                .draggable(preparationTimeID) {
-                    Label("Drag to Move", systemImage: "line.3.horizontal")
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(.tertiary)
+                .draggable(preparationTime.id) {
+                    RecipeRowDragPreview(listWidth: dragPreviewWidth, text: previewText, placeholder: "New Time")
                 }
         }
         .dropDestination(for: String.self) { droppedIDs, _ in

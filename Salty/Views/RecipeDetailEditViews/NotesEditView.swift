@@ -12,6 +12,8 @@ import SwiftUI
 
 struct NotesEditView: View {
     @Binding var recipe: Recipe
+    /// The list's own width, measured so a dragged row's preview can match it.
+    @State private var listWidth: CGFloat = 0
     /// Where a dragged row would land, or nil when nothing is being dragged over the list.
     @State private var dropTarget: RecipeItemListEditor.DropTarget?
     /// A row that was just added: scrolled to and focused, then cleared.
@@ -102,6 +104,7 @@ struct NotesEditView: View {
                 RecipeListDropIndicator(isActive: dropTarget == .above(id))
                 NoteEditRowView(
                     note: RecipeItemListEditor.binding(for: id, in: $recipe.notes, fallback: note),
+                    dragPreviewWidth: listWidth,
                     isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: recipe.notes),
                     focusedNoteID: $focusedNoteID,
                     onAdd: { addNote(below: id) },
@@ -119,6 +122,11 @@ struct NotesEditView: View {
                 onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
         }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                listWidth = width
+            }
     }
 
     // MARK: - Editing
@@ -177,6 +185,8 @@ struct NotesEditView: View {
 
 struct NoteEditRowView: View {
     @Binding var note: Note
+    /// Width of the list, so the drag preview can match it.
+    let dragPreviewWidth: CGFloat
     let isAlternateRow: Bool
     var focusedNoteID: FocusState<String?>.Binding
     let onAdd: () -> Void
@@ -242,9 +252,7 @@ struct NoteEditRowView: View {
                     .labelStyle(.iconOnly)
                     .foregroundStyle(.tertiary)
                     .draggable(note.id) {
-                        Label("Drag to Move", systemImage: "line.3.horizontal")
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(.tertiary)
+                        RecipeRowDragPreview(listWidth: dragPreviewWidth, text: note.title, placeholder: "Note Title")
                     }
             }
         }
