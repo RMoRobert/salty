@@ -135,6 +135,43 @@ public struct IngredientTextParser {
 } 
 
 
+/// The units `parseQuantity()` will fold into the quantity, so "1 c" reads as one thing while the
+/// "onion" of "1 onion" stays part of the ingredient.
+///
+/// Hoisted out of `parseQuantity()` because the set was being rebuilt for every ingredient row drawn,
+/// and because the multi-word order below is an invariant that needs somewhere to be written down.
+private enum IngredientUnits {
+
+    /// Units of more than one word, **longest first**.
+    ///
+    /// Order matters: the first prefix match wins, so a shorter unit listed ahead of a longer one it
+    /// prefixes swallows only part of the word. Listed the other way round, "2 fluid ounces water"
+    /// parsed as a quantity of "2 fluid ounce" and a remainder of "s water".
+    static let multiWord: [String] = [
+        "fluid ounces", "fluid ounce",
+        "fl. oz.", "fl oz", "floz",
+    ]
+
+    static let single: Set<String> = [
+        "cup", "cups", "c", "c.",
+        "tablespoon", "tablespoons", "tbl", "tbl.", "tbsp", "tbsp.", "tbs", "tbs.",
+        "teaspoon", "teaspoons", "t", "t.", "tsp", "tsp.",
+        "gram", "grams", "g", "g.",
+        "kilogram", "kilograms", "kg", "kg.",
+        "ounce", "ounces", "oz", "oz.",
+        "pound", "pounds", "lb", "lb.", "lbs", "lbs.",
+        "milliliter", "milliliters", "ml", "ml.",
+        "liter", "liters", "l", "l.",
+        "package", "packages", "pkg", "pkg.",
+        "can", "cans",
+        "bottle", "bottles",
+        "piece", "pieces", "pc", "pc.",
+        "dash", "dashes",
+        "pinch", "pinches",
+        "drop", "drops"
+    ]
+}
+
 /// Utility struct extension for parsing quantity out of ingredient string (used in UI)
 extension Ingredient {
     /// Parses the ingredient text to identify the quantity portion (number + unit).
@@ -170,29 +207,13 @@ extension Ingredient {
             return (numberString, "")
         }
         
-        // Check for multi-word units first (e.g., "fl oz", "fluid ounce")
-        let multiWordUnits: [String] = [
-            "fl oz", "fl. oz.", "floz",
-            "fluid ounce", "fluid ounces"
-        ]
-        
+        // Multi-word units first (e.g. "fl oz", "fluid ounces"), longest first -- see IngredientUnits.
         let afterNumberLower = afterNumber.lowercased()
-        for unit in multiWordUnits {
-            let unitLower = unit.lowercased()
-            if afterNumberLower.hasPrefix(unitLower) {
-                // Find the actual unit string in the original text (preserving case)
-                // We need to match character by character to handle case variations
-                let unitLength = unit.count
-                if afterNumber.count >= unitLength {
-                    // Try to find the unit match preserving original case
-                    let possibleUnit = String(afterNumber.prefix(unitLength))
-                    if possibleUnit.lowercased() == unitLower {
-                        let afterUnit = String(afterNumber.dropFirst(unitLength)).trimmingCharacters(in: .whitespaces)
-                        let fullQuantity = "\(numberString) \(possibleUnit)"
-                        return (fullQuantity, afterUnit)
-                    }
-                }
-            }
+        for unit in IngredientUnits.multiWord where afterNumberLower.hasPrefix(unit) {
+            // Sliced out of the original rather than the lowercased copy, so "Fl Oz" survives as typed.
+            let asTyped = String(afterNumber.prefix(unit.count))
+            let afterUnit = String(afterNumber.dropFirst(unit.count)).trimmingCharacters(in: .whitespaces)
+            return ("\(numberString) \(asTyped)", afterUnit)
         }
         
         // Extract the next word/token (may include periods, hyphens, etc.)
@@ -204,29 +225,9 @@ extension Ingredient {
         let word = String(afterNumber[wordRange]).lowercased()
         let afterWord = String(afterNumber[wordRange.upperBound...]).trimmingCharacters(in: .whitespaces)
         
-        // Check if the word is a unit of measurement
-        let units: Set<String> = [
-            "cup", "cups", "c", "c.",
-            "tablespoon", "tablespoons", "tbl", "tbl.", "tbsp", "tbsp.", "tbs", "tbs.",
-            "teaspoon", "teaspoons", "t", "t.", "tsp", "tsp.",
-            "gram", "grams", "g", "g.",
-            "kilogram", "kilograms", "kg", "kg.",
-            "ounce", "ounces", "oz", "oz.",
-            "pound", "pounds", "lb", "lb.", "lbs", "lbs.",
-            "milliliter", "milliliters", "ml", "ml.",
-            "liter", "liters", "l", "l.",
-            "package", "packages", "pkg", "pkg.",
-            "can", "cans",
-            "bottle", "bottles",
-            "piece", "pieces", "pc", "pc.",
-            "dash", "dashes",
-            "pinch", "pinches",
-            "drop", "drops"
-        ]
-        
         // Check if word (with or without trailing period) matches a unit
         let wordWithoutPeriod = word.replacingOccurrences(of: ".", with: "")
-        if units.contains(word) || units.contains(wordWithoutPeriod) {
+        if IngredientUnits.single.contains(word) || IngredientUnits.single.contains(wordWithoutPeriod) {
             let fullQuantity = "\(numberString) \(String(afterNumber[wordRange]))"
             return (fullQuantity, afterWord)
         }
