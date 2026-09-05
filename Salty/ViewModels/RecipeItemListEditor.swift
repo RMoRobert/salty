@@ -2,17 +2,19 @@
 //  RecipeItemListEditor.swift
 //  Salty
 //
-//  The add / insert / delete / reorder half of the ingredient and direction editors, lifted out of
-//  the views so it can be tested. Both editors previously kept a private copy of the list, mirrored
-//  it back into the recipe through a pair of onChange handlers guarded by an equality check, and did
-//  their own index arithmetic in the drop handler. Working on `inout` arrays instead lets the views
-//  bind straight to `recipe.ingredients` / `recipe.directions`, so the mirror is gone.
+//  The add / insert / delete / reorder half of the recipe's five editable lists -- ingredients,
+//  directions, notes, preparation times, variations -- lifted out of the views so it can be tested.
+//  Each editor previously kept a private copy of its list, mirrored it back into the recipe through a
+//  pair of onChange handlers guarded by an equality check, and did its own index arithmetic in the
+//  drop handler. Working on `inout` arrays instead lets the views bind straight to
+//  `recipe.ingredients` and friends, so the mirror is gone.
 //
 //  Everything here is addressed by id rather than index, for the same reason
 //  LibraryClassifiersEditViewModel is: indices go stale the moment the list changes underneath them.
 //
 
 import Foundation
+import SwiftUI
 import SaltyCore
 
 enum RecipeItemListEditor {
@@ -95,6 +97,49 @@ enum RecipeItemListEditor {
 
         items.move(fromOffsets: IndexSet(integer: source), toOffset: destination)
         return true
+    }
+
+    /// Moves the row with `id` one position towards the top. Returns false if it is already there or
+    /// isn't in the list, which is also what disables the corresponding menu item.
+    @discardableResult
+    static func moveUp<Item: RecipeEditableRow>(id: String, in items: inout [Item]) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }), index > 0 else { return false }
+        items.move(fromOffsets: IndexSet(integer: index), toOffset: index - 1)
+        return true
+    }
+
+    /// Moves the row with `id` one position towards the bottom.
+    @discardableResult
+    static func moveDown<Item: RecipeEditableRow>(id: String, in items: inout [Item]) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }), index < items.count - 1 else { return false }
+        // Two past the source, because `toOffset` is measured before the row is lifted out.
+        items.move(fromOffsets: IndexSet(integer: index), toOffset: index + 2)
+        return true
+    }
+
+    // MARK: - Row bindings
+
+    /// A binding to the row with `id` that resolves its position on every read and write.
+    ///
+    /// `ForEach($rows)` would be shorter, but the bindings it produces index by position, and a row
+    /// outlives its own deletion: `withAnimation` keeps it on screen for the removal animation, and
+    /// the last row's index is `count` by then. Deleting the last row of a list -- which is always
+    /// what a just-added row is -- trapped on that. Resolving by id instead means a deleted row
+    /// falls back to the value it was last drawn with and then disappears.
+    static func binding<Item: RecipeEditableRow>(
+        for id: String,
+        in items: Binding<[Item]>,
+        fallback: Item
+    ) -> Binding<Item> {
+        Binding(
+            get: { items.wrappedValue.first { $0.id == id } ?? fallback },
+            set: { newValue in
+                // A write aimed at a row that is already gone is dropped rather than landing on
+                // whichever row moved into its place.
+                guard let index = items.wrappedValue.firstIndex(where: { $0.id == id }) else { return }
+                items.wrappedValue[index] = newValue
+            }
+        )
     }
 
     // MARK: - Display

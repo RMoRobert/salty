@@ -183,17 +183,19 @@ struct IngredientsListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach($ingredients) { $ingredient in
+            ForEach(ingredients) { ingredient in
                 let id = ingredient.id
                 RecipeListDropIndicator(isActive: dropTarget == .above(id))
                 IngredientEditRowView(
-                    ingredient: $ingredient,
+                    ingredient: RecipeItemListEditor.binding(for: id, in: $ingredients, fallback: ingredient),
                     isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: ingredients),
                     focusedIngredientID: focusedIngredientID,
                     onAdd: { addIngredient(below: id) },
                     onDelete: { delete(id: id) },
                     onDrop: { droppedID in move(droppedID, to: .above(id)) },
-                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) }
+                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) },
+                    onMoveUp: { moveUp(id: id) },
+                    onMoveDown: { moveDown(id: id) }
                 )
                 .id(id)
             }
@@ -232,6 +234,18 @@ struct IngredientsListView: View {
         return moved
     }
 
+    private func moveUp(id: String) -> Bool {
+        withAnimation(.snappy) {
+            RecipeItemListEditor.moveUp(id: id, in: &ingredients)
+        }
+    }
+
+    private func moveDown(id: String) -> Bool {
+        withAnimation(.snappy) {
+            RecipeItemListEditor.moveDown(id: id, in: &ingredients)
+        }
+    }
+
     /// Only the row currently being hovered clears the indicator: dragging from one row to the next
     /// reports the new row as targeted before the old one reports that it isn't.
     private func setDropTarget(_ target: RecipeItemListEditor.DropTarget, isTargeted: Bool) {
@@ -251,10 +265,12 @@ struct IngredientEditRowView: View {
     var focusedIngredientID: FocusState<String?>.Binding
     let onAdd: () -> Void
     let onDelete: () -> Void
-    /// Returns whether the drop was accepted. Nil when the row's container handles reordering
-    /// itself -- a List with `onMove` -- in which case the drag handle is dropped too.
-    var onDrop: ((String) -> Bool)?
-    var onDropTargetChanged: ((Bool) -> Void)?
+    /// Returns whether the drop was accepted.
+    let onDrop: (String) -> Bool
+    let onDropTargetChanged: (Bool) -> Void
+    /// Each returns whether the row actually moved.
+    let onMoveUp: () -> Bool
+    let onMoveDown: () -> Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 3) {
@@ -265,6 +281,7 @@ struct IngredientEditRowView: View {
                 .lineLimit(1...3)
                 .textFieldStyle(.plain)
                 .focused(focusedIngredientID, equals: ingredient.id)
+                .modifier(RecipeRowKeyboardReordering(onMoveUp: onMoveUp, onMoveDown: onMoveDown))
                 .padding([.top, .bottom], 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -314,17 +331,15 @@ struct IngredientEditRowView: View {
 
                 // Drag handle column - fixed width. The payload is the row's id, so a drop can tell a
                 // real row from a stray text drag and never acts on a stale index.
-                if onDrop != nil {
-                    Label("Drag to Move", systemImage: "line.3.horizontal")
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 24)
-                        .draggable(ingredient.id) {
-                            Label("Drag to Move", systemImage: "line.3.horizontal")
-                                .labelStyle(.iconOnly)
-                                .foregroundStyle(.tertiary)
-                        }
-                }
+                Label("Drag to Move", systemImage: "line.3.horizontal")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 24)
+                    .draggable(ingredient.id) {
+                        Label("Drag to Move", systemImage: "line.3.horizontal")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.tertiary)
+                    }
             }
         }
         .padding(.vertical, 2)
@@ -333,7 +348,12 @@ struct IngredientEditRowView: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isAlternateRow ? Color(nsColor: .tertiarySystemFill) : .clear)
         }
-        .modifier(RecipeRowDropDestination(onDrop: onDrop, onDropTargetChanged: onDropTargetChanged))
+        .dropDestination(for: String.self) { droppedIDs, _ in
+            guard let droppedID = droppedIDs.first else { return false }
+            return onDrop(droppedID)
+        } isTargeted: { isTargeted in
+            onDropTargetChanged(isTargeted)
+        }
     }
 }
 
