@@ -10,7 +10,6 @@
 import SwiftUI
 import Flow
 import SaltyCore
-import UUIDV7
 
 struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss
@@ -131,15 +130,18 @@ struct RecipeDetailEditMobileView: View {
     struct BasicInformationView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
         
+        /// "Servings" until one is set, then a correctly singular or plural count.
+        private var servingsLabel: String {
+            guard let servings = viewModel.recipe.servings else { return "Servings" }
+            return servings == 1 ? "1 serving" : "\(servings) servings"
+        }
+        
         var body: some View {
             Section("Basic Information") {
                 TextField("Name", text: $viewModel.recipe.name)
                 TextField("Source", text: $viewModel.recipe.source)
                 TextField("Source Details", text: $viewModel.recipe.sourceDetails)
-                Stepper(viewModel.recipe.servings != nil ?
-                        (viewModel.recipe.servings! > 1 ? "\(viewModel.recipe.servings!.description) servings"
-                         : "\(viewModel.recipe.servings!.description) serving")
-                        : "Servings",
+                Stepper(servingsLabel,
                         value: Binding(
                             get: { viewModel.recipe.servings ?? 0 },
                             set: { viewModel.recipe.servings = $0 == 0 ? nil : $0 }
@@ -163,9 +165,9 @@ struct RecipeDetailEditMobileView: View {
                 HStack {
                     Text("Categories")
                     Spacer()
-                    Button(action: {
+                    Button {
                         viewModel.showingEditCategoriesSheet.toggle()
-                    }) {
+                    } label: {
                         Text(viewModel.hasCategories ? viewModel.sortedCategories.joined(separator: ", ") : "Select Categories…")
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -200,15 +202,17 @@ struct RecipeDetailEditMobileView: View {
     // MARK: - Ingredients Section
     struct IngredientsView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
+        @FocusState private var focusedIngredientID: String?
         
         var body: some View {
             Section("Ingredients") {
                 ForEach($viewModel.recipe.ingredients) { $ingredient in
                     let placeholderText = ingredient.isHeading ? "Heading Name" : (ingredient.isMain ? "Main Ingredient Name" : "Ingredient Name")
                     HStack {
+                        // `.headline` already carries the weight a heading needs.
                         TextField(placeholderText, text: $ingredient.text)
                             .font(ingredient.isHeading ? .headline : .body)
-                            .fontWeight(ingredient.isHeading ? .semibold : .regular)
+                            .focused($focusedIngredientID, equals: ingredient.id)
                         Group {
                             if ingredient.isMain {
                                 Image(systemName: "medal")
@@ -228,39 +232,21 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-                    Button(action: {
-                        viewModel.recipe.ingredients.append(Ingredient(
-                            id: UUIDV7().uuidString,
-                            isHeading: false,
-                            isMain: false,
-                            text: ""
-                        ))
-                    }) {
-                        Label("Add Ingredient", systemImage: "plus.circle.fill")
+                    Button("Add Ingredient", systemImage: "plus.circle.fill") {
+                        add(.emptyRow())
                     }
                     .labelStyle(.titleAndIcon)
                     
                     Spacer()
                     Menu {
-                        Button(action: {
-                            viewModel.recipe.ingredients.append(Ingredient(
-                                id: UUIDV7().uuidString,
-                                isHeading: true,
-                                isMain: false,
-                                text: ""
-                            ))
-                        }) {
-                            Label("Add Heading", systemImage: "folder.badge.plus")
+                        Button("Add Heading", systemImage: "folder.badge.plus") {
+                            add(.emptyRow(isHeading: true))
                         }
                         
-                        Button(action: {
-                            viewModel.recipe.ingredients.append(Ingredient(
-                                id: UUIDV7().uuidString,
-                                isHeading: false,
-                                isMain: true,
-                                text: ""
-                            ))
-                        }) {
+                        Button {
+                            add(.emptyRow(isHeading: false, isMain: true))
+                        } label: {
+                            // A bundled image rather than a symbol, so this one keeps the Label form.
                             Label {
                                 Text("Add Main Ingredient")
                             } icon: {
@@ -268,17 +254,13 @@ struct RecipeDetailEditMobileView: View {
                             }
                         }
                         
-                        Button(action: {
+                        Button("Edit as Text (Bulk Edit)", systemImage: "text.page") {
                             viewModel.showingBulkEditIngredientsSheet.toggle()
-                        }) {
-                            Label("Edit as Text (Bulk Edit)", systemImage: "text.page")
                         }
                         
-                        Button(action: {
+                        Button("Scan Text", systemImage: "text.viewfinder") {
                             viewModel.scanTextTarget = .ingredients
                             viewModel.showingScanTextSheet.toggle()
-                        }) {
-                            Label("Scan Text", systemImage: "text.viewfinder")
                         }
                     } label: {
                         Label("More", systemImage: "ellipsis")
@@ -288,18 +270,49 @@ struct RecipeDetailEditMobileView: View {
                 }
             }
         }
+        
+        /// Appends the row and puts the keyboard in it, so adding several in a row doesn't mean
+        /// tapping into each new field first.
+        private func add(_ ingredient: Ingredient) {
+            let id = RecipeItemListEditor.append(ingredient, to: &viewModel.recipe.ingredients)
+            RecipeRowFocus.focus(id, in: $focusedIngredientID)
+        }
     }
     
     // MARK: - Directions Section
     struct DirectionsView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
+        @FocusState private var focusedDirectionID: String?
         
         var body: some View {
             Section("Directions") {
                 ForEach($viewModel.recipe.directions) { $direction in
-                    TextField(direction.isHeading == true ? "Heading Name" : "Direction Text", text: $direction.text)
-                        .font(direction.isHeading == true ? .headline : .body)
-                        .fontWeight(direction.isHeading == true ? .semibold : .regular)
+                    HStack(alignment: .firstTextBaseline) {
+                        // Numbered the way the desktop editor and the printed recipe number them:
+                        // headings don't take a number and don't advance the count.
+                        if let stepNumber = RecipeItemListEditor.stepNumber(
+                            forDirectionWith: direction.id,
+                            in: viewModel.recipe.directions
+                        ) {
+                            Text("\(stepNumber).")
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        // `.headline` already carries the weight a heading needs.
+                        TextField(
+                            direction.isHeadingRow ? "Heading Name" : "Direction Text",
+                            text: $direction.text,
+                            axis: .vertical
+                        )
+                        .font(direction.isHeadingRow ? .headline : .body)
+                        // Grows with the step rather than truncating it, but starts at one line so a
+                        // recipe with a dozen short steps doesn't turn into a wall of empty rows.
+                        // The ceiling is high enough that a real step doesn't clip -- 8 wasn't, and a
+                        // truncated row is the thing this is meant to fix -- while still bounding a
+                        // pathologically long one. The macOS editor caps at 13 for the same reason.
+                        .lineLimit(direction.isHeadingRow ? 1...2 : 1...15)
+                        .focused($focusedDirectionID, equals: direction.id)
+                    }
                 }
                 .onDelete { indexSet in
                     viewModel.recipe.directions.remove(atOffsets: indexSet)
@@ -308,41 +321,25 @@ struct RecipeDetailEditMobileView: View {
                     viewModel.recipe.directions.move(fromOffsets: from, toOffset: to)
                 }
                 HStack {
-                    Button(action: {
-                        viewModel.recipe.directions.append(Direction(
-                            id: UUIDV7().uuidString,
-                            isHeading: false,
-                            text: ""
-                        ))
-                    }) {
-                        Label("Add Step", systemImage: "plus.circle.fill")
+                    Button("Add Step", systemImage: "plus.circle.fill") {
+                        add(.emptyRow())
                     }
                     .labelStyle(.titleAndIcon)
                     
                     Spacer()
                     
                     Menu {
-                        Button(action: {
-                            viewModel.recipe.directions.append(Direction(
-                                id: UUIDV7().uuidString,
-                                isHeading: true,
-                                text: ""
-                            ))
-                        }) {
-                            Label("Add Heading", systemImage: "folder.badge.plus")
+                        Button("Add Heading", systemImage: "folder.badge.plus") {
+                            add(.emptyRow(isHeading: true))
                         }
                         
-                        Button(action: {
+                        Button("Edit as Text (Bulk Edit)", systemImage: "text.page") {
                             viewModel.showingBulkEditDirectionsSheet.toggle()
-                        }) {
-                            Label("Edit as Text (Bulk Edit)", systemImage: "text.page")
                         }
                         
-                        Button(action: {
+                        Button("Scan Text", systemImage: "text.viewfinder") {
                             viewModel.scanTextTarget = .directions
                             viewModel.showingScanTextSheet.toggle()
-                        }) {
-                            Label("Scan Text", systemImage: "text.viewfinder")
                         }
                     } label: {
                         Label("More", systemImage: "ellipsis")
@@ -352,11 +349,18 @@ struct RecipeDetailEditMobileView: View {
                 }
             }
         }
+        
+        /// Appends the row and puts the keyboard in it.
+        private func add(_ direction: Direction) {
+            let id = RecipeItemListEditor.append(direction, to: &viewModel.recipe.directions)
+            RecipeRowFocus.focus(id, in: $focusedDirectionID)
+        }
     }
     
     // MARK: - Preparation Time Section
     struct PreparationTimesView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
+        @FocusState private var focusedPreparationTimeID: String?
         
         var body: some View {
             Section("Preparation Time") {
@@ -364,7 +368,7 @@ struct RecipeDetailEditMobileView: View {
                     HStack {
                         TextField("Type (e.g., \"Bake\")", text: $preparationTime.type)
                             .font(.headline)
-                            .fontWeight(.semibold)
+                            .focused($focusedPreparationTimeID, equals: preparationTime.id)
                         TextField("Time (e.g., \"30 minutes\")", text: $preparationTime.timeString)
                             .font(.body)
                     }
@@ -377,14 +381,9 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-                    Button(action: {
-                        viewModel.recipe.preparationTimes.append(PreparationTime(
-                            id: UUIDV7().uuidString,
-                            type: "",
-                            timeString: ""
-                        ))
-                    }) {
-                        Label("Add Time", systemImage: "plus.circle.fill")
+                    Button("Add Time", systemImage: "plus.circle.fill") {
+                        let id = RecipeItemListEditor.append(.emptyRow(), to: &viewModel.recipe.preparationTimes)
+                        RecipeRowFocus.focus(id, in: $focusedPreparationTimeID)
                     }
                     .labelStyle(.titleAndIcon)
                     
@@ -397,6 +396,7 @@ struct RecipeDetailEditMobileView: View {
     // MARK: - Notes Section
     struct NotesView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
+        @FocusState private var focusedNoteID: String?
         
         var body: some View {
             Section("Notes") {
@@ -404,7 +404,7 @@ struct RecipeDetailEditMobileView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("Note title", text: $note.title)
                             .font(.headline)
-                            .fontWeight(.semibold)
+                            .focused($focusedNoteID, equals: note.id)
                         TextField("Note content", text: $note.content, axis: .vertical)
                             .font(.body)
                             .lineLimit(3...6)
@@ -418,14 +418,9 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-                    Button(action: {
-                        viewModel.recipe.notes.append(Note(
-                            id: UUIDV7().uuidString,
-                            title: "",
-                            content: ""
-                        ))
-                    }) {
-                        Label("Add Note", systemImage: "plus.circle.fill")
+                    Button("Add Note", systemImage: "plus.circle.fill") {
+                        let id = RecipeItemListEditor.append(.emptyRow(), to: &viewModel.recipe.notes)
+                        RecipeRowFocus.focus(id, in: $focusedNoteID)
                     }
                     .labelStyle(.titleAndIcon)
                     
@@ -438,6 +433,7 @@ struct RecipeDetailEditMobileView: View {
     // MARK: - Variations Section
     struct VariationsView: View {
         @Bindable var viewModel: RecipeDetailEditViewModel
+        @FocusState private var focusedVariationID: String?
         
         var body: some View {
             Section("Variations") {
@@ -445,7 +441,7 @@ struct RecipeDetailEditMobileView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("Variation name", text: $variation.variationName)
                             .font(.headline)
-                            .fontWeight(.semibold)
+                            .focused($focusedVariationID, equals: variation.id)
                         TextField("Variation text", text: $variation.text, axis: .vertical)
                             .font(.body)
                             .lineLimit(3...6)
@@ -459,14 +455,9 @@ struct RecipeDetailEditMobileView: View {
                 }
                 
                 HStack {
-                    Button(action: {
-                        viewModel.recipe.variations.append(Variation(
-                            id: UUIDV7().uuidString,
-                            variationName: "",
-                            text: ""
-                        ))
-                    }) {
-                        Label("Add Variation", systemImage: "plus.circle.fill")
+                    Button("Add Variation", systemImage: "plus.circle.fill") {
+                        let id = RecipeItemListEditor.append(.emptyRow(), to: &viewModel.recipe.variations)
+                        RecipeRowFocus.focus(id, in: $focusedVariationID)
                     }
                     .labelStyle(.titleAndIcon)
                     
@@ -487,10 +478,8 @@ struct RecipeDetailEditMobileView: View {
                 if viewModel.hasTags {
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
                         ForEach(viewModel.sortedTags, id: \.self) { tag in
-                            Button(action: {
+                            Button(tag, systemImage: "minus.circle") {
                                 Task { await viewModel.removeTag(tag) }
-                            }) {
-                                Label(tag, systemImage: "minus.circle")
                             }
                             .buttonStyle(.bordered)
                             .foregroundStyle(.primary)
@@ -505,11 +494,9 @@ struct RecipeDetailEditMobileView: View {
                     }
                     .animation(.easeInOut(duration: 0.3), value: viewModel.sortedTags)
                 }
-                Button(action: {
+                Button("Add Tag", systemImage: "plus.circle.fill") {
                     newTagName = ""
                     showingAddTagAlert = true
-                }) {
-                    Label("Add Tag", systemImage: "plus.circle.fill")
                 }
                 .labelStyle(.titleAndIcon)
             }
