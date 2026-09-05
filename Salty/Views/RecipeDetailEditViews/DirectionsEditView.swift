@@ -12,6 +12,8 @@ import SwiftUI
 
 struct DirectionsEditView: View {
     @Binding var recipe: Recipe
+    /// The list's own width, measured so a dragged row's preview can match it.
+    @State private var listWidth: CGFloat = 0
     /// Where a dragged row would land, or nil when nothing is being dragged over the list.
     @State private var dropTarget: RecipeItemListEditor.DropTarget?
     /// A row that was just added: scrolled to and focused, then cleared.
@@ -116,6 +118,7 @@ struct DirectionsEditView: View {
                 RecipeListDropIndicator(isActive: dropTarget == .above(id))
                 DirectionEditRowView(
                     direction: RecipeItemListEditor.binding(for: id, in: $recipe.directions, fallback: direction),
+                    dragPreviewWidth: listWidth,
                     stepNumber: RecipeItemListEditor.stepNumber(forDirectionWith: id, in: recipe.directions),
                     isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: recipe.directions),
                     focusedDirectionID: $focusedDirectionID,
@@ -134,6 +137,11 @@ struct DirectionsEditView: View {
                 onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
         }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                listWidth = width
+            }
     }
 
     // MARK: - Editing
@@ -204,6 +212,8 @@ struct DirectionsEditView: View {
 
 struct DirectionEditRowView: View {
     @Binding var direction: Direction
+    /// Width of the list, so the drag preview can match it.
+    let dragPreviewWidth: CGFloat
     let stepNumber: Int?
     let isAlternateRow: Bool
     var focusedDirectionID: FocusState<String?>.Binding
@@ -215,30 +225,6 @@ struct DirectionEditRowView: View {
     /// Each returns whether the row actually moved.
     let onMoveUp: () -> Bool
     let onMoveDown: () -> Bool
-
-    private var directionDragPreview: some View {
-        HStack(alignment: .center, spacing: 8) {
-            if let stepNumber {
-                Text("\(stepNumber).")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(direction.text)
-                .font(direction.isHeadingRow ? .headline : .body)
-                .fontWeight(direction.isHeadingRow ? .semibold : .regular)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.regularMaterial)
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-        )
-        .frame(maxWidth: 300)
-    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 2) {
@@ -291,7 +277,13 @@ struct DirectionEditRowView: View {
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.tertiary)
                         .draggable(direction.id) {
-                            directionDragPreview
+                            RecipeRowDragPreview(
+                                listWidth: dragPreviewWidth,
+                                stepNumber: stepNumber,
+                                text: direction.text,
+                                placeholder: direction.isHeadingRow ? "Heading Name" : "Direction text",
+                                isHeading: direction.isHeadingRow
+                            )
                         }
                 }
             }

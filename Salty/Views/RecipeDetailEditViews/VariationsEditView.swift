@@ -12,6 +12,8 @@ import SwiftUI
 
 struct VariationsEditView: View {
     @Binding var recipe: Recipe
+    /// The list's own width, measured so a dragged row's preview can match it.
+    @State private var listWidth: CGFloat = 0
     /// Where a dragged row would land, or nil when nothing is being dragged over the list.
     @State private var dropTarget: RecipeItemListEditor.DropTarget?
     /// A row that was just added: scrolled to and focused, then cleared.
@@ -102,6 +104,7 @@ struct VariationsEditView: View {
                 RecipeListDropIndicator(isActive: dropTarget == .above(id))
                 VariationEditRowView(
                     variation: RecipeItemListEditor.binding(for: id, in: $recipe.variations, fallback: variation),
+                    dragPreviewWidth: listWidth,
                     focusedVariationID: $focusedVariationID,
                     onAdd: { addVariation(below: id) },
                     onDelete: { delete(id: id) },
@@ -118,6 +121,11 @@ struct VariationsEditView: View {
                 onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
         }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                listWidth = width
+            }
     }
 
     // MARK: - Editing
@@ -176,6 +184,8 @@ struct VariationsEditView: View {
 
 struct VariationEditRowView: View {
     @Binding var variation: Variation
+    /// Width of the list, so the drag preview can match it.
+    let dragPreviewWidth: CGFloat
     var focusedVariationID: FocusState<String?>.Binding
     let onAdd: () -> Void
     let onDelete: () -> Void
@@ -240,9 +250,7 @@ struct VariationEditRowView: View {
                     .labelStyle(.iconOnly)
                     .foregroundStyle(.tertiary)
                     .draggable(variation.id) {
-                        Label("Drag to Move", systemImage: "line.3.horizontal")
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(.tertiary)
+                        RecipeRowDragPreview(listWidth: dragPreviewWidth, text: variation.variationName, placeholder: "Variation Name")
                     }
             }
         }

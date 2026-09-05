@@ -176,6 +176,8 @@ struct MenuItem {
 }
 
 struct IngredientsListView: View {
+    /// The list's own width, measured so a dragged row's preview can match it.
+    @State private var listWidth: CGFloat = 0
     @Binding var ingredients: [Ingredient]
     @Binding var dropTarget: RecipeItemListEditor.DropTarget?
     @Binding var scrollToNewItem: String?
@@ -188,6 +190,7 @@ struct IngredientsListView: View {
                 RecipeListDropIndicator(isActive: dropTarget == .above(id))
                 IngredientEditRowView(
                     ingredient: RecipeItemListEditor.binding(for: id, in: $ingredients, fallback: ingredient),
+                    dragPreviewWidth: listWidth,
                     isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: ingredients),
                     focusedIngredientID: focusedIngredientID,
                     onAdd: { addIngredient(below: id) },
@@ -205,6 +208,11 @@ struct IngredientsListView: View {
                 onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
             )
         }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                listWidth = width
+            }
     }
 
     // MARK: - Editing
@@ -261,6 +269,8 @@ struct IngredientsListView: View {
 
 struct IngredientEditRowView: View {
     @Binding var ingredient: Ingredient
+    /// Width of the list, so the drag preview can match it.
+    let dragPreviewWidth: CGFloat
     let isAlternateRow: Bool
     var focusedIngredientID: FocusState<String?>.Binding
     let onAdd: () -> Void
@@ -336,9 +346,12 @@ struct IngredientEditRowView: View {
                     .foregroundStyle(.tertiary)
                     .frame(width: 24)
                     .draggable(ingredient.id) {
-                        Label("Drag to Move", systemImage: "line.3.horizontal")
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(.tertiary)
+                        RecipeRowDragPreview(
+                            listWidth: dragPreviewWidth,
+                            text: ingredient.text,
+                            placeholder: ingredient.isHeadingRow ? "Heading Title" : "Ingredient",
+                            isHeading: ingredient.isHeadingRow
+                        )
                     }
             }
         }
