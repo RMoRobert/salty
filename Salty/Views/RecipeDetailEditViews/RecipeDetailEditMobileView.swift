@@ -179,10 +179,8 @@ struct RecipeDetailEditMobileView: View {
                 Toggle("Favorite", isOn: $viewModel.recipe.isFavorite)
                 Toggle("Want to make", isOn: $viewModel.recipe.wantToMake)
                 
-                HStack {
-                    Text("Rating")
-                    Spacer()
-                    RatingEditView(recipe: $viewModel.recipe)
+                LabeledContent("Rating") {
+                    StarRatingEditView(rating: $viewModel.recipe.rating, clearButtonEdge: .leading)
                 }
                 
                 HStack {

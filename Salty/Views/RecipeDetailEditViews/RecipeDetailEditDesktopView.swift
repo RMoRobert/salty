@@ -163,7 +163,10 @@ struct RecipeDetailEditDesktopView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Rating:")
                                 .frame(width: 80, alignment: .leading)
-                            RatingEditView(recipe: $viewModel.recipe)
+                                // The control announces itself as "Rating"; this caption
+                                // would otherwise be read out a second time.
+                                .accessibilityHidden(true)
+                            StarRatingEditView(rating: $viewModel.recipe.rating)
                                 .frame(maxWidth: 250, alignment: .leading)
                         }
                         Spacer()
