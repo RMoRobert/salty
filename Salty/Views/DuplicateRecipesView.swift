@@ -248,7 +248,7 @@ private struct DuplicateRecipeRowView: View {
                 }
                 if recipe.rating != .notSet {
                     Label(recipe.rating.stringValue(), systemImage: "star.fill")
-                        .accessibilityLabel("Rated \(recipe.rating.stringValue())")
+                        .accessibilityLabel("Rated \(recipe.rating.rawValue) of 5 stars")
                 }
                 if recipe.isFavorite {
                     Image(systemName: "heart.fill")
