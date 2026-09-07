@@ -285,15 +285,14 @@ struct RecipeDetailEditMobileView: View {
         var body: some View {
             Section("Directions") {
                 ForEach($viewModel.recipe.directions) { $direction in
-                    HStack(alignment: .firstTextBaseline) {
-                        // Numbered the way the desktop editor and the printed recipe number them:
-                        // headings don't take a number and don't advance the count.
+                    // Top aligned, not first baseline: an empty vertical-axis TextField reports a
+                    // first baseline a line above the one it draws its placeholder on.
+                    HStack(alignment: .top) {
                         if let stepNumber = RecipeItemListEditor.stepNumber(
                             forDirectionWith: direction.id,
                             in: viewModel.recipe.directions
                         ) {
-                            Text("\(stepNumber).")
-                                .foregroundStyle(.secondary)
+                            DirectionStepNumberLabel(number: stepNumber)
                         }
                         
                         // `.headline` already carries the weight a heading needs.
@@ -303,11 +302,6 @@ struct RecipeDetailEditMobileView: View {
                             axis: .vertical
                         )
                         .font(direction.isHeadingRow ? .headline : .body)
-                        // Grows with the step rather than truncating it, but starts at one line so a
-                        // recipe with a dozen short steps doesn't turn into a wall of empty rows.
-                        // The ceiling is high enough that a real step doesn't clip -- 8 wasn't, and a
-                        // truncated row is the thing this is meant to fix -- while still bounding a
-                        // pathologically long one. The macOS editor caps at 13 for the same reason.
                         .lineLimit(direction.isHeadingRow ? 1...2 : 1...15)
                         .focused($focusedDirectionID, equals: direction.id)
                     }
