@@ -52,7 +52,7 @@ struct RatingView: View {
             .accessibilityLabel(
                 recipe.rating == .notSet
                     ? "Rating: not set"
-                    : "Rating: \(recipe.rating.rawValue) star\(recipe.rating.rawValue == 1 ? "" : "s")"
+                    : "Rating: \(recipe.rating.rawValue) of 5 stars"
             )
         }
     }

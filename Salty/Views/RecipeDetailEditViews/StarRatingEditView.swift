@@ -69,7 +69,7 @@ struct StarRatingEditView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Rating")
-        .accessibilityValue(rating == .notSet ? "Not set" : "\(rating.rawValue) out of 5")
+        .accessibilityValue(rating == .notSet ? "Not set" : "\(rating.rawValue) of 5 stars")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: rating = rating.stepped(by: 1)
@@ -122,13 +122,13 @@ private extension Rating {
     /// The rating `delta` steps away, clamped to the `notSet`...`five` range.
     func stepped(by delta: Int) -> Rating {
         let last = Self.allCases.count - 1
-        return Rating(rawValue: min(max(rawValue + delta, 0), last)) ?? self
+        return Rating(rawValue: Swift.min(Swift.max(rawValue + delta, 0), last)) ?? self
     }
 }
 
 // MARK: - Tap targets
 
-/// The smallest comfortable touch target per the HIG. Hit regions below are grown to
+/// The smallest comfortable touch target per HIG. Hit regions below are grown to
 /// this size around glyphs that draw much smaller, without changing their layout.
 /// Pointers are precise enough that macOS gets no such slop.
 private enum TapTarget {
@@ -248,18 +248,38 @@ private struct RatingStarRow: View {
         previewRating ?? rating
     }
 
-    /// One gesture handles both a plain tap and a sweep across the row. Per-star
-    /// buttons plus a drag made SwiftUI arbitrate between the two, and the button
-    /// under the touch-down point always won, so the sweep never took effect.
+    /// The sweep across the row. A drag here used to beat the enclosing Form's
+    /// scroll outright, so touch scrolling on iOS by touching here would set rating
+    /// instead of scroll. Two things fix that: the gesture is attached as *simultaneous*, so
+    /// the scroll can recognise alongside it and take over vertical movement, and
+    /// the sweep only previews or commits while the drag is mostly horizontal, so
+    /// even a drag the scroll does not cancel leaves the rating alone.
     private var sweep: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.coordinateSpace))
+        DragGesture(coordinateSpace: .named(Self.coordinateSpace))
             .updating($dragRating) { value, dragRating, _ in
-                dragRating = star(atX: value.location.x)
+                dragRating = Self.isSweeping(value) ? star(atX: value.location.x) : nil
             }
             .onChanged { _ in
                 onPointerDown()
             }
             .onEnded { value in
+                guard Self.isSweeping(value) else { return }
+                rating = star(atX: value.location.x)
+            }
+    }
+
+    /// Whether a drag reads as a sweep along the stars rather than a scroll past them.
+    private static func isSweeping(_ value: DragGesture.Value) -> Bool {
+        abs(value.translation.width) >= abs(value.translation.height)
+    }
+
+    /// A plain tap, which the thresholded sweep no longer covers. Row-level rather
+    /// than per-star buttons: buttons plus a drag made SwiftUI arbitrate between the
+    /// two, and the button under the touch-down point always won.
+    private var tap: some Gesture {
+        SpatialTapGesture(coordinateSpace: .named(Self.coordinateSpace))
+            .onEnded { value in
+                onPointerDown()
                 rating = star(atX: value.location.x)
             }
     }
@@ -287,7 +307,9 @@ private struct RatingStarRow: View {
         .padding(.vertical, touchSlop)
         .contentShape(.rect)
         .padding(.vertical, -touchSlop)
-        .gesture(sweep)
+        // The sweep gets first claim; only when it fails (no movement) does the tap fire.
+        // Simultaneous so the Form's scroll is never locked out; see `sweep`.
+        .simultaneousGesture(sweep.exclusively(before: tap))
         #if os(macOS)
         // Row-level rather than per-star: hovering a star's own frame left the 2pt
         // gaps between them uncovered, so the preview dropped back to the real
