@@ -646,7 +646,7 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text("Salty automatically backs up your recipe library about every day and a half, keeping the two most recent backups plus a few older ones spaced days to weeks apart.")
+                Text("Salty automatically backs up your recipe library about every day or two and keeps the two most recent backups plus a few older ones, days to weeks apart, if available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
