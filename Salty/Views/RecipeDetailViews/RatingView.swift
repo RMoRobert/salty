@@ -35,9 +35,17 @@ struct RatingView: View {
                 ForEach(1..<6) { val in
                     let isStarInRange = recipe.rating.rawValue >= val
                     Image(systemName: isStarInRange ? "star.fill" : "star")
-                        .symbolRenderingMode(isStarInRange ? .hierarchical : nil)
-                        .foregroundStyle(isStarInRange ? .yellow : .gray)
-                        .shadow(radius: isStarInRange ? 0.5 : 0, x: isStarInRange ? 0.5 : 0, y: isStarInRange ? 1 : 0)
+                        .foregroundStyle(isStarInRange ? Color.ratingStar : .gray)
+                        // `ratingStarOutline` is transparent except under Increase Contrast in light
+                        // mode, where the outline -- not the fill -- is what carries the star's
+                        // contrast. Everywhere else it draws nothing, so the plain orange star is
+                        // what shows. The appearance does the switching; no colorScheme check here.
+                        .overlay {
+                            if isStarInRange {
+                                Image(systemName: "star")
+                                    .foregroundStyle(Color.ratingStarOutline)
+                            }
+                        }
                         .opacity(recipe.rating.rawValue > 0 ? 1 : 0.33)
                 }
             }

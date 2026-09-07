@@ -34,7 +34,7 @@ struct RecipeImageView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                            .clipShape(.rect(cornerRadius: 5, style: .continuous))
                             .frame(width: imageFrameSize, height: imageFrameSize, alignment: .center)
                     case .failure(let error):
                         // Check if it's a cancellation error and retry (see -999 cancelled sometimes on iOS -- no idea why, but this seems to work around)
@@ -52,7 +52,7 @@ struct RecipeImageView: View {
                         } else {
                             // Show fallback after max retries or other errors
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(.white)
+                                .fill(.quaternary)
                                 .frame(width: imageFrameSize, height: imageFrameSize)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10)
@@ -61,7 +61,7 @@ struct RecipeImageView: View {
                         }
                     @unknown default:
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(.white)
+                            .fill(.quaternary)
                             .frame(width: imageFrameSize, height: imageFrameSize)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
@@ -73,7 +73,7 @@ struct RecipeImageView: View {
             }
             else {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(.white)
+                    .fill(.quaternary)
                     .frame(width: imageFrameSize, height: imageFrameSize)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)

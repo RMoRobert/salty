@@ -236,12 +236,16 @@ private struct TitleAndBasicInfoSection: View {
             }
             .padding()
             if let recipe = viewModel.recipe, recipe.imageFilename != nil {
-                RecipeImageView(recipe: recipe)
-                    .shadow(radius: 2)
-                    .padding()
-                    .onTapGesture {
-                        viewModel.showFullImage()
-                    }
+                Button {
+                    viewModel.showFullImage()
+                } label: {
+                    RecipeImageView(recipe: recipe)
+                        .shadow(radius: 2)
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .accessibilityLabel("Recipe photo")
+                .accessibilityHint("Shows the full-size image")
             }
         }
         .padding([.top], 8)
@@ -259,7 +263,6 @@ private struct PrepTimeAndFavoriteEtcSection: View {
                         HStack {
                             Image(systemName: "heart.fill")
                                 .foregroundStyle(.red)
-                                .modifier(IconShadowModifier())
                             Text("Favorite")
                         }
                         .accessibilityElement(children: .combine)
@@ -269,7 +272,6 @@ private struct PrepTimeAndFavoriteEtcSection: View {
                         HStack {
                             Image(systemName: "bookmark")
                                 .foregroundStyle(Color.green.opacity(0.8))
-                                .modifier(IconShadowModifier())
                             Text("Want to Make")
                         }
                         .accessibilityElement(children: .combine)
@@ -712,13 +714,6 @@ private struct TitleStyle: ViewModifier {
             .bold()
             .padding(.top, 8)
             .padding(.bottom, 8)
-    }
-}
-
-private struct IconShadowModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .shadow(radius: 0.5, x:0.5, y:1)
     }
 }
 
