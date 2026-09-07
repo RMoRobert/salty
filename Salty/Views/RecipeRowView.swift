@@ -25,6 +25,9 @@ func createXPImage(_ value: Data) -> Image {
 struct RecipeRowView: View {
     @AppStorage("listViewStyle") private var listViewStyle: RecipeListViewStyle = .summary
     let recipe: RecipeListItem
+    private var thumbnailSize: CGFloat { listViewStyle == .smallIcons ? 32 : 64 }
+    /// Corner radius tracks the thumbnail size so the small-icon style doesn't read as a squircle.
+    private var thumbnailCornerRadius: CGFloat { listViewStyle == .smallIcons ? 6 : 10 }
     private var hasBottomRowData: Bool {
         recipe.rating != .notSet
     }
@@ -32,8 +35,7 @@ struct RecipeRowView: View {
         Image(systemName: recipe.isFavorite ? "heart.fill" : "heart.slash")
             .font(.caption)
             .foregroundStyle(.red)
-            .modifier(IconShadowModifier())
-            .opacity(recipe.isFavorite ? 100 : 0)
+            .opacity(recipe.isFavorite ? 1 : 0)
             .accessibilityHint(recipe.isFavorite ? "Is Favorite" : "Not Favorite")
     }
     
@@ -43,21 +45,27 @@ struct RecipeRowView: View {
                 createXPImage(thumbnailData)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: listViewStyle == .smallIcons ? 32 : 64, height: listViewStyle == .smallIcons ? 32 : 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .shadow(radius: 2)
+                    .frame(width: thumbnailSize, height: thumbnailSize)
+                    .clipShape(.rect(cornerRadius: thumbnailCornerRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: thumbnailCornerRadius, style: .continuous)
+                            .strokeBorder(.separator, lineWidth: 0.5)
+                    }
                     .padding(4)
             } else {
                 // Show default recipe image when no thumbnail data
                 Image(systemName: "list.bullet.rectangle")
                     .font(.system(size: listViewStyle == .smallIcons ? 24 : 32, weight: .light))
                     .foregroundStyle(.gray.opacity(0.4))
-                    .frame(width: listViewStyle == .smallIcons ? 32 : 64, height: listViewStyle == .smallIcons ? 32 : 64)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5)
-                            .fill(.gray.opacity((0.06)))
-                            .shadow(radius: 2)
-                    )
+                    .frame(width: thumbnailSize, height: thumbnailSize)
+                    .background {
+                        RoundedRectangle(cornerRadius: thumbnailCornerRadius, style: .continuous)
+                            .fill(.gray.opacity(0.06))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: thumbnailCornerRadius, style: .continuous)
+                            .strokeBorder(.separator, lineWidth: 0.5)
+                    }
                     .padding(4)
             }
             VStack(alignment: .leading) {
@@ -66,7 +74,7 @@ struct RecipeRowView: View {
                 }
                 VStack(alignment: .leading) {
                     Text(recipe.name)
-                        .fontWeight(.semibold)
+                        .font(.headline)
                         .multilineTextAlignment(.leading)
                         .lineLimit(1)
                     if listViewStyle == .summary || (!hasBottomRowData && !recipe.isFavorite) {
@@ -96,7 +104,6 @@ struct RecipeRowView: View {
                                     Image(systemName: recipe.rating.rawValue >= starNum ? "star.fill" : "star")
                                         .foregroundStyle(.secondary)
                                         .font(.caption2)
-                                        .modifier(IconShadowModifier())
                                         .accessibilityHidden(true)
                                 }
                             }
@@ -125,14 +132,6 @@ struct RecipeRowView: View {
             }
         }
     }
-    
-    struct IconShadowModifier: ViewModifier {
-        func body(content: Content) -> some View {
-            content
-                .shadow(radius: 0.5, x:0.5, y:1)
-        }
-    }
-    
 }
 
 
