@@ -33,6 +33,15 @@ class ShoppingListFreeformViewModel {
     @ObservationIgnored
     private var saveTask: Task<Void, Never>?
 
+    /// The text as last read from or written to the database. Saves are triggered by the view's
+    /// `onChange(of: text)`, which can't tell typing from `reloadAfterExternalChange()` assigning
+    /// `text` — so without this, every reload was saved straight back and announced as a *new* edit.
+    /// With the list open in two windows, that echo reached the window being typed in about 0.4s after
+    /// its own save and reloaded it with its own now-stale text, dropping the keystrokes typed since
+    /// and (because the editor's string was replaced wholesale) throwing the cursor to the end.
+    @ObservationIgnored
+    private var storedText = ""
+
     init(listId: String) {
         self.listId = listId
     }
@@ -57,6 +66,7 @@ class ShoppingListFreeformViewModel {
                 guard !isLoaded else { return }
                 // A missing row is a legitimately empty document, not a reason to keep waiting.
                 text = list?.contentsForFreeform ?? ""
+                storedText = text
                 isLoaded = true
                 return
             } catch is CancellationError {
@@ -86,17 +96,27 @@ class ShoppingListFreeformViewModel {
             let list = try await database.read { [listId] db in
                 try ShoppingList.where { $0.id.eq(listId) }.fetchOne(db)
             }
-            text = list?.contentsForFreeform ?? ""
+            let reloaded = list?.contentsForFreeform ?? ""
+            storedText = reloaded
+            // Replacing an editor's string resets its selection, so leave an identical one alone.
+            if text != reloaded {
+                text = reloaded
+            }
         } catch {
             logger.error("Error reloading shopping list \(self.listId): \(error)")
         }
     }
 
     /// Debounced save: collapses a burst of keystrokes into one write. Guarded on `isLoaded` so the
-    /// initial text assignment during `load()` doesn't schedule a redundant save.
+    /// initial text assignment during `load()` doesn't schedule a redundant save, and on `storedText`
+    /// so a reload (or typing that ends up back where the database already is) doesn't either.
     func scheduleSave() {
         guard isLoaded else { return }
         saveTask?.cancel()
+        guard text != storedText else {
+            saveTask = nil
+            return
+        }
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(0.4))
             guard !Task.isCancelled else { return }
@@ -116,6 +136,7 @@ class ShoppingListFreeformViewModel {
         saveTask = nil
         guard isLoaded else { return }
         let content = text
+        storedText = content
         let id = listId
         let log = logger
         let token = editorToken
