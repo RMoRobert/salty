@@ -515,6 +515,14 @@ private struct RecipeListColumnView: View {
     private let logger = Logger(subsystem: "Salty", category: "UI")
 
     #if os(macOS)
+    /// Exists only to bump once after recipe list appears to force rebuild the toolbar's New Recipe split button.
+    /// Workaround for apparent macOS 27.0 SwiftUI bug: a `Menu` with `primaryAction` in a window created at launch (with
+    /// at least one other toolbar item beside it) lays out its "+" segment  too narrow (jammed against edges).
+    /// Recreating the toolbar item after after it apppears seems to force proper measurements (other ideas like toggling `.disabled` or
+    /// resizing window did not). Doesn't affect Shopping List "New" button, likely since user only selects after app launch, so only doing here/
+    /// Remove if/when fixed in SwiftUI:
+    @State private var newRecipeMenuRefreshID = 0
+
     private func openRecipeInNewWindow(recipeId: String) {
         openWindow(id: "recipe-detail-window", value: recipeId)
     }
@@ -907,6 +915,7 @@ private struct RecipeListColumnView: View {
                 primaryAction: {
                     viewModel.addNewRecipe()
                 }
+                .id(newRecipeMenuRefreshID) // workaround for SwiftUI oddity; see comment above
 
             }
             #endif
@@ -951,6 +960,9 @@ private struct RecipeListColumnView: View {
             if !viewModel.selectedRecipeIDs.isEmpty {
                 showingDeleteConfirmation = true
             }
+        }
+        .task {
+            newRecipeMenuRefreshID += 1  // workaround for SwiftUI oddity; see comment above
         }
         #endif
         .searchable(text: $viewModel.searchString)

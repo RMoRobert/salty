@@ -257,7 +257,7 @@ public enum RecipeListQueryBuilder {
         // Never-made recipes sort LAST in BOTH directions. SQLite puts NULLs first when ascending, which
         // would fill the top of the list with recipes that have no date at all — for a sort whose whole
         // point is "what have I cooked lately", those belong at the bottom whichever way it's pointed.
-        case .byLastMade:     return "\(Recipe.lastPrepared) IS NULL, \(Recipe.lastPrepared) \(direction)"
+        case .byLastPrepared:     return "\(Recipe.lastPrepared) IS NULL, \(Recipe.lastPrepared) \(direction)"
         }
     }
 }
