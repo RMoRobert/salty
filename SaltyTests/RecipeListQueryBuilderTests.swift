@@ -64,7 +64,7 @@ struct RecipeListQueryBuilderTests {
     /// SQLite sorts NULLs first, filling the top of the list with recipes that have no date at all.
     @Test func lastMadeSortsNullsLastInBothDirections() {
         for direction in RecipeListSortDirection.allCases {
-            let s = sql(sortOrder: .byLastMade, sortDirection: direction)
+            let s = sql(sortOrder: .byLastPrepared, sortDirection: direction)
             let orderBy = s.components(separatedBy: "ORDER BY")[1]
             #expect(orderBy.contains("IS NULL"))
             // The IS NULL term must come FIRST — it's what pushes the nulls to the end.
@@ -75,7 +75,7 @@ struct RecipeListQueryBuilderTests {
     }
 
     @Test func lastMadeSortOrdersByLastPrepared() {
-        let s = sql(sortOrder: .byLastMade, sortDirection: .descending)
+        let s = sql(sortOrder: .byLastPrepared, sortDirection: .descending)
         #expect(s.components(separatedBy: "ORDER BY")[1].contains("lastPrepared"))
     }
 
