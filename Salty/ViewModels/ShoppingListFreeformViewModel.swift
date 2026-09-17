@@ -143,7 +143,7 @@ class ShoppingListFreeformViewModel {
         Task {
             do {
                 try await database.write { db in
-                    if var list = try ShoppingList.where { $0.id.eq(id) }.fetchOne(db) {
+                    if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
                         // Only the freeform payload — never touch `isFreeform` (owned by creation).
                         list.contentsForFreeform = content
                         list.lastModifiedDate = Date()

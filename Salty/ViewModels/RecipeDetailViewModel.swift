@@ -27,6 +27,7 @@ class RecipeDetailViewModel {
     /// Temporary ingredient scale for detail view only. Stored as a fraction for `.percent` formatting (1.0 = 100%, 2.0 = 200%).
     var ingredientScalePercent = 1.0
     var isIngredientScalePopoverShowing = false
+    var isAddToShoppingListShowing = false
     var isSavingScaledRecipe = false
     var scaledRecipeSaveErrorMessage: String?
     
@@ -100,13 +101,12 @@ class RecipeDetailViewModel {
     
     /// Display-only percent number for footnotes and saved recipe names (e.g. `50`, `200`).
     var ingredientScalePercentLabel: String {
-        let displayPercent = ingredientScalePercent * 100
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.string(from: NSNumber(value: displayPercent)) ?? "\(displayPercent)"
+        // POSIX locale: the label is also embedded in saved recipe names, so it must not vary by region.
+        (ingredientScalePercent * 100).formatted(
+            .number
+                .precision(.fractionLength(0...2))
+                .locale(Locale(identifier: "en_US_POSIX"))
+        )
     }
     
     var ingredientScaleDirectionsFootnote: String {

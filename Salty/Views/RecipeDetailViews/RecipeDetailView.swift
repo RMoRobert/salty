@@ -75,20 +75,14 @@ struct RecipeDetailView: View {
         Group {
             if let recipe = viewModel.recipe {
                 ScrollView {
-                    Group {
-                        TitleAndBasicInfoSection(viewModel: viewModel)
-                        PrepTimeAndFavoriteEtcSection(recipe: recipe)
+                    VStack(spacing: 8) {
+                        TitleAndBasicInfoSection(viewModel: viewModel, recipe: recipe)
+                        PrepTimeAndRatingsAndMiscSection(recipe: recipe)
                         IntroductionSection(recipe: recipe)
-                        AdaptiveStack(verticalAlignment: .top) {
-                            IngredientsSection(viewModel: viewModel, recipe: recipe)
-                            DirectionsSection(viewModel: viewModel, recipe: recipe)
-                        }
+                        IngredientsAndDirectionsSection(viewModel: viewModel, recipe: recipe)
                         NotesSection(recipe: recipe)
-                            .padding(.top, 2)
                         VariationsSection(recipe: recipe)
-                            .padding(.top, 2)
                         TagsSection(viewModel: viewModel)
-                            .padding(.top, 2)
                     }
                     .padding()
                 }
@@ -97,7 +91,6 @@ struct RecipeDetailView: View {
                     colors: [Color.recipeDetailPageBackgroundA, Color.recipeDetailPageBackgroundB],
                     startPoint: .top, endPoint: .bottom
                 ))
-                .foregroundStyle(Color.recipeDetailBoxForeground)
                 .textSelection(.enabled)
                 .sheet(isPresented: $viewModel.showingFullImage) {
                     RecipeFullImageView(recipe: recipe)
@@ -155,163 +148,199 @@ struct RecipeDetailView: View {
     }
 }
 
-// MARK: - Private Subviews
+// MARK: - Header
 
+/// Title, source, and course/yield/servings chips, centered beside photo when the card
+/// is wide enough for both, or above if not
 private struct TitleAndBasicInfoSection: View {
     @Bindable var viewModel: RecipeDetailViewModel
-    
+    let recipe: Recipe
+
     var body: some View {
-        AdaptiveStack {
-            VStack(spacing: 4) {
-                HStack {
-                    Text(viewModel.recipe?.name ?? "")
-                        .font(.title)
-                        .bold()
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(alignment: .top)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                TitleAndBasicInfoText(viewModel: viewModel, recipe: recipe)
+                RecipeHeaderImage(viewModel: viewModel, recipe: recipe, size: 150)
+            }
+            // ViewThatFits measures the *ideal* width, and a paragraph's ideal width is one long
+            // line. This makes it side by side only when the card has at least this much room:
+            .frame(idealWidth: 520)
+            // Both sub-views have own padding, so adding none here:
+            VStack(spacing: 0) {
+                TitleAndBasicInfoText(viewModel: viewModel, recipe: recipe)
+                RecipeHeaderImage(viewModel: viewModel, recipe: recipe, size: 125)
+            }
+        }
+        // These top couple cards are centered and possibly varied width, unlike others that are full width:
+        .modifier(RecipeSectionBoxModifier(fillsWidth: false))
+    }
+}
+
+private struct TitleAndBasicInfoText: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    let recipe: Recipe
+
+    var body: some View {
+        // Spacers rather than fixed spacing: beside the photo the column is as tall as the photo,
+        // and the spacers spread the lines over that height instead of leaving them bunched in the
+        // middle. Stacked (no height to fill) they collapse to their minimum.
+        VStack(spacing: 4) {
+            Text(recipe.name)
+                .font(.title)
+                .bold()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 #if !os(macOS)
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.frame(in: .global).maxY
-                        } action: { maxY in
-                            let buffer: CGFloat = 90
-                            viewModel.isTitleVisible = maxY > buffer
-                        }
-#endif
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .global).maxY
+                } action: { maxY in
+                    let buffer: CGFloat = 90
+                    viewModel.isTitleVisible = maxY > buffer
                 }
-                Spacer()
-                if let recipe = viewModel.recipe, !recipe.source.isEmpty {
-                    HStack {
-                        Image(systemName: "text.book.closed")
-                        Text(recipe.source)
+#endif
+            Spacer(minLength: 8)
+            RecipeSourceLines(recipe: recipe)
+            Spacer(minLength: 8)
+            HFlow(itemSpacing: 12, rowSpacing: 8) {
+                if let courseName = viewModel.courseName {
+                    RecipeChip(systemImage: "fork.knife.circle", accessibilityLabel: "Course: \(courseName)") {
+                        Text(courseName)
                     }
-                    .accessibilityElement(children: .combine)
+                }
+                if !recipe.yield.isEmpty {
+                    RecipeChip(systemImage: "circle.grid.2x2", accessibilityLabel: "Yield: \(recipe.yield)") {
+                        Text(recipe.yield)
+                    }
+                }
+                if let servings = recipe.servings, servings > 0 {
+                    RecipeChip(systemImage: "person.2", accessibilityLabel: "Servings: \(servings)") {
+                        Text(servings, format: .number)
+                    }
+                }
+            }
+        }
+        // Same vertical inset as the photo, so the title tops out level with it and the chips
+        // bottom out level with it.
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+}
+
+private struct RecipeSourceLines: View {
+    let recipe: Recipe
+
+    var body: some View {
+        let sourceDetails = recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
+        if !recipe.source.isEmpty || !sourceDetails.isEmpty {
+            VStack(spacing: 4) {
+                if !recipe.source.isEmpty {
+                    Label {
+                        Text(recipe.source.attributedWithWebLinks)
+                    } icon: {
+                        Image(systemName: "text.book.closed")
+                    }
+                    .multilineTextAlignment(.center)
                     .accessibilityLabel("Source: \(recipe.source)")
                 }
-                if let recipe = viewModel.recipe, !recipe.sourceDetails.trimmingCharacters(in: .whitespaces).isEmpty {
-                    let sourceDetails = recipe.sourceDetails.trimmingCharacters(in: .whitespaces)
+                if !sourceDetails.isEmpty {
                     if let url = URL(string: sourceDetails),
-                       let _ = url.scheme?.lowercased().starts(with: "http") {
+                       url.scheme?.lowercased().starts(with: "http") == true {
                         Link(destination: url) {
                             Text(sourceDetails)
                                 .lineLimit(2)
                                 .truncationMode(.middle)
-                                .foregroundStyle(Color.blue)
                         }
-                    }
-                    else {
-                        Text(recipe.sourceDetails)
+                        #if os(macOS)
+                        .help(sourceDetails)
+                        #endif
+                    } else {
+                        // Still links any URL within the text, e.g. "Adapted from https://…"
+                        Text(sourceDetails.attributedWithWebLinks)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Spacer()
-                HFlow(itemSpacing: 12) {
-                    if let courseName = viewModel.courseName {
-                        HStack {
-                            Image(systemName: "fork.knife.circle")
-                            Text(courseName)
-                        }
-                        .modifier(CapsuleBackgroundModifier())
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Course: \(courseName)")
-                    }
-                    if let recipe = viewModel.recipe, !recipe.yield.isEmpty {
-                        HStack {
-                            Image(systemName: "circle.grid.2x2")
-                            Text(recipe.yield)
-                        }
-                        .modifier(CapsuleBackgroundModifier())
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Yield: \(recipe.yield)")
-                    }
-                    if let recipe = viewModel.recipe, let servings = recipe.servings, servings > 0 {
-                        HStack {
-                            Image(systemName: "person.2")
-                            Text(servings.description)
-                        }
-                        .modifier(CapsuleBackgroundModifier())
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Servings: \(servings)")
-                    }
-                }
-            }
-            .padding()
-            if let recipe = viewModel.recipe, recipe.imageFilename != nil {
-                Button {
-                    viewModel.showFullImage()
-                } label: {
-                    RecipeImageView(recipe: recipe)
-                        .shadow(radius: 2)
-                }
-                .buttonStyle(.plain)
-                .padding()
-                .accessibilityLabel("Recipe photo")
-                .accessibilityHint("Shows the full-size image")
             }
         }
-        .padding([.top], 8)
-        .modifier(RecipeSectionBoxModifier())
     }
 }
 
-private struct PrepTimeAndFavoriteEtcSection: View {
+private struct RecipeHeaderImage: View {
+    @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
+    let size: CGFloat
+
     var body: some View {
-        VStack {
-            if (recipe.isFavorite || recipe.wantToMake) {
+        if recipe.imageFilename != nil {
+            Button {
+                viewModel.showFullImage()
+            } label: {
+                RecipeImageView(recipe: recipe, imageFrameSize: size)
+                    .shadow(radius: 2)
+            }
+            .buttonStyle(.plain)
+            .padding(8)
+            .accessibilityLabel("Recipe photo")
+            .accessibilityHint("Shows the full-size image")
+        }
+    }
+}
+
+/// Favorite/Want to Make/preparation times, and rating/difficulty
+private struct PrepTimeAndRatingsAndMiscSection: View {
+    let recipe: Recipe
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if recipe.isFavorite || recipe.wantToMake {
                 HFlow(itemSpacing: 24, rowSpacing: 12) {
-                    if (recipe.isFavorite) {
-                        HStack {
+                    if recipe.isFavorite {
+                        Label {
+                            Text("Favorite")
+                        } icon: {
                             Image(systemName: "heart.fill")
                                 .foregroundStyle(.red)
-                            Text("Favorite")
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Marked as Favorite")
                     }
-                    if (recipe.wantToMake) {
-                        HStack {
+                    if recipe.wantToMake {
+                        Label {
+                            Text("Want to Make")
+                        } icon: {
                             Image(systemName: "bookmark")
                                 .foregroundStyle(Color.green.opacity(0.8))
-                            Text("Want to Make")
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Marked as Want to Make")
                     }
                 }
-                .padding(.horizontal)
-                .opacity((recipe.isFavorite || recipe.wantToMake) ? 1 : 0)
-                .allowsHitTesting(recipe.isFavorite || recipe.wantToMake)
             }
-            if recipe.preparationTimes.count > 0 {
+            if !recipe.preparationTimes.isEmpty {
                 HFlow(itemSpacing: 12, rowSpacing: 8) {
                     ForEach(recipe.preparationTimes) { prepTime in
-                        HStack {
-                            Image(systemName: "clock")
+                        RecipeChip(
+                            systemImage: "clock",
+                            accessibilityLabel: "Preparation time: type: \(prepTime.type), duration: \(prepTime.timeString)"
+                        ) {
                             VStack {
-                                Text("\(prepTime.type)")
+                                Text(prepTime.type)
                                     .font(.caption)
-                                Text("\(prepTime.timeString)")
+                                Text(prepTime.timeString)
                             }
-                            .accessibilityHidden(true)
                         }
-                        .modifier(CapsuleBackgroundModifier())
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Preparation time: type: \(prepTime.type), duration: \(prepTime.timeString)")
                     }
                 }
-                .padding(.horizontal)
             }
             HFlow(alignment: .top, itemSpacing: 60, rowSpacing: 30) {
-                VStack(spacing: 10) {
-                    RatingView(recipe: recipe, showLabel: false)
-                }
-                VStack(spacing: 10) {
-                    DifficultyView(recipe: recipe, showLabel: false)
-                }
+                RatingView(recipe: recipe, showLabel: false)
+                DifficultyView(recipe: recipe, showLabel: false)
             }
+            .padding(.top, 4)
         }
         .padding(8)
-        .modifier(RecipeSectionBoxModifier())
+        .modifier(RecipeSectionBoxModifier(fillsWidth: false))
     }
 }
 
@@ -319,11 +348,10 @@ private struct IntroductionSection: View {
     let recipe: Recipe
     var body: some View {
         if !recipe.introduction.isEmpty {
-            VStack {
-                Text(recipe.introduction)
-                    .italic()
-                    .padding()
-            }
+            Text(recipe.introduction)
+                .italic()
+                .fixedSize(horizontal: false, vertical: true)
+                .padding()
         }
         else {
             VStack {}
@@ -332,10 +360,35 @@ private struct IntroductionSection: View {
     }
 }
 
+// MARK: - Ingredients and Directions
+
+/// Ingredients beside directions when the column is wide enough for both to read comfortably,
+/// stacked otherwise (e.g., iPad portrait with the recipe list showing).
+private struct IngredientsAndDirectionsSection: View {
+    @Bindable var viewModel: RecipeDetailViewModel
+    let recipe: Recipe
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 8) {
+                IngredientsSection(viewModel: viewModel, recipe: recipe)
+                    .frame(maxWidth: 360)
+                DirectionsSection(viewModel: viewModel, recipe: recipe)
+            }
+            // See RecipeHeaderSection for why the ideal width is pinned.
+            .frame(idealWidth: 640, maxWidth: .infinity)
+            VStack(spacing: 8) {
+                IngredientsSection(viewModel: viewModel, recipe: recipe)
+                DirectionsSection(viewModel: viewModel, recipe: recipe)
+            }
+        }
+    }
+}
+
 private struct IngredientsSection: View {
     @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Ingredients")
@@ -344,15 +397,12 @@ private struct IngredientsSection: View {
                 let ingredient = recipe.ingredients[index]
                 if ingredient.isHeading {
                     Text(ingredient.text)
-                        .font(.callout)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.recipeDetailBoxForeground2)
+                        .modifier(SubheadingStyle())
                         .padding(.top, 8)
                         .padding(.bottom, 6)
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•")
-                            .foregroundStyle(.recipeDetailBoxForeground)
                             .bold()
                         let parsed = viewModel.scaledIngredientDisplay(ingredient)
                         if parsed.hasQuantity {
@@ -361,13 +411,10 @@ private struct IngredientsSection: View {
                              Text(parsed.remainder.isEmpty ? "" : " \(parsed.remainder)")
                                 .fontWeight(.regular))
                                 .fixedSize(horizontal: false, vertical: true)
-                                .foregroundStyle(.recipeDetailBoxForeground)
                                 .accessibilityElement(children: .combine)
                         } else {
                             Text(ingredient.text)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .foregroundStyle(.recipeDetailBoxForeground)
-                                .fontWeight(.regular)
                         }
                     }
                     .padding(.bottom, 4)
@@ -383,13 +430,12 @@ private struct IngredientsSection: View {
                 .padding(.bottom, 4)
                 .padding(.top, 16)
         }
-        .frame(minWidth: 85, maxWidth: 300)
         .modifier(RecipeSectionBoxModifier())
     }
 }
 
 /// The ingredients box footer. Side by side when the box has the width for it, stacked when it
-/// doesn't -- the box narrows to 85pt, where two labels on one line would truncate to nothing.
+/// doesn't.
 private struct IngredientsSectionActions: View {
     @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
@@ -425,14 +471,13 @@ private struct IngredientsScaleButton: View {
 private struct IngredientsAddToListButton: View {
     @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
-    @State private var isAddToShoppingListShowing = false
 
     var body: some View {
         Button("Add to List…", systemImage: "cart.badge.plus") {
-            isAddToShoppingListShowing = true
+            viewModel.isAddToShoppingListShowing = true
         }
         .modifier(IngredientsActionButtonModifier())
-        .sheet(isPresented: $isAddToShoppingListShowing) {
+        .sheet(isPresented: $viewModel.isAddToShoppingListShowing) {
             AddToShoppingListView(
                 recipe: recipe,
                 // Whatever the ingredients list is currently showing is what gets added, so a
@@ -444,14 +489,15 @@ private struct IngredientsAddToListButton: View {
     }
 }
 
-/// Shared look for the small actions under the ingredients list.
+/// Shared appearance for the small actions under the ingredients list: link-styled text on all
+/// platforms, so should look like platform-appropriate controls instead of additional list item
 private struct IngredientsActionButtonModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             #if os(macOS)
             .buttonStyle(.link)
             #else
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             #endif
             .controlSize(.small)
     }
@@ -459,7 +505,7 @@ private struct IngredientsActionButtonModifier: ViewModifier {
 
 private struct IngredientScalePopoverContent: View {
     @Bindable var viewModel: RecipeDetailViewModel
-    
+
     var body: some View {
         VStack(spacing: 12) {
             HStack {
@@ -476,10 +522,10 @@ private struct IngredientScalePopoverContent: View {
                 .help("Close")
                 .keyboardShortcut(.escape, modifiers: [])
                 #endif
-                
+
                 Spacer(minLength: 0)
             }
-            
+
             HStack {
                 TextField("Scale by:", value: $viewModel.ingredientScalePercent,
                           format: .percent.precision(.fractionLength(2))
@@ -487,7 +533,7 @@ private struct IngredientScalePopoverContent: View {
                     .frame(width: 80)
             }
             Slider(value: $viewModel.ingredientScalePercent, in: 0.25...2)
-            
+
             HStack(spacing: 8) {
                 IngredientScalePresetButton(
                     title: "Half",
@@ -511,7 +557,7 @@ private struct IngredientScalePopoverContent: View {
                     viewModel.ingredientScalePercent = 2.0
                 }
             }
-            
+
             Button("Reset") {
                 viewModel.resetIngredientScale()
             }
@@ -520,7 +566,7 @@ private struct IngredientScalePopoverContent: View {
             .controlSize(.small)
             .disabled(!viewModel.isIngredientScaleActive)
             Spacer()
-            Text("Recipe will temporarily display with scaled measurements, or you can...")
+            Text("Recipe will temporarily display with scaled measurements, or you can…")
                 .font(.caption)
                 .accessibilityLabel("Recipe will temporarily display with scaled measurements, or save as new recipe below.")
             Button("Save as New Recipe…") {
@@ -530,8 +576,8 @@ private struct IngredientScalePopoverContent: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(!viewModel.isIngredientScaleActive || viewModel.isSavingScaledRecipe)
-            
-            
+
+
             if viewModel.isSavingScaledRecipe {
                 ProgressView()
                     .controlSize(.small)
@@ -560,7 +606,7 @@ private struct IngredientScalePresetButton: View {
     let accessibilityLabel: String
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Group {
             if isSelected {
@@ -585,28 +631,32 @@ private struct IngredientScalePresetButton: View {
 private struct DirectionsSection: View {
     @Bindable var viewModel: RecipeDetailViewModel
     let recipe: Recipe
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Directions")
                 .modifier(TitleStyle())
             ForEach(recipe.directions.indices, id: \.self) { index in
-                let isHeading = recipe.directions[index].isHeading ?? false
-                if isHeading {
-                    Text(recipe.directions[index].text)
-                        .font(.callout)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.recipeDetailBoxForeground2)
+                let direction = recipe.directions[index]
+                if direction.isHeading ?? false {
+                    Text(direction.text)
+                        .modifier(SubheadingStyle())
                         .padding(.top, 8)
                         .padding(.bottom, 6)
                 } else {
+                    // Omit headings from step count
+                    let stepNumber = recipe.directions.prefix(index).filter { $0.isHeading != true }.count + 1
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("\(recipe.directions.prefix(index + 1).filter { $0.isHeading != true }.count).")
-                            .fontWeight(.semibold)
-                        Text(recipe.directions[index].text)
+                        Text("\(stepNumber).")
+                            .bold()
+                            .monospacedDigit()
+                            .foregroundStyle(.recipeDetailBoxForeground2)
+                            // Fixed column so the text starts at the same x for "9." and "10."
+                            .frame(minWidth: 24, alignment: .trailing)
+                        Text(direction.text)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.bottom, 4)
+                    .padding(.bottom, 8)
                 }
             }
             if viewModel.isIngredientScaleActive {
@@ -618,36 +668,32 @@ private struct DirectionsSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(minWidth: 95, maxWidth: 1000)
         .modifier(RecipeSectionBoxModifier())
     }
 }
 
+// MARK: - Notes, Variations, Tags
+
 private struct NotesSection: View {
     let recipe: Recipe
     var body: some View {
-        if recipe.notes.count > 0 {
-            VStack(alignment: .leading) {
+        if !recipe.notes.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Notes")
                     .modifier(TitleStyle())
-                    .padding(.bottom, 2) // override to reduce space below heading
                 ForEach(recipe.notes.indices, id: \.self) { index in
+                    let note = recipe.notes[index]
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(recipe.notes[index].title)
-                            .font(.callout)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.recipeDetailBoxForeground2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(recipe.notes[index].content)
+                        if !note.title.isEmpty {
+                            Text(note.title)
+                                .modifier(SubheadingStyle())
+                        }
+                        Text(note.content)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.top, index == 0 ? 0 : 2) // no top padding for first note
-                    .padding(.bottom, 2)
                 }
             }
-            
             .modifier(RecipeSectionBoxModifier())
-            .frame(maxWidth: .infinity)
         }
     }
 }
@@ -655,58 +701,72 @@ private struct NotesSection: View {
 private struct VariationsSection: View {
     let recipe: Recipe
     var body: some View {
-        if recipe.variations.count > 0 {
-            VStack(alignment: .leading) {
+        if !recipe.variations.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Variations")
                     .modifier(TitleStyle())
-                    .padding(.bottom, 2) // override to reduce space below heading
                 ForEach(recipe.variations.indices, id: \.self) { index in
+                    let variation = recipe.variations[index]
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(recipe.variations[index].variationName)
-                            .font(.callout)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.recipeDetailBoxForeground2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(recipe.variations[index].text)
+                        if !variation.variationName.isEmpty {
+                            Text(variation.variationName)
+                                .modifier(SubheadingStyle())
+                        }
+                        Text(variation.text)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.top, index == 0 ? 0 : 2) // no top padding for first variation
-                    .padding(.bottom, 2)
                 }
             }
-            
             .modifier(RecipeSectionBoxModifier())
-            .frame(maxWidth: .infinity)
         }
     }
 }
 
 private struct TagsSection: View {
     @Bindable var viewModel: RecipeDetailViewModel
-    
+
     var body: some View {
         if !viewModel.recipeTags.isEmpty {
             VStack(alignment: .leading) {
                 Text("Tags")
                     .modifier(TitleStyle())
-                HFlow(itemSpacing: 8, rowSpacing: 16) {
+                HFlow(itemSpacing: 8, rowSpacing: 8) {
                     ForEach(viewModel.recipeTags, id: \.id) { tag in
-                        Label(tag.name, systemImage: "tag")
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 6)
-                            .background(Color.recipeDetailPageBackgroundA.opacity(0.66), in: Capsule())
+                        RecipeChip(systemImage: "tag", accessibilityLabel: "Tag: \(tag.name)") {
+                            Text(tag.name)
+                        }
                     }
                 }
             }
             .modifier(RecipeSectionBoxModifier())
-            .frame(maxWidth: .infinity)
         }
     }
 }
 
+// MARK: - Shared pieces
 
-// MARK: Modifier Structs
+/// A capsule with a leading symbol, used for most pieces of recipe metadata (prep time, yield, etc.)
+private struct RecipeChip<Content: View>: View {
+    let systemImage: String
+    var iconColor: Color? = nil
+    let accessibilityLabel: String
+    @ViewBuilder let content: Content
 
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(iconColor ?? Color.primary)
+            content
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .background(Color.recipeDetailPageBackgroundA.opacity(0.66), in: .capsule)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+/// Section titles ("Ingredients", "Notes", etc.)
 private struct TitleStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -714,27 +774,36 @@ private struct TitleStyle: ViewModifier {
             .bold()
             .padding(.top, 8)
             .padding(.bottom, 8)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
-private struct CapsuleBackgroundModifier: ViewModifier {
+/// Headings within a section (ingredient groups, direction phases, note titles)
+private struct SubheadingStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
-            .background(Color.recipeDetailPageBackgroundA.opacity(0.66))
-            .clipShape(Capsule())
-            .padding(EdgeInsets(top: 1, leading: 4, bottom: 10, trailing: 6))
+            .font(.headline)
+            .foregroundStyle(.recipeDetailBoxForeground2)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-
+/// The card that most recipe sections live in (can opt in or out of filling entire width; most fill)
 private struct RecipeSectionBoxModifier: ViewModifier {
+    var fillsWidth = true
+
     func body(content: Content) -> some View {
-        content
+        Group {
+            if fillsWidth {
+                content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                content
+            }
+        }
             .padding(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .background(Color.recipeDetailBoxBackground)
-            .foregroundStyle(Color.recipeDetailBoxForeground)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(.rect(cornerRadius: 12))
             .shadow(color: Color.recipeDetailBoxShadow.opacity(0.7), radius: 3, x:1, y:1)
             .padding(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
     }
@@ -746,5 +815,3 @@ private struct RecipeSectionBoxModifier: ViewModifier {
     RecipeDetailView(recipe: SampleData.sampleRecipes[0])
         .environment(ChefViewSessionStore())
 }
-
-

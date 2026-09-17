@@ -18,12 +18,9 @@ struct RecipeImageView: View {
     @State private var retryCount = 0
     
     var body: some View {
-        VStack {
-            Label("Image", systemImage: "photo")
-                .labelStyle(TitleOnlyLabelStyle())
-                .hidden()
-                .frame(width: 0, height: 0)
-            
+        // Spacing 0: a hidden zero-size sibling used to live here and the stack's default
+        // spacing above the image made the tile sit lower than it looked.
+        VStack(spacing: 0) {
             if let imageURL = recipe.fullImageURL {
                 AsyncImage(url: imageURL) { phase in
                     switch phase {
@@ -31,11 +28,13 @@ struct RecipeImageView: View {
                         ProgressView()
                             .frame(width: imageFrameSize, height: imageFrameSize)
                     case .success(let image):
+                        // Fill the square and crop, so every photo makes the same clean tile; the
+                        // full, uncropped image is what the tap-through shows.
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .clipShape(.rect(cornerRadius: 5, style: .continuous))
+                            .scaledToFill()
                             .frame(width: imageFrameSize, height: imageFrameSize, alignment: .center)
+                            .clipShape(.rect(cornerRadius: 5, style: .continuous))
                     case .failure(let error):
                         // Check if it's a cancellation error and retry (see -999 cancelled sometimes on iOS -- no idea why, but this seems to work around)
                         if let urlError = error as? URLError, urlError.code == .cancelled, retryCount < 2 {

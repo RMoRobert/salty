@@ -12,8 +12,8 @@ import CoreTransferable
 import UUIDV7
 
 public extension UTType {
-    public static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe", conformingTo:  .json)
-    public static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
+    static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe", conformingTo:  .json)
+    static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
 }
 
 extension SaltyRecipeExport: Transferable {
