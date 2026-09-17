@@ -101,6 +101,10 @@ struct RecipeNavigationSplitView: View {
     @State private var columnVisibilityBeforeDetailOnly: NavigationSplitViewVisibility = .automatic
     // Tracking separately from showRecipeDetailOnly so can toggle this a tad before and avoid double animation (see add'l comments below):
     @State private var removeSidebarToggle = false
+    // True from the button tap until the split view actually reports `.detailOnly`. Rebuilding the
+    // sidebar column to drop its toggle makes the split view briefly report `.all` (iPadOS 26/27),
+    // which would otherwise read as "the user brought the columns back" and cancel the mode.
+    @State private var isEnteringDetailOnly = false
     @State private var showingEditLibCategoriesSheet = false
     @State private var showingEditLibTagsSheet = false
     @State private var showingEditLibCoursesSheet = false
@@ -168,16 +172,21 @@ struct RecipeNavigationSplitView: View {
             // restoration of it possible only via swipe gesture. Using .all instead of .automatic seems
             // to work around that, so will restore that value here in that case.
             columnVisibilityBeforeDetailOnly = columnVisibility == .automatic ? .all : columnVisibility
+            isEnteringDetailOnly = true
             removeSidebarToggle = true
             // Awkward workaround to avoid jitter while sidebar toggle icon removed, but works for now...
             Task {
                 try? await Task.sleep(for: .milliseconds(30))
-                guard showRecipeDetailOnly else { return }
+                guard showRecipeDetailOnly else {
+                    isEnteringDetailOnly = false
+                    return
+                }
                 withAnimation(.smooth) {
                     columnVisibility = .detailOnly
                 }
             }
         } else {
+            isEnteringDetailOnly = false
             removeSidebarToggle = false
             // Only restore if still in detail-only; otherwise the user already picked a layout by hand.
             guard columnVisibility == .detailOnly else { return }
@@ -197,6 +206,13 @@ struct RecipeNavigationSplitView: View {
     /// Bringing the columns back by hand (sidebar toggle, drag) exits detail-only mode,
     /// so the toolbar button's label stays in sync with what's on screen.
     private func exitDetailOnlyModeIfColumnsRestored(_ newVisibility: NavigationSplitViewVisibility) {
+        // Transient values while entering aren't the user's doing; see isEnteringDetailOnly.
+        if isEnteringDetailOnly {
+            if newVisibility == .detailOnly {
+                isEnteringDetailOnly = false
+            }
+            return
+        }
         if showRecipeDetailOnly && newVisibility != .detailOnly {
             showRecipeDetailOnly = false
         }

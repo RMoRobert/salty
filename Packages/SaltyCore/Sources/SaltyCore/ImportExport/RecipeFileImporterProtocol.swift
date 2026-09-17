@@ -13,7 +13,7 @@ public protocol RecipeFileImporterProtocol {
 }
 
 public extension RecipeFileImporterProtocol {
-    public static func getDataFromFile(_ fileUrl: URL) -> Data? {
+    static func getDataFromFile(_ fileUrl: URL) -> Data? {
         guard let data = try? Data(contentsOf: fileUrl) else {
             return nil
         }

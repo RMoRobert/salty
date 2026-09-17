@@ -188,7 +188,7 @@ class ShoppingListDetailViewModel {
         Task {
             do {
                 try await database.write { db in
-                    if var list = try ShoppingList.where { $0.id.eq(id) }.fetchOne(db) {
+                    if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
                         // Write only the checklist payload — never touch `isFreeform`. The kind is owned
                         // by creation and `convertToFreeform()`; a save that flipped it could undo a
                         // conversion via a late debounced write after the view has already swapped.
@@ -219,7 +219,7 @@ class ShoppingListDetailViewModel {
         Task {
             do {
                 try await database.write { db in
-                    if var list = try ShoppingList.where { $0.id.eq(id) }.fetchOne(db) {
+                    if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
                         list.isFreeform = true
                         list.contentsForFreeform = content
                         list.lastModifiedDate = Date()
