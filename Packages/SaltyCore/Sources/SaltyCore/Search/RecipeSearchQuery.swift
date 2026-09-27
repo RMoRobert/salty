@@ -34,6 +34,11 @@ public enum RecipeSearchField: String, Codable, Hashable, CaseIterable, Sendable
     case course
     case category
     case tags
+    /// The method steps' text. Appended rather than placed beside ingredients, so the SQL for every
+    /// earlier field keeps its position.
+    case directions
+    /// `source` and `sourceDetails` (the publication and its URL), searched together.
+    case source
 }
 
 /// How a text criterion's value is matched. Every case renders to `LIKE` under `COLLATE NOCASE`,

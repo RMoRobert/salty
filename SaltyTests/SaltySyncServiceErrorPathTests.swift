@@ -11,6 +11,7 @@
 import Testing
 import Foundation
 @testable import Salty
+import SaltyCore
 
 /// A URLProtocol that answers every request with a canned status code and body.
 final class StubURLProtocol: URLProtocol {

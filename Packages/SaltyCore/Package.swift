@@ -2,8 +2,8 @@
 
 import PackageDescription
 
-// Platform minimums intentionally mirror the app's IPHONEOS_DEPLOYMENT_TARGET / MACOSX_DEPLOYMENT_TARGET
-// so availability checks behave identically on both sides of the module boundary. When a tvOS target is
+// Platform minimums mirror IPHONEOS_DEPLOYMENT_TARGET/MACOSX_DEPLOYMENT_TARGET in main app
+// so availability checks behave identically in both this package and actual app. If/when tvOS target is
 // added, declare `.tvOS(...)` here too — but only once something actually builds for it, so the platform
 // list never claims support that has never been compiled.
 let package = Package(
@@ -14,6 +14,9 @@ let package = Package(
     ],
     products: [
         .library(name: "SaltyCore", targets: ["SaltyCore"]),
+        // A separate product so Windows/Android clients can depend on "SaltyCore" alone and never
+        // compile Apple frameworks.
+        .library(name: "SaltyCoreApple", targets: ["SaltyCoreApple"]),
     ],
     dependencies: [
         // URLs match Salty.xcodeproj's XCRemoteSwiftPackageReference entries exactly (including the
@@ -47,6 +50,12 @@ let package = Package(
                 .product(name: "SwiftHtml", package: "swift-html"),
                 .product(name: "SwiftSoup", package: "SwiftSoup"),
             ]
+        ),
+        // Apple-only but non-UI logic (e.g. Core Graphics PDF composition); SwiftUI/AppKit/UIKit code
+        // belongs in the app. May import SaltyCore, never the reverse, so SaltyCore stays portable.
+        .target(
+            name: "SaltyCoreApple",
+            dependencies: ["SaltyCore"]
         ),
     ]
 )

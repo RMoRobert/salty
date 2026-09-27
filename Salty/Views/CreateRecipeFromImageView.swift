@@ -43,6 +43,8 @@ struct CreateRecipeFromImageView: View {
     @State private var parsedRecipe: Recipe?
     @State private var showingRecipeEditor = false
     @State private var showingTextParsingTips = false
+    @State private var isParsing = false
+    @AppStorage(RecipeImportParser.smartParseSettingKey) private var smartParseEnabled = true
     
     var body: some View {
         NavigationStack {
@@ -167,6 +169,11 @@ struct CreateRecipeFromImageView: View {
                     .padding(.horizontal)
                 }
                 
+                if !ocrService.extractedText.isEmpty {
+                    SmartParseOptionRow(isOn: $smartParseEnabled)
+                        .padding(.horizontal)
+                }
+
                 // Action buttons
                 HStack(spacing: 16) {
 #if os(macOS)
@@ -213,13 +220,17 @@ struct CreateRecipeFromImageView: View {
 #endif
                         }
                     }
-                    .disabled(selectedImage == nil || ocrService.isProcessing)
+                    .disabled(selectedImage == nil || ocrService.isProcessing || isParsing)
                     
                     Button("Create Recipe") {
                         createRecipeFromExtractedText()
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(ocrService.extractedText.isEmpty)
+                    .disabled(ocrService.extractedText.isEmpty || isParsing)
+                    if isParsing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                 }
                 .padding(.horizontal)
                 .padding([.top, .bottom], 8)
@@ -262,7 +273,7 @@ struct CreateRecipeFromImageView: View {
             isPresented: $showingTextParsingTips,
             actions: {},
             message: {
-                Text("For best results:\n\n• Remove excess text like page numbers.\n\n• Provide titles like \"Directions\" or \"Ingredients\" on their own line before the relevant sections to improve detection. Number or label direction steps if possible. (Other helpful labels include \"yield,\" \"servings,\" and \"introduction.\")\n\n• For certain recipes, it may be easier to use the built-in \"Scan Text\" feature on iPhone/iPad in any text field or the \"Edit as Text (Bulk Edit)\" feature for directions or ingredients.")
+                Text("For best results:\n\n• Remove excess text like page numbers.\n\n• Provide titles like \"Directions\" or \"Ingredients\" on their own line before the relevant sections to improve detection. Number or label direction steps if possible. (Other helpful labels include \"yield,\" \"servings,\" and \"introduction.\")\n\n• With Apple Intelligence on, Smart Parse sorts the extracted text into ingredients and directions on your device. Check the result in the editor before saving.\n\n• For certain recipes, it may be easier to use the built-in \"Scan Text\" feature on iPhone/iPad in any text field or the \"Edit as Text (Bulk Edit)\" feature for directions or ingredients.")
             })
         #endif
         .fileImporter(
@@ -280,7 +291,7 @@ struct CreateRecipeFromImageView: View {
             }
         }
         .sheet(isPresented: $showingSplitSheet) {
-            SplitRecipesView(pageTexts: splitPageTexts, pageImages: splitPageImages, onCreate: createRecipes)
+            SplitRecipesView(pageTexts: splitPageTexts, pageImages: splitPageImages, onCreate: createRecipes(fromTexts:))
                 #if os(macOS)
                 .frame(minWidth: 500, minHeight: 520)
                 #endif
@@ -311,10 +322,18 @@ struct CreateRecipeFromImageView: View {
 #endif
     }
     
+    /// Parses the extracted text (Smart Parse when available and enabled, else the rules) and opens
+    /// the result in the editor for review.
     private func createRecipeFromExtractedText() {
-        let parser = RecipeFromTextParser()
-        parsedRecipe = parser.parseRecipe(from: ocrService.extractedText)
-        showingRecipeEditor = true
+        let text = ocrService.extractedText
+        isParsing = true
+        Task {
+            let result = await RecipeImportParser.parse(text, preferSmart: smartParseEnabled)
+            logger.info("Parsed imported text with \(String(describing: result.method))")
+            parsedRecipe = result.recipe
+            isParsing = false
+            showingRecipeEditor = true
+        }
     }
     
     private func loadFileFromSecureURL(_ url: URL) {
@@ -357,13 +376,21 @@ struct CreateRecipeFromImageView: View {
         multipleRecipes = false
     }
 
-    /// Inserts the recipes parsed from a multi-recipe PDF split, then dismisses the import flow.
-    private func createRecipes(_ recipes: [Recipe]) {
-        guard !recipes.isEmpty else {
+    /// Parses each page group of a multi-recipe PDF split, inserts the recipes, then dismisses the
+    /// import flow. Smart Parse runs one group at a time, so a long document takes a few seconds.
+    private func createRecipes(fromTexts texts: [String]) {
+        guard !texts.isEmpty else {
             dismiss()
             return
         }
+        isParsing = true
         Task {
+            var parsed: [Recipe] = []
+            for text in texts {
+                parsed.append(await RecipeImportParser.parse(text, preferSmart: smartParseEnabled).recipe)
+            }
+            let recipes = parsed
+            isParsing = false
             do {
                 try await database.write { db in
                     for recipe in recipes {
@@ -392,6 +419,24 @@ struct CreateRecipeFromImageView: View {
         return cgImage
     }
     //endif
+}
+
+// MARK: - Smart Parse option
+
+/// The Smart Parse switch, shown once text has been extracted. Shows a hint instead when the model is
+/// switched off or not ready, and nothing on ineligible devices (which use the rules silently).
+struct SmartParseOptionRow: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        if RecipeImportParser.isSmartParseAvailable {
+            Toggle("Smart Parse with on-device intelligence", isOn: $isOn)
+        } else if let hint = RecipeImportParser.smartParseUnavailableHint {
+            Text(hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }
 
 #if os(iOS)

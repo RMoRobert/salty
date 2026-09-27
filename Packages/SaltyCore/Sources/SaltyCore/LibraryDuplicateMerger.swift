@@ -12,9 +12,8 @@
 
 import Foundation
 import GRDB
-import OSLog
 
-private let logger = Logger(subsystem: "Salty", category: "Library")
+private let logger = SaltyLogger(subsystem: "Salty", category: "Library")
 
 public enum LibraryDuplicateMerger {
 
@@ -116,6 +115,7 @@ public enum LibraryDuplicateMerger {
             for duplicate in group.duplicates where duplicate.id != group.survivor.id {
                 guard try rowExists(kind: group.kind, id: duplicate.id, in: db) else { continue }
                 let touched = try fold(kind: group.kind, duplicateId: duplicate.id, into: group.survivor.id, in: db)
+                try ClassifierTombstoneWriter.recordDeletions(group.kind, [duplicate.id], in: db)
                 touchedRecipeIds.formUnion(touched)
                 summary.removedItems += 1
                 mergedAny = true

@@ -438,7 +438,7 @@ class RecipeNavigationSplitViewModel {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            let ids = try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: url)
+            let ids = try await RecipeFileImportHelper.importIntoDatabase(database, fileUrl: url)
             if let firstId = ids.first {
                 handleNewRecipeSaved(recipeId: firstId)
             }
@@ -769,7 +769,7 @@ class RecipeNavigationSplitViewModel {
         logger.info("\(s)")
         if let demoImportUrl = Bundle.main.url(forResource: "DemoRecipes", withExtension: "saltyRecipe") {
             do {
-                try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: demoImportUrl)
+                try await RecipeFileImportHelper.importIntoDatabase(database, fileUrl: demoImportUrl)
                 logger.info("Successfully imported sample recipes")
             } catch {
                 logger.error("Failed to import sample recipes: \(error.localizedDescription)")
@@ -816,16 +816,16 @@ class RecipeNavigationSplitViewModel {
             id: UUIDV7().uuidString,
             name: trimmed.isEmpty ? "New List" : trimmed,
             isFreeform: isFreeform,
-            contentsForFreeform: isFreeform ? "" : nil,
-            lastModifiedDate: Date()
+            contentsForFreeform: isFreeform ? "" : nil
+            // `lastModifiedDate` is stamped by `ShoppingListWriter.insert` below.
         )
         do {
-            try await database.write { db in
-                try ShoppingList.insert { newList }.execute(db)
+            let created = try await database.write { db in
+                try ShoppingListWriter.insert(newList, in: db)
             }
             selectedSidebarItem = .allShoppingLists
-            selectedShoppingListIDs = [newList.id]
-            return newList
+            selectedShoppingListIDs = [created.id]
+            return created
         } catch {
             logger.error("Error creating shopping list: \(error)")
             return nil
@@ -837,10 +837,8 @@ class RecipeNavigationSplitViewModel {
         guard !trimmed.isEmpty else { return }
         do {
             try await database.write { db in
-                if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
+                try ShoppingListWriter.update(id: id, in: db) { list in
                     list.name = trimmed
-                    list.lastModifiedDate = Date()
-                    try ShoppingList.update(list).execute(db)
                 }
             }
         } catch {

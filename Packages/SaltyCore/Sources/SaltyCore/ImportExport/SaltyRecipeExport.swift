@@ -7,50 +7,10 @@
 
 import Foundation
 import SQLiteData
-import UniformTypeIdentifiers
-import CoreTransferable
 import UUIDV7
 
-public extension UTType {
-    static let saltyRecipe = UTType(exportedAs: "com.inuvro.salty.recipe", conformingTo:  .json)
-    static let saltyRecipeLibrary = UTType(exportedAs: "com.inuvro.salty.recipeLibrary")
-}
-
-extension SaltyRecipeExport: Transferable {
-    public static var transferRepresentation: some TransferRepresentation {
-        // A real .saltyRecipe file is the representation that AirDrops cleanly and lets the receiving
-        // device "Open in Salty" (the app registers this UTType in Info.plist). A FileRepresentation is
-        // far more reliable for this than CodableRepresentation, which historically failed to populate
-        // some share destinations. Plain text is kept as a fallback for Mail/Messages to recipients
-        // who don't have Salty.
-        FileRepresentation(contentType: .saltyRecipe) { recipe in
-            let safeName = recipe.name
-                .replacingOccurrences(of: "/", with: "-")
-                .replacingOccurrences(of: ":", with: "-")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let filename = safeName.isEmpty ? "Recipe" : safeName
-            let url = URL.temporaryDirectory.appendingPathComponent(filename, conformingTo: .saltyRecipe)
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601  // match SaltyRecipeImportHelper's decoder
-            try encoder.encode(recipe).write(to: url, options: .atomic)
-            return SentTransferredFile(url)
-        } importing: { received in
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(SaltyRecipeExport.self, from: Data(contentsOf: received.file))
-        }
-
-        // Fallback: readable plain text for Mail/Messages to recipients without Salty.
-        DataRepresentation(contentType: .plainText) { recipe in
-            let text = recipe.plainTextRepresentation
-            return text.data(using: .utf8) ?? Data()
-        } importing: { data in
-            // This probably won't work super-well, but is required and should do *something*:
-            let recipe: Recipe = RecipeFromTextParser().parseRecipe(from: String(data: data, encoding: .utf8) ?? "")
-            return try self.fromRecipe(recipe)
-        }
-    }
-}
+// The `Transferable` conformance and `UTType.saltyRecipe` live in the app (SaltyRecipeTransfer.swift):
+// they're Apple-only, and SaltyCore also builds for Windows and Android.
 
 // MARK: - Export-Optimized Structs
 
@@ -423,10 +383,7 @@ public extension SaltyRecipeExport {
     /// Exports the recipe to JSON data
     /// - Returns: JSON data representation of the recipe
     public func toJSONData() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(self)
+        try SaltyRecipeFile.encode([self])
     }
     
     /// Exports the recipe to a JSON string

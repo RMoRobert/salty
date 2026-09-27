@@ -1,6 +1,6 @@
 //
 //  RecipeLastPreparedWriter.swift
-//  Salty
+//  SaltyCore
 //
 //  The single place that stamps a recipe's "last made on" date. Shared by the recipe list's
 //  Last Prepared menu and Chef View's "Made It!" button so the column-level rules below stay
@@ -8,9 +8,10 @@
 //
 
 import Foundation
+import GRDB
 import SQLiteData
 
-enum RecipeLastPreparedWriter {
+public enum RecipeLastPreparedWriter {
 
     /// Sets (or clears, with `date: nil`) the "last made on" date for one or more recipes.
     ///
@@ -19,28 +20,41 @@ enum RecipeLastPreparedWriter {
     /// `lastModifiedPreparedDate` is stamped instead, and is what sync uses.
     ///
     /// Raw SQL so ONLY these two columns change — a record-level update would rewrite every column,
-    /// and the whole point of this write is that `lastModifiedDate` stays exactly as it was.
-    static func setLastMade(_ date: Date?, forRecipeIds ids: [String], in database: any DatabaseWriter) async throws {
+    /// and the whole point of this write is that `lastModifiedDate` stays exactly as it was. (It is
+    /// also why this doesn't go through `RecipeWriter.save`, which writes the full row.)
+    public static func setLastMade(
+        _ date: Date?, forRecipeIds ids: [String], in db: Database, now rawNow: Date = Date()
+    ) throws {
+        guard !ids.isEmpty else { return }
+        let now = rawNow.roundedToWireMillis   // DATE-009; see the note in RecipeWriter.save
+        for id in ids {
+            try db.execute(
+                sql: """
+                    UPDATE recipe
+                    SET lastPrepared = ?, lastModifiedPreparedDate = ?
+                    WHERE id = ?
+                    """,
+                arguments: [date, now, id]
+            )
+        }
+    }
+
+    /// Convenience for callers that own a database rather than a transaction. One write, so all the
+    /// recipes land together or not at all.
+    public static func setLastMade(
+        _ date: Date?, forRecipeIds ids: [String], in database: any DatabaseWriter
+    ) async throws {
         guard !ids.isEmpty else { return }
         let stamp = Date()
         try await database.write { db in
-            for id in ids {
-                try db.execute(
-                    sql: """
-                        UPDATE recipe
-                        SET lastPrepared = ?, lastModifiedPreparedDate = ?
-                        WHERE id = ?
-                        """,
-                    arguments: [date, stamp, id]
-                )
-            }
+            try setLastMade(date, forRecipeIds: ids, in: db, now: stamp)
         }
     }
 
     /// Local noon on the calendar day of `day` — the storage form for a user-picked date, chosen so
     /// minor time-zone shifts can't roll the displayed day backwards or forwards. Falls back to the
     /// raw value if the calendar can't build it (it always can for a real date).
-    static func localNoon(on day: Date) -> Date {
+    public static func localNoon(on day: Date) -> Date {
         Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
     }
 }

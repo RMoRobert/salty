@@ -9,6 +9,7 @@ import OSLog
 import Foundation
 import SQLiteData
 import GRDB
+import SaltyCore
 
 #if os(iOS)
 import UIKit
@@ -95,17 +96,10 @@ final class RecipeImageManager: @unchecked Sendable {
     
     // MARK: - Filename safety
 
-    /// Whether `name` can be used as a single file name inside the images directory.
-    ///
-    /// Recipe ids and image filenames reach this class from the sync server as well as from the
-    /// app's own database, and `URL.appending(component:)` does NOT neutralise `..` -- a value like
-    /// `../../Library/Preferences/x` resolves straight out of the images folder. Anything that could
-    /// name a directory, climb out of one, or hide as a dotfile is refused here, and every entry point
-    /// below checks before touching the filesystem.
+    /// Whether `name` can be used as a single file name inside the images directory (see
+    /// `LibraryFilenames.isSafeComponent`). Every entry point below checks before touching the filesystem.
     static func isSafeFilenameComponent(_ name: String) -> Bool {
-        guard !name.isEmpty, name.utf8.count <= 255 else { return false }
-        guard !name.hasPrefix(".") else { return false }
-        return !name.contains("/") && !name.contains("\\") && !name.contains("\0")
+        LibraryFilenames.isSafeComponent(name)
     }
 
     /// Writes `imageData` as this recipe's image and returns the stored filename with a thumbnail.
@@ -329,3 +323,6 @@ final class RecipeImageManager: @unchecked Sendable {
         return nil
     }
 }
+
+/// The image files SaltyCore's `ServerSyncEngine` reads and writes during sync.
+extension RecipeImageManager: SyncImageStore {}

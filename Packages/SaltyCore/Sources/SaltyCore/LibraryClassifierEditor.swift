@@ -116,6 +116,7 @@ public enum LibraryClassifierEditor {
         ids: some Sequence<String>,
         in db: Database
     ) throws -> Set<String> {
+        let ids = Array(ids) // walked twice: once to delete, once to tombstone
         var touchedRecipeIds = Set<String>()
 
         for id in ids {
@@ -142,6 +143,9 @@ public enum LibraryClassifierEditor {
             }
         }
 
+        // A deletion made here on purpose, so the next sync deletes it on the server rather than
+        // taking the server's copy back as one this device has never had.
+        try ClassifierTombstoneWriter.recordDeletions(classifier, ids, in: db)
         try Recipe.touchLastModified(recipeIds: touchedRecipeIds, in: db)
         return touchedRecipeIds
     }

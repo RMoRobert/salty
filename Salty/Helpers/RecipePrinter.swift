@@ -22,6 +22,7 @@ import Foundation
 import OSLog
 import WebKit
 import SaltyCore
+import SaltyCoreApple
 
 #if os(macOS)
 import AppKit

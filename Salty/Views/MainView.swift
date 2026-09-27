@@ -74,7 +74,7 @@ struct MainView: View {
     private func handleIncomingURL(_ url: URL) {
         guard url.pathExtension.lowercased() == "saltyrecipe" else { return }
         importConfirmURL = url
-        importConfirmNames = SaltyRecipeImportHelper.peekRecipeNames(url)
+        importConfirmNames = RecipeFileImportHelper.peekRecipeNames(url)
         showingImportConfirm = true
     }
 }

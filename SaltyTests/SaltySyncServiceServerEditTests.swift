@@ -8,9 +8,12 @@
 //  - Sync fires `ShoppingListChangeNotifier` for every list it writes or deletes locally, so an
 //    open checklist/freeform editor reloads instead of saving its stale in-memory copy back over
 //    the downloaded change.
-//  - Classifier deletes carry `If-Match` with the timestamp the delete decision was based on, and
-//    a 409 (future server: "the row changed after your fetch") downloads the current row instead
-//    of deleting. Today's server ignores the header, so behavior is unchanged until it doesn't.
+//  - A course/category/tag is deleted on the server only when a tombstone records that it was
+//    deleted here; any other server-only row is downloaded, however old (ClassifierTombstoneWriter).
+//  - Those deletes carry `If-Match` with the timestamp the delete decision was based on, and a 409
+//    (future server: "the row changed after your fetch") downloads the current row instead of
+//    deleting. Today's server ignores the header, so behavior is unchanged until it doesn't.
+//  - The force re-syncs drop every pending tombstone, so the next sync can't undo them.
 //  - The force re-sync-to-server paths mark every overwrite with `X-Salty-Force`, so a future
 //    server-side stale-write guard can distinguish a deliberate mirror push; regular sync must
 //    never send it.
@@ -207,7 +210,10 @@ struct SaltySyncServiceServerEditTests {
         let staleDate = Date().addingTimeInterval(-7200)
         let staleWire = SyncWireDate.string(from: staleDate)
 
-        // A server-only category older than the watermark: the client decides to delete it there.
+        // A server-only category, deleted here and unchanged there since: the client deletes it there.
+        try await database.write { db in
+            try ClassifierTombstoneWriter.recordDeletions(.category, ["cat-gone"], in: db)
+        }
         var routes = baseRoutes(lastSync: Date().addingTimeInterval(-3600))
         routes.append(.init(method: "GET", path: "/api/categories",
                             body: #"[{"id": "cat-gone", "name": "Stale", "lastModifiedDate": "\#(staleWire)"}]"#))
@@ -226,11 +232,13 @@ struct SaltySyncServiceServerEditTests {
         // The If-Match value is the timestamp the delete decision was based on, verbatim.
         #expect(deletes.first?.headers["If-Match"] == staleWire)
 
-        // And it was not resurrected locally.
-        let localCount = try await database.read { db in
-            try Int.fetchOne(db, sql: #"SELECT COUNT(*) FROM "category" WHERE "id" = 'cat-gone'"#) ?? -1
+        // And it was not resurrected locally, and the tombstone has done its job.
+        let (localCount, tombstones) = try await database.read { db in
+            (try Int.fetchOne(db, sql: #"SELECT COUNT(*) FROM "category" WHERE "id" = 'cat-gone'"#) ?? -1,
+             try ClassifierTombstoneWriter.pending(.category, in: db))
         }
         #expect(localCount == 0)
+        #expect(tombstones.isEmpty)
     }
 
     @Test func classifierDeleteConflictDownloadsCurrentRowInstead() async throws {
@@ -240,6 +248,9 @@ struct SaltySyncServiceServerEditTests {
 
         // Same setup, but the server refuses: the category changed after our fetch (a web rename
         // racing this sync). The 409 body is the current row — download it instead of deleting.
+        try await database.write { db in
+            try ClassifierTombstoneWriter.recordDeletions(.category, ["cat-kept"], in: db)
+        }
         var routes = baseRoutes(lastSync: Date().addingTimeInterval(-3600))
         routes.append(.init(method: "GET", path: "/api/categories",
                             body: #"[{"id": "cat-kept", "name": "Stale", "lastModifiedDate": "\#(staleWire)"}]"#))
@@ -254,10 +265,124 @@ struct SaltySyncServiceServerEditTests {
             try await service.syncNow(force: true)
         }
 
-        let localName = try await database.read { db in
-            try String.fetchOne(db, sql: #"SELECT "name" FROM "category" WHERE "id" = 'cat-kept'"#)
+        let (localName, tombstones) = try await database.read { db in
+            (try String.fetchOne(db, sql: #"SELECT "name" FROM "category" WHERE "id" = 'cat-kept'"#),
+             try ClassifierTombstoneWriter.pending(.category, in: db))
         }
         #expect(localName == "Renamed on web")
+        #expect(tombstones.isEmpty, "the edit won, so there is no deletion left to push")
+    }
+
+    // MARK: - A server-only classifier is taken unless it was deleted here
+
+    /// A server-only category stamped before this device's last sync, with no tombstone, is a row this
+    /// library never had (a restored backup, another library, an upload that kept its original date):
+    /// it's downloaded, not deleted on the server. Counterpart of
+    /// `aServerRecipeOlderThanTheWatermarkIsTakenNotDeleted`.
+    @Test func aServerCategoryOlderThanTheWatermarkIsTakenNotDeleted() async throws {
+        let database = try makeTestDatabase()
+        let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
+
+        var routes = baseRoutes(lastSync: Date().addingTimeInterval(-3600))
+        routes.append(.init(method: "GET", path: "/api/categories",
+                            body: #"[{"id": "cat-theirs", "name": "From another library", "lastModifiedDate": "\#(staleWire)"}]"#))
+        routes.append(.init(method: "DELETE", path: "/api/categories/", isPrefix: true, body: "{}"))
+        SyncRouteStubURLProtocol.reset(routes: routes)
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.syncNow(force: true)
+        }
+
+        let deletes = SyncRouteStubURLProtocol.recorded.filter { $0.method == "DELETE" }
+        #expect(deletes.isEmpty, "a category this library cannot prove it deleted stays on the server")
+        let localName = try await database.read { db in
+            try String.fetchOne(db, sql: #"SELECT "name" FROM "category" WHERE "id" = 'cat-theirs'"#)
+        }
+        #expect(localName == "From another library")
+    }
+
+    /// An edit beats a delete: a tombstoned row whose server copy changed after this device's last sync
+    /// comes back, and the tombstone is dropped.
+    @Test func aTombstonedCategoryEditedSinceTheLastSyncIsDownloadedInstead() async throws {
+        let database = try makeTestDatabase()
+        let editedWire = SyncWireDate.string(from: Date().addingTimeInterval(-600))
+        try await database.write { db in
+            try ClassifierTombstoneWriter.recordDeletions(.category, ["cat-renamed"], in: db)
+        }
+
+        var routes = baseRoutes(lastSync: Date().addingTimeInterval(-3600))
+        routes.append(.init(method: "GET", path: "/api/categories",
+                            body: #"[{"id": "cat-renamed", "name": "Renamed elsewhere", "lastModifiedDate": "\#(editedWire)"}]"#))
+        routes.append(.init(method: "DELETE", path: "/api/categories/", isPrefix: true, body: "{}"))
+        SyncRouteStubURLProtocol.reset(routes: routes)
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.syncNow(force: true)
+        }
+
+        #expect(SyncRouteStubURLProtocol.recorded.filter { $0.method == "DELETE" }.isEmpty)
+        let (localName, tombstones) = try await database.read { db in
+            (try String.fetchOne(db, sql: #"SELECT "name" FROM "category" WHERE "id" = 'cat-renamed'"#),
+             try ClassifierTombstoneWriter.pending(.category, in: db))
+        }
+        #expect(localName == "Renamed elsewhere")
+        #expect(tombstones.isEmpty)
+    }
+
+    /// Deleting every tag is legitimate, and each deletion is recorded, so the SYNC-016 empty-library
+    /// guard must not hold them back: the tags would stay on the server, the tombstones would stay
+    /// here, and the next sync would refuse again, forever.
+    @Test func deletingEveryTagStillReachesTheServer() async throws {
+        let database = try makeTestDatabase() // the migrations seed no tags, so this library has none
+        let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
+        try await database.write { db in
+            try ClassifierTombstoneWriter.recordDeletions(.tag, ["tag-gone"], in: db)
+        }
+
+        var routes = baseRoutes(lastSync: Date().addingTimeInterval(-3600))
+        routes.append(.init(method: "GET", path: "/api/tags",
+                            body: #"[{"id": "tag-gone", "name": "Unwanted", "lastModifiedDate": "\#(staleWire)"}]"#))
+        routes.append(.init(method: "DELETE", path: "/api/tags/", isPrefix: true, body: "{}"))
+        SyncRouteStubURLProtocol.reset(routes: routes)
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.syncNow(force: true)
+        }
+
+        let deletes = SyncRouteStubURLProtocol.recorded.filter { $0.method == "DELETE" && $0.path == "/api/tags/tag-gone" }
+        #expect(deletes.count == 1)
+        let tombstones = try await database.read { db in try ClassifierTombstoneWriter.pending(.tag, in: db) }
+        #expect(tombstones.isEmpty)
+    }
+
+    /// A tombstone for a row the server no longer has has nothing left to do, and is dropped without a
+    /// request, so the tables drain even when another device got there first.
+    @Test func tombstonesForRowsTheServerNoLongerHasAreDropped() async throws {
+        let database = try makeTestDatabase()
+        try await database.write { db in
+            try ClassifierTombstoneWriter.recordDeletions(.course, ["course-already-gone"], in: db)
+        }
+        SyncRouteStubURLProtocol.reset(routes: baseRoutes(lastSync: Date().addingTimeInterval(-3600)))
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.syncNow(force: true)
+        }
+
+        #expect(SyncRouteStubURLProtocol.recorded.filter { $0.method == "DELETE" }.isEmpty)
+        let tombstones = try await database.read { db in try ClassifierTombstoneWriter.pending(.course, in: db) }
+        #expect(tombstones.isEmpty)
     }
 
     // MARK: - SYNC-016: neither empty side is a mass deletion
@@ -272,9 +397,9 @@ struct SaltySyncServiceServerEditTests {
     /// and pulling the server's copy back with an ordinary sync.
     ///
     /// SYNC-021 now makes the recipe half of this unconditional — no library, empty or not, deletes a
-    /// recipe on the server — so what this pins for recipes is the outcome rather than the guard. The
-    /// SYNC-016 guard itself is still live and still needed for courses, categories and tags, which
-    /// have no tombstones and so keep the inference SYNC-021 removed from recipes.
+    /// recipe on the server — so what this pins for recipes is the outcome rather than the guard.
+    /// Courses, categories and tags have tombstones too, so the SYNC-016 guard on server deletions
+    /// covers only shopping lists.
     @Test func anEmptyLibraryDoesNotAskTheServerToDeleteEveryRecipe() async throws {
         let database = try makeTestDatabase() // seeds classifiers; no recipes
         let staleWire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
@@ -386,6 +511,72 @@ struct SaltySyncServiceServerEditTests {
         // The migration seeds guarantee there was something to push.
         #expect(!classifierWrites.isEmpty)
         #expect(classifierWrites.allSatisfy { $0.headers[SaltySyncService.forceWriteHeader] == "1" })
+    }
+
+    // MARK: - Force re-syncs drop pending deletions
+
+    /// "Replace local with server" restores what the user deleted here; a tombstone left behind would
+    /// have the very next sync delete it on the server again.
+    @Test func replacingLocalWithServerDropsPendingDeletions() async throws {
+        let database = try makeTestDatabase()
+        let wire = SyncWireDate.string(from: Date().addingTimeInterval(-7200))
+        try await database.write { db in
+            try RecipeTombstoneWriter.recordDeletion("r-deleted-here", in: db)
+            try ClassifierTombstoneWriter.recordDeletions(.category, ["cat-deleted-here"], in: db)
+        }
+
+        var routes = baseRoutes(lastSync: Date().addingTimeInterval(-3600))
+        routes.append(.init(method: "GET", path: "/api/categories",
+                            body: #"[{"id": "cat-deleted-here", "name": "Restored", "lastModifiedDate": "\#(wire)"}]"#))
+        routes.append(.init(method: "DELETE", path: "/api/categories/", isPrefix: true, body: "{}"))
+        routes.append(.init(method: "POST", path: "/api/recipes/sync/delete", body: "{}"))
+        SyncRouteStubURLProtocol.reset(routes: routes)
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.forceFullResyncFromServer()
+            // The sync after is where a leftover tombstone would strike.
+            try await service.syncNow(force: true)
+        }
+
+        let deletions = SyncRouteStubURLProtocol.recorded.filter {
+            $0.method == "DELETE" || $0.path == "/api/recipes/sync/delete"
+        }
+        #expect(deletions.isEmpty)
+        let (recipeTombstones, categoryTombstones, localName) = try await database.read { db in
+            (try RecipeTombstoneWriter.pending(in: db),
+             try ClassifierTombstoneWriter.pending(.category, in: db),
+             try String.fetchOne(db, sql: #"SELECT "name" FROM "category" WHERE "id" = 'cat-deleted-here'"#))
+        }
+        #expect(recipeTombstones.isEmpty)
+        #expect(categoryTombstones.isEmpty)
+        #expect(localName == "Restored")
+    }
+
+    /// "Replace server with local" carries out every pending deletion by mirroring (the rows are absent
+    /// here, so their server copies go), after which there is nothing left to push.
+    @Test func replacingServerWithLocalDropsPendingDeletions() async throws {
+        let database = try makeTestDatabase()
+        try await database.write { db in
+            try RecipeTombstoneWriter.recordDeletion("r-deleted-here", in: db)
+            try ClassifierTombstoneWriter.recordDeletions(.tag, ["tag-deleted-here"], in: db)
+        }
+        SyncRouteStubURLProtocol.reset(routes: baseRoutes(lastSync: Date().addingTimeInterval(-3600)))
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let service = makeService()
+            try await service.forceFullResyncToServer()
+        }
+
+        let (recipeTombstones, tagTombstones) = try await database.read { db in
+            (try RecipeTombstoneWriter.pending(in: db), try ClassifierTombstoneWriter.pending(.tag, in: db))
+        }
+        #expect(recipeTombstones.isEmpty)
+        #expect(tagTombstones.isEmpty)
     }
 }
 

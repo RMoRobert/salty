@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import OSLog
 
 /// Wire shape for a shopping list. Mirrors SaltyKMP's `ServerShoppingList` and the server's
 /// `shopping_list` table. Everything past `id` is optional so a client predating a field still
@@ -98,7 +97,7 @@ public extension ServerShoppingList {
             let items = wrapped.compactMap(\.value)
             if items.count != wrapped.count {
                 let skipped = wrapped.count - items.count
-                Logger(subsystem: "Salty", category: "Sync").error(
+                SaltyLogger(subsystem: "Salty", category: "Sync").error(
                     "Shopping list \(listId): skipped \(skipped) unreadable item(s) from the server payload"
                 )
             }

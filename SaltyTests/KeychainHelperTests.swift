@@ -8,6 +8,7 @@
 import Testing
 import Foundation
 @testable import Salty
+import SaltyCore
 
 /// The one test that deliberately uses the real keychain -- everything else injects
 /// `InMemorySyncCredentialStore` instead.

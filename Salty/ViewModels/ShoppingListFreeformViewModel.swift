@@ -143,11 +143,9 @@ class ShoppingListFreeformViewModel {
         Task {
             do {
                 try await database.write { db in
-                    if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
-                        // Only the freeform payload — never touch `isFreeform` (owned by creation).
+                    // Only the freeform payload — never touch `isFreeform` (owned by creation).
+                    try ShoppingListWriter.update(id: id, in: db) { list in
                         list.contentsForFreeform = content
-                        list.lastModifiedDate = Date()
-                        try ShoppingList.update(list).execute(db)
                     }
                 }
                 // The same list may be open in another window, holding its own copy of this text.

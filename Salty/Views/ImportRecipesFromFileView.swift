@@ -63,15 +63,7 @@ struct ImportRecipesFromFileView: View {
                 defer { if isScoped { file.url.stopAccessingSecurityScopedResource() } }
 
                 do {
-                    let importedIds: [String]
-                    switch file.kind {
-                    case .saltyRecipe:
-                        importedIds = try await SaltyRecipeImportHelper.importIntoDatabase(database, jsonFileUrl: file.url)
-                    case .macGourmet:
-                        importedIds = try await MacGourmetImportHelper.importIntoDatabase(database, xmlFileUrl: file.url)
-                    case .crouton:
-                        importedIds = try await CroutonImportHelper.importIntoDatabase(database, fileUrl: file.url)
-                    }
+                    let importedIds = try await RecipeFileImportHelper.importIntoDatabase(database, fileUrl: file.url)
                     importedRecipeCount += importedIds.count
                 } catch {
                     logger.error("Import of \(file.url.lastPathComponent) failed: \(error.localizedDescription)")

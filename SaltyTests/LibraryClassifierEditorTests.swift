@@ -193,6 +193,9 @@ struct LibraryClassifierEditorTests {
         }
         #expect(recipeCount == 1)
         #expect(try await recipeTimestamp("r-1", in: db) != before)
+        // A deletion made here, so it's recorded for the next sync to push.
+        let tombstoned = try await db.read { try ClassifierTombstoneWriter.pending(.category, in: $0) }
+        #expect(tombstoned == [categoryId])
     }
 
     @Test func deletingATagDropsItsJunctionRows() async throws {
@@ -245,6 +248,8 @@ struct LibraryClassifierEditorTests {
         }
         #expect(courseIdAfter == nil)
         #expect(try await recipeTimestamp("r-1", in: db) != before)
+        let tombstoned = try await db.read { try ClassifierTombstoneWriter.pending(.course, in: $0) }
+        #expect(tombstoned == [courseId])
     }
 
     @Test func deletingSeveralRowsAtOnceReportsEveryAffectedRecipe() async throws {
@@ -277,6 +282,12 @@ struct LibraryClassifierEditorTests {
             try Int.fetchOne($0, sql: #"SELECT COUNT(*) FROM "tag" WHERE "id" IN (?, ?)"#, arguments: [first, second]) ?? -1
         }
         #expect(remaining == 0)
+        // Every row is tombstoned, and only in its own kind's table.
+        let (tags, categories) = try await db.read {
+            (try ClassifierTombstoneWriter.pending(.tag, in: $0), try ClassifierTombstoneWriter.pending(.category, in: $0))
+        }
+        #expect(tags == [first, second])
+        #expect(categories.isEmpty)
     }
 
     // MARK: - Helpers

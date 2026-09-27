@@ -231,6 +231,11 @@ public enum RecipeListQueryBuilder {
             return "EXISTS (SELECT 1 FROM \(RecipeCategory.self) JOIN \(Category.self) ON \(Category.id) = \(RecipeCategory.categoryId) WHERE \(RecipeCategory.recipeId) = \(Recipe.id) AND \(Category.name) COLLATE NOCASE LIKE \(bind: pattern))"
         case .tags:
             return "EXISTS (SELECT 1 FROM \(RecipeTag.self) JOIN \(Tag.self) ON \(Tag.id) = \(RecipeTag.tagId) WHERE \(RecipeTag.recipeId) = \(Recipe.id) AND \(Tag.name) COLLATE NOCASE LIKE \(bind: pattern))"
+        case .directions:
+            // A JSON array of {id, isHeading, text}, like ingredients: only the step text is matched.
+            return "EXISTS (SELECT 1 FROM json_each(IIF(json_valid(\(Recipe.directions)), \(Recipe.directions), '[]')) WHERE json_extract(value, '$.text') COLLATE NOCASE LIKE \(bind: pattern))"
+        case .source:
+            return "(\(Recipe.source) COLLATE NOCASE LIKE \(bind: pattern) OR \(Recipe.sourceDetails) COLLATE NOCASE LIKE \(bind: pattern))"
         }
     }
 

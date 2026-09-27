@@ -4,7 +4,7 @@
 //
 //  Review screen for the "this file contains multiple recipes" PDF import. Shows each page and lets the
 //  user mark where a new recipe begins (defaulting to one recipe per page); contiguous pages between
-//  markers become one recipe. On confirm, the page groups are parsed and handed back via `onCreate`.
+//  markers become one recipe. On confirm, each group's text is handed back via `onCreate` for parsing.
 //
 
 import SwiftUI
@@ -19,14 +19,14 @@ import AppKit
 struct SplitRecipesView: View {
     let pageTexts: [String]
     let pageImages: [CGImage]
-    let onCreate: ([Recipe]) -> Void
+    let onCreate: ([String]) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     /// Page indices (besides 0) that begin a new recipe.
     @State private var startPages: Set<Int>
 
-    init(pageTexts: [String], pageImages: [CGImage], onCreate: @escaping ([Recipe]) -> Void) {
+    init(pageTexts: [String], pageImages: [CGImage], onCreate: @escaping ([String]) -> Void) {
         self.pageTexts = pageTexts
         self.pageImages = pageImages
         self.onCreate = onCreate
@@ -64,7 +64,7 @@ struct SplitRecipesView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create \(groups.count) Recipe\(groups.count == 1 ? "" : "s")") {
-                        onCreate(RecipePageSplitter.recipes(pageTexts: pageTexts, startPages: startPages))
+                        onCreate(RecipePageSplitter.groupTexts(pageTexts: pageTexts, startPages: startPages))
                         dismiss()
                     }
                 }

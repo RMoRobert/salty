@@ -37,6 +37,7 @@ struct ContractCorpusTests {
     @Test("ids")        func ids()        throws { try runSuite("ids") }
     @Test("migrations") func migrations() throws { try runSuite("migrations") }
     @Test("reconciler") func reconciler() throws { try runSuite("reconciler") }
+    @Test("webimport")  func webimport()  throws { try runSuite("webimport") }
 
     /// One test per suite, looping its cases.
     ///
@@ -175,6 +176,11 @@ struct ContractCorpusTests {
 
         case "deletion_guard":
             assertDeletionGuard(c)
+
+        // ---- web import ----------------------------------------------------------------------
+
+        case "scan_web_recipes":
+            try assertWebImport(c)
 
         default:
             Issue.record("""

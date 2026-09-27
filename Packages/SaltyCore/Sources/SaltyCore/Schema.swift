@@ -7,11 +7,10 @@
 
 import SQLiteData
 import GRDB
-import OSLog
 import Foundation
 import UUIDV7
 
-private let logger = Logger(subsystem: "Salty", category: "Database")
+private let logger = SaltyLogger(subsystem: "Salty", category: "Database")
 
 // Record Types
 
@@ -172,17 +171,28 @@ extension Recipe {
     /// fails the `courseId → course` FK if that recipe carries a dangling course reference (introduced
     /// by the FK-less server or a peer app that didn't enforce the constraint). GRDB stores Date in the
     /// same "yyyy-MM-dd HH:mm:ss.SSS" UTC format as the rest of the schema.
-    public static func touchLastModified(recipeId: String, in db: Database) throws {
+    /// Returns the stamp it wrote, so a caller holding an in-memory copy of the row can keep it in
+    /// step with the database instead of assigning a second, slightly different `Date()` of its own.
+    @discardableResult
+    public static func touchLastModified(recipeId: String, in db: Database, now rawNow: Date = Date()) throws -> Date {
+        // DATE-009: whole milliseconds, so the value returned to an in-memory caller is exactly the
+        // value stored. See the note in RecipeWriter.save.
+        let now = rawNow.roundedToWireMillis
         try db.execute(
             sql: #"UPDATE "recipe" SET "lastModifiedDate" = ? WHERE "id" = ?"#,
-            arguments: [Date(), recipeId],
+            arguments: [now, recipeId],
         )
+        return now
     }
-    
-    public static func touchLastModified(recipeIds: some Sequence<String>, in db: Database) throws {
+
+    @discardableResult
+    public static func touchLastModified(
+        recipeIds: some Sequence<String>, in db: Database, now: Date = Date()
+    ) throws -> Date {
         for recipeId in Set(recipeIds) {
-            try touchLastModified(recipeId: recipeId, in: db)
+            try touchLastModified(recipeId: recipeId, in: db, now: now)
         }
+        return now
     }
 }
 

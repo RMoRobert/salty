@@ -188,13 +188,11 @@ class ShoppingListDetailViewModel {
         Task {
             do {
                 try await database.write { db in
-                    if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
-                        // Write only the checklist payload — never touch `isFreeform`. The kind is owned
-                        // by creation and `convertToFreeform()`; a save that flipped it could undo a
-                        // conversion via a late debounced write after the view has already swapped.
+                    // Write only the checklist payload — never touch `isFreeform`. The kind is owned
+                    // by creation and `convertToFreeform()`; a save that flipped it could undo a
+                    // conversion via a late debounced write after the view has already swapped.
+                    try ShoppingListWriter.update(id: id, in: db) { list in
                         list.contentsForList = itemsToSave
-                        list.lastModifiedDate = Date()
-                        try ShoppingList.update(list).execute(db)
                     }
                 }
                 // The same list may be open in another window, holding its own copy of these items.
@@ -219,11 +217,9 @@ class ShoppingListDetailViewModel {
         Task {
             do {
                 try await database.write { db in
-                    if var list = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) {
+                    try ShoppingListWriter.update(id: id, in: db) { list in
                         list.isFreeform = true
                         list.contentsForFreeform = content
-                        list.lastModifiedDate = Date()
-                        try ShoppingList.update(list).execute(db)
                     }
                 }
                 // A checklist of this list open in another window is about to be replaced by the

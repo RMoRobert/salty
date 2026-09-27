@@ -103,9 +103,8 @@ class CreateRecipeFromWebViewModel {
         // Convert text to structured data before saving
         convertTextToStructuredData()
 
-        recipe.lastModifiedDate = Date()
-
-        // Copy main-actor state into locals for use inside the @Sendable DB closure
+        // Copy main-actor state into locals for use inside the @Sendable DB closure.
+        // No timestamps here: `RecipeWriter.save` stamps them, as for any edit.
         var recipeDraft = recipe
         let categoryIDsToSave = selectedCategoryIDs
 
@@ -116,12 +115,12 @@ class CreateRecipeFromWebViewModel {
             showingSaveErrorAlert = true
             return false
         }
-        let recipeToSave = recipeDraft
+        let recipeDraftToSave = recipeDraft
 
         do {
-            try await database.write { db in
+            let recipeToSave = try await database.write { db -> Recipe in
                 // First, save the recipe
-                try Recipe.insert { recipeToSave }.execute(db)
+                let recipeToSave = try RecipeWriter.save(recipeDraftToSave, in: db).recipe
 
                 // Then, save the category relationships
                 for categoryId in categoryIDsToSave {
@@ -132,6 +131,7 @@ class CreateRecipeFromWebViewModel {
                     )
                     try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
                 }
+                return recipeToSave
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")
             recipe = recipeToSave
@@ -216,15 +216,17 @@ class CreateRecipeFromWebViewModel {
         }
     }
 
+    /// Turns the two text editors back into structured items before saving. An empty editor means
+    /// "nothing was extracted", not "clear the field", hence the guards.
     private func convertTextToStructuredData() {
         // Convert ingredients text to structured ingredients
         if !ingredientsText.isEmpty {
-            recipe.ingredients = IngredientTextParser.parseIngredients(from: ingredientsText)
+            recipe.applyIngredientsText(ingredientsText)
         }
-        
+
         // Convert directions text to structured directions
         if !directionsText.isEmpty {
-            recipe.directions = DirectionTextParser.parseDirections(from: directionsText)
+            recipe.applyDirectionsText(directionsText)
         }
     }
 
@@ -255,8 +257,7 @@ class CreateRecipeFromWebViewModel {
         recipe.preparationTimes = scannedRecipe.preparationTimes
         recipe.notes = scannedRecipe.notes
         recipe.nutrition = scannedRecipe.nutrition
-        recipe.lastModifiedDate = Date()
-        
+
         // Convert structured ingredients to text
         if !scannedRecipe.ingredients.isEmpty {
             ingredientsText = scannedRecipe.ingredients.map { $0.text }.joined(separator: "\n")

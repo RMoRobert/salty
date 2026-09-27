@@ -8,6 +8,7 @@
 import Foundation
 import Synchronization
 @testable import Salty
+import SaltyCore
 
 /// Stands in for `KeychainHelper` in tests.
 ///
