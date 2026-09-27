@@ -22,6 +22,7 @@
 
 import Foundation
 import Observation
+import SaltyCore
 
 @MainActor
 @Observable

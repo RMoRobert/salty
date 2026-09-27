@@ -14,6 +14,10 @@
 //  Nothing here deletes a file, so a failed database write can never leave a row referencing an
 //  image that is already gone.
 //
+//  These methods stamp `lastModifiedImageDate` even though `RecipeWriter.save` would too: a replaced
+//  photo usually keeps its `imageFilename`, so the writer's diff rests on the thumbnail bytes alone.
+//  `RecipeWriter` honours a stamp already raised here.
+//
 
 import Foundation
 import SaltyCore

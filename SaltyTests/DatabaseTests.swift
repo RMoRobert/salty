@@ -224,8 +224,8 @@ struct DatabaseIntegrationTests {
                 try db.execute(sql: "UPDATE recipe SET name = ?, isFavorite = ? WHERE id = ?", arguments: ["Updated", true, "recipe-2"])
             }
 
-            // `Row` isn't Sendable, so this resolves to the synchronous `read` (no `await`).
-            let row = try db.read { db in
+            // `Row` isn't Sendable, so this must use the synchronous `read` (see `readSync`).
+            let row = try readSync(db) { db in
                 try Row.fetchOne(db, sql: "SELECT name, isFavorite FROM recipe WHERE id = ?", arguments: ["recipe-2"])
             }
             #expect(row?["name"] == "Updated")
@@ -617,7 +617,7 @@ struct DatabaseIntegrationTests {
                 includeFavorites: false, sortOrder: .byName, sortDirection: .ascending
             ).prepare { _ in "?" }
 
-            let row = try db.read { db in try Row.fetchOne(db, sql: sqlText) }
+            let row = try readSync(db) { db in try Row.fetchOne(db, sql: sqlText) }
             #expect(row != nil)
 
             // Column order MUST match RecipeListItem's stored-property declaration order.
@@ -665,7 +665,7 @@ struct DatabaseIntegrationTests {
             // Idempotent: a second pass must be a harmless no-op.
             coalesceNullRecipeColumns(db)
 
-            let row = try #require(try db.read { try Row.fetchOne($0, sql: "SELECT * FROM recipe WHERE id = 'r-null'") })
+            let row = try #require(try readSync(db) { try Row.fetchOne($0, sql: "SELECT * FROM recipe WHERE id = 'r-null'") })
 
             // JSON columns are now valid empty-array JSON (decodable, not NULL).
             for column in ["directions", "ingredients", "notes", "variations", "preparationTimes"] {
@@ -703,7 +703,7 @@ struct DatabaseIntegrationTests {
             coalesceNullRecipeColumns(db)
 
             // The WHERE … IS NULL guard must leave populated columns untouched.
-            let row = try #require(try db.read { try Row.fetchOne($0, sql: "SELECT * FROM recipe WHERE id = 'r-keep'") })
+            let row = try #require(try readSync(db) { try Row.fetchOne($0, sql: "SELECT * FROM recipe WHERE id = 'r-keep'") })
             #expect((row["source"] as String) == "Grandma")
             #expect((row["isFavorite"] as Int) == 1)
             #expect((row["difficulty"] as Int) == 3)
@@ -757,6 +757,9 @@ struct DatabaseIntegrationTests {
                 try String.fetchAll($0, sql: "SELECT recipeId FROM recipeCategory WHERE categoryId = 'cat-keep' ORDER BY recipeId")
             }
             #expect(recipeIds == ["r1", "r2", "r3"])
+            // And the merged-away row is tombstoned, so the next sync deletes it on the server too.
+            let tombstoned = try await db.read { try ClassifierTombstoneWriter.pending(.category, in: $0) }
+            #expect(tombstoned == ["cat-dupe"])
         }
 
         @Test func doesNotCreateDuplicateJunctionRowsForRecipesInBoth() async throws {
@@ -978,4 +981,11 @@ struct DatabaseIntegrationTests {
             #expect(groups.isEmpty)
         }
     }
+}
+
+/// Runs `body` with the *synchronous* `DatabaseReader.read`. From an `async` test the compiler picks the
+/// async overload for `db.read { }`, whose result must be Sendable, and GRDB's `Row` is not (Xcode 27
+/// reports this as an error rather than falling back). A non-async wrapper leaves only the sync overload.
+private func readSync<T>(_ db: some DatabaseReader, _ body: (Database) throws -> T) throws -> T {
+    try db.read(body)
 }

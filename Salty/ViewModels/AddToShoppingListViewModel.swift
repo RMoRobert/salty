@@ -194,20 +194,21 @@ final class AddToShoppingListViewModel {
         let heading = recipeName.isEmpty ? nil : recipeName
         do {
             try await database.write { db in
-                guard var list = try ShoppingList.where({ $0.id.eq(listId) }).fetchOne(db) else { return }
-                if list.isFreeform {
-                    // Freeform lists round-trip through the checklist form, so the same insertion
-                    // rules apply to both kinds without a second implementation.
-                    let existing = ShoppingListFreeformConverter.items(from: list.contentsForFreeform ?? "")
-                    let updated = RecipeToShoppingList.adding(chosen, to: existing, underHeading: heading)
-                    list.contentsForFreeform = ShoppingListFreeformConverter.text(from: updated)
-                } else {
-                    list.contentsForList = RecipeToShoppingList.adding(
-                        chosen, to: list.contentsForList, underHeading: heading
-                    )
+                // The closure sees the stored list, so this appends to what's really there rather
+                // than to a copy this view model loaded earlier.
+                try ShoppingListWriter.update(id: listId, in: db) { list in
+                    if list.isFreeform {
+                        // Freeform lists round-trip through the checklist form, so the same insertion
+                        // rules apply to both kinds without a second implementation.
+                        let existing = ShoppingListFreeformConverter.items(from: list.contentsForFreeform ?? "")
+                        let updated = RecipeToShoppingList.adding(chosen, to: existing, underHeading: heading)
+                        list.contentsForFreeform = ShoppingListFreeformConverter.text(from: updated)
+                    } else {
+                        list.contentsForList = RecipeToShoppingList.adding(
+                            chosen, to: list.contentsForList, underHeading: heading
+                        )
+                    }
                 }
-                list.lastModifiedDate = Date()
-                try ShoppingList.update(list).execute(db)
             }
         } catch {
             logger.error("Error adding recipe ingredients to shopping list \(listId): \(error)")

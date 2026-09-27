@@ -31,13 +31,13 @@ struct SaltyRecipeFileShareTests {
     @Test func peeksSingleRecipeName() throws {
         let url = try writeTemp(try export("Tomato Soup"))
         defer { try? FileManager.default.removeItem(at: url) }
-        #expect(SaltyRecipeImportHelper.peekRecipeNames(url) == ["Tomato Soup"])
+        #expect(RecipeFileImportHelper.peekRecipeNames(url) == ["Tomato Soup"])
     }
 
     @Test func peeksMultipleRecipeNames() throws {
         let url = try writeTemp([try export("Aioli"), try export("Brioche")])
         defer { try? FileManager.default.removeItem(at: url) }
-        #expect(SaltyRecipeImportHelper.peekRecipeNames(url) == ["Aioli", "Brioche"])
+        #expect(RecipeFileImportHelper.peekRecipeNames(url) == ["Aioli", "Brioche"])
     }
 
     @Test func returnsEmptyForUndecodableFile() throws {
@@ -45,6 +45,6 @@ struct SaltyRecipeFileShareTests {
             .appendingPathComponent("\(UUID().uuidString).saltyRecipe")
         defer { try? FileManager.default.removeItem(at: url) }
         try Data("definitely not a recipe".utf8).write(to: url)
-        #expect(SaltyRecipeImportHelper.peekRecipeNames(url).isEmpty)
+        #expect(RecipeFileImportHelper.peekRecipeNames(url).isEmpty)
     }
 }

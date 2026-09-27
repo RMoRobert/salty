@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import OSLog
 import UUIDV7
 
 public struct RecipeFromTextParser {
@@ -15,7 +14,7 @@ public struct RecipeFromTextParser {
     /// synthesised init to callers outside SaltyCore.
     public init() {}
 
-    private let logger = Logger(subsystem: "Salty", category: "App")
+    private let logger = SaltyLogger(subsystem: "Salty", category: "App")
     
     // MARK: - Main parsing method
     

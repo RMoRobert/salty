@@ -4,8 +4,8 @@
 //
 //  Records that a recipe was deleted HERE, so the next sync can say so rather than infer it.
 //
-//  Why this app writes a table it doesn't read: the `deletedRecipe` table is shared bookkeeping, and
-//  the other two clients (Salty.NET, SaltyKMP) consume it. Without a tombstone, a deletion is visible
+//  The `deletedRecipe` table is shared bookkeeping: every client (this one's `ServerSyncEngine`,
+//  Salty.NET, SaltyKMP) pushes whatever it finds there. Without a tombstone, a deletion is visible
 //  to a peer only as an absence, and an absence is ambiguous — "deleted here" and "never downloaded"
 //  look identical. The peer then falls back to comparing the server's timestamp against its own sync
 //  watermark, and when the recipe happened to be edited on a third device since that watermark, the
@@ -93,5 +93,17 @@ public enum RecipeTombstoneWriter {
         for id in ids {
             try db.execute(sql: #"DELETE FROM "deletedRecipe" WHERE "id" = ?"#, arguments: [id])
         }
+    }
+
+    /// Forgets every pending deletion — for the force re-syncs. After "replace local with server" a
+    /// leftover tombstone would delete a just-downloaded recipe from the server on the next sync.
+    public static func clearAll(in db: Database) throws {
+        let exists = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'deletedRecipe'"
+        ) ?? 0 > 0
+        guard exists else { return }
+
+        try db.execute(sql: #"DELETE FROM "deletedRecipe""#)
     }
 }

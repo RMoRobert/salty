@@ -26,14 +26,19 @@ public enum RecipePageSplitter {
         return result
     }
 
-    /// Parses each page group into a Recipe, skipping groups whose pages have no text at all (e.g. a
-    /// blank divider page). Pages within a group are joined with blank lines before parsing.
+    /// The text of each page group, skipping groups whose pages have no text at all (e.g. a blank
+    /// divider page). Pages within a group are joined with blank lines. The app parses each text into
+    /// a recipe (RecipeImportParser), so the model-backed parser can be used when it is available.
+    public static func groupTexts(pageTexts: [String], startPages: Set<Int>) -> [String] {
+        groups(pageCount: pageTexts.count, startPages: startPages).compactMap { group in
+            let text = group.map { pageTexts[$0] }.joined(separator: "\n\n")
+            return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+        }
+    }
+
+    /// Rule-based parse of every page group (see `groupTexts`).
     public static func recipes(pageTexts: [String], startPages: Set<Int>) -> [Recipe] {
         let parser = RecipeFromTextParser()
-        return groups(pageCount: pageTexts.count, startPages: startPages).compactMap { group in
-            let text = group.map { pageTexts[$0] }.joined(separator: "\n\n")
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-            return parser.parseRecipe(from: text)
-        }
+        return groupTexts(pageTexts: pageTexts, startPages: startPages).map { parser.parseRecipe(from: $0) }
     }
 }

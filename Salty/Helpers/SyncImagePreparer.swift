@@ -4,10 +4,9 @@
 //
 //  Image format work for sync, deliberately kept OFF the main actor.
 //
-//  `SaltySyncService` is `@MainActor` (it's `@Observable` and drives sync UI state), so everything it
-//  called synchronously ran on the main thread — including a full decode-and-re-encode of the photo.
-//  `ImportFileLimits.maxImageBytes` allows 100 MB, so syncing a large HEIC could hold the main thread
-//  for the whole conversion and visibly hang the UI.
+//  `SaltySyncService` (`@MainActor`) hands this to `ServerSyncEngine` as its `prepareImage` closure.
+//  The conversion is a full decode-and-re-encode, and `ImportFileLimits.maxImageBytes` allows 100 MB,
+//  so it must not run on the main actor (UI hang) or tie up the engine's actor.
 //
 //  Nothing here touches sync state, the database, or the network: it's `Data` in, `Data` out. The
 //  off-main guarantee is stated explicitly rather than relied on as a default, because the default is
@@ -29,6 +28,7 @@
 
 import Foundation
 import OSLog
+import SaltyCore
 
 #if canImport(UIKit)
 import UIKit
@@ -37,14 +37,6 @@ import AppKit
 #endif
 
 private let logger = Logger(subsystem: "Salty", category: "SyncImage")
-
-/// An image ready to be attached to a multipart upload: the bytes to send, and the two strings the
-/// request needs to describe them.
-struct PreparedSyncImage: Sendable, Equatable {
-    let data: Data
-    let mimeType: String
-    let fileExtension: String
-}
 
 nonisolated enum SyncImagePreparer {
 

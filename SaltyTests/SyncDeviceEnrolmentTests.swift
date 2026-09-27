@@ -3,8 +3,7 @@
 //  SaltyTests
 //
 //  The device/token authentication scheme: enrol once with a password, then carry that sync token on
-//  every request forever after. (It used to be traded for a short-lived JWT; the server has no JWT tier
-//  any more, so the token itself is what authenticates.)
+//  every request forever after.
 //
 //  Weighted towards the cases where getting it wrong is expensive and quiet rather than the happy path:
 //  a password that survives enrolment, a token thrown away because the server was merely down, and a
@@ -19,6 +18,7 @@
 import Testing
 import Foundation
 @testable import Salty
+import SaltyCore
 
 /// A URLProtocol that routes on path, and -- unlike the other stubs in this target -- keeps each
 /// request's body.
@@ -129,10 +129,8 @@ final class SyncDeviceEnrolmentTests {
 
     /// A login reply carrying a freshly issued sync token, shaped as the server sends it.
     ///
-    /// Deliberately carries no `token`/`expiresIn`: the server stopped sending them when the JWT tier
-    /// went, and both were once declared non-optional here -- which is exactly how that change reached
-    /// users, as "the app couldn't read the response" rather than as anything about authentication.
-    /// Keeping this body minimal is what would have caught it.
+    /// Deliberately minimal (no `token`/`expiresIn`), so decoding can't come to depend on fields the
+    /// server doesn't send.
     private static func loginBody(deviceToken: String? = "salty_abc123",
                                   username: String = "cook") -> String {
         let tokenField = deviceToken.map { ",\"deviceToken\":\"\($0)\"" } ?? ""

@@ -1,13 +1,16 @@
 //
 //  RecipePdfComposer.swift
-//  SaltyCore
+//  SaltyCoreApple
 //
 //  Joins one paginated PDF per recipe into a single print job and stamps a header (recipe name) and
-//  footer (source on the left, "Page n of m" on the right — numbered per recipe) onto every page.
+//  footer (source on the left, "Page n of m" on the right, numbered per recipe) onto every page.
 //
-//  WebKit can't do this itself: it doesn't support CSS `@page` margin boxes or page counters, and it
-//  doesn't repeat `position: fixed` elements on each printed page (verified on macOS 26). So the recipe
-//  is paginated first, then decorated here with Core Graphics, which works identically on both platforms.
+//  WebKit can't do this alone, so recipe is paginated first, then marked with Core Graphics.
+//
+//  This part is in SaltyCoreApple rather than SaltyCore due to Core Graphics and Core Text usage
+//  but the page geometry it works with (`RecipePrintOptions.pageSize`, `sideMargin`,
+//  `bandedVerticalMargin`) remain in SaltyCore. Non-Apple platforms would need alternate if add
+//  this feature in same way.
 //
 
 import Foundation

@@ -232,4 +232,41 @@ struct RecipeSearchQueryTests {
         let decoded = try JSONDecoder().decode(RecipeSearchQuery.self, from: data)
         #expect(decoded == query)
     }
+
+    /// The JSON other clients build by hand -- the C# app sends its parsed search box this way over
+    /// SaltyCoreFFI -- so the synthesized Codable shape (`_0` for an unlabeled payload included) is
+    /// part of that contract and must not drift.
+    @Test func theWireShapeOtherClientsBuildDecodes() throws {
+        let json = #"""
+            {"combinator":"all","criteria":[
+              {"text":{"field":"directions","match":"contains","value":"simmer"}},
+              {"group":{"_0":{"combinator":"any","criteria":[
+                {"text":{"field":"source","match":"contains","value":"BBC"}},
+                {"text":{"field":"name","match":"contains","value":"BBC"}}]}}}]}
+            """#
+        let decoded = try JSONDecoder().decode(RecipeSearchQuery.self, from: Data(json.utf8))
+        #expect(decoded == RecipeSearchQuery(.all, [
+            .text(field: .directions, match: .contains, value: "simmer"),
+            .group(RecipeSearchQuery(.any, [
+                .text(field: .source, match: .contains, value: "BBC"),
+                .text(field: .name, match: .contains, value: "BBC"),
+            ])),
+        ]))
+    }
+
+    // MARK: - Directions and source
+
+    @Test func directionsMatchOnlyTheStepText() throws {
+        let rendered = try #require(sql(RecipeListQueryBuilder.textCondition(field: .directions, pattern: "%simmer%")))
+        #expect(rendered.contains("directions"))
+        #expect(rendered.contains("json_each"))
+        #expect(rendered.contains("'$.text'"))
+    }
+
+    @Test func sourceMatchesThePublicationOrItsLink() throws {
+        let rendered = try #require(sql(RecipeListQueryBuilder.textCondition(field: .source, pattern: "%bbc%")))
+        #expect(rendered.contains("\"source\""))
+        #expect(rendered.contains("\"sourceDetails\""))
+        #expect(rendered.contains(" OR "))
+    }
 }

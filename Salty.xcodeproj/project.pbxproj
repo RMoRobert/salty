@@ -17,6 +17,7 @@
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
 		D48AB7422F20966800184122 /* UUIDV7 in Frameworks */ = {isa = PBXBuildFile; productRef = D48AB7412F20966800184122 /* UUIDV7 */; };
 		D4C0DE032F0000000000AA03 /* SaltyCore in Frameworks */ = {isa = PBXBuildFile; productRef = D4C0DE022F0000000000AA02 /* SaltyCore */; };
+		D4C0DE052F0000000000AA05 /* SaltyCoreApple in Frameworks */ = {isa = PBXBuildFile; productRef = D4C0DE042F0000000000AA04 /* SaltyCoreApple */; };
 		D4CF1AFF2FDF1B5000870E9D /* AGENTS.md in Resources */ = {isa = PBXBuildFile; fileRef = D4CF1AFE2FDF1B4700870E9D /* AGENTS.md */; };
 /* End PBXBuildFile section */
 
@@ -83,6 +84,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D4C0DE032F0000000000AA03 /* SaltyCore in Frameworks */,
+				D4C0DE052F0000000000AA05 /* SaltyCoreApple in Frameworks */,
 				D48AB7422F20966800184122 /* UUIDV7 in Frameworks */,
 				D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */,
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
@@ -171,6 +173,7 @@
 			name = Salty;
 			packageProductDependencies = (
 				D4C0DE022F0000000000AA02 /* SaltyCore */,
+				D4C0DE042F0000000000AA04 /* SaltyCoreApple */,
 				D45D78962DFF646A0067A88D /* SwiftHtml */,
 				D45D789B2DFF7B8A0067A88D /* Flow */,
 				D45D78A02DFF7E950067A88D /* WebViewKit */,
@@ -558,7 +561,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Salty;
+				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -844,6 +847,10 @@
 		D4C0DE022F0000000000AA02 /* SaltyCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SaltyCore;
+		};
+		D4C0DE042F0000000000AA04 /* SaltyCoreApple */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SaltyCoreApple;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -10,8 +10,15 @@
 //  `bytes(for:)` instead and gives up the moment the running total passes the cap, so the most it can
 //  ever hold is the cap plus one byte.
 //
+//  KNOWN GAP off Apple platforms: swift-corelibs-foundation has no `bytes(for:)`, so there the body is
+//  buffered in full and measured afterwards, which doesn't protect memory.
+//
 
 import Foundation
+// URLSession lives in a separate module in swift-corelibs-foundation.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Thrown by `URLSession.data(for:maxBytes:)` when a response body is over the caller's cap.
 public struct ResponseTooLargeError: Error, Sendable, Equatable {
@@ -34,6 +41,14 @@ public extension URLSession {
     /// as soon as the body passes the cap. Either way the failure is `ResponseTooLargeError`, so callers
     /// can tell "too big" apart from "unreachable".
     func data(for request: URLRequest, maxBytes: Int) async throws -> (Data, URLResponse) {
+        #if canImport(FoundationNetworking)
+        // No `bytes(for:)` here; see the KNOWN GAP note at the top of the file.
+        let (data, response) = try await self.data(for: request)
+        if data.count > maxBytes {
+            throw ResponseTooLargeError(limit: maxBytes, observed: data.count)
+        }
+        return (data, response)
+        #else
         let (bytes, response) = try await self.bytes(for: request)
 
         // -1 (`NSURLResponseUnknownLength`) when the server sent no Content-Length; only enforce a
@@ -54,5 +69,6 @@ public extension URLSession {
             }
         }
         return (data, response)
+        #endif
     }
 }

@@ -128,9 +128,8 @@ class RecipeDetailEditViewModel {
     /// on failure, sets `showingSaveErrorAlert` so the view can inform the user.
     @discardableResult
     func saveRecipe() async -> Bool {
-        recipe.lastModifiedDate = Date()
         // Snapshot main-actor state into locals: the async write closure is @Sendable and runs
-        // off the main actor, so it must not touch `self`.
+        // off the main actor, so it must not touch `self`. Sync timestamps are left to `RecipeWriter.save`.
         var recipeDraft = recipe
         let isNew = isNewRecipe
         let categoryIDs = selectedCategoryIDs
@@ -144,16 +143,11 @@ class RecipeDetailEditViewModel {
             showingSaveErrorAlert = true
             return false
         }
-        let recipeToSave = recipeDraft
+        let recipeDraftToSave = recipeDraft
         do {
-            try await database.write { db in
-                if isNew {
-                    // Insert new recipe
-                    try Recipe.insert { recipeToSave }.execute(db)
-                } else {
-                    // Update existing recipe
-                    try Recipe.update(recipeToSave).execute(db)
-                }
+            // `save` returns the row as written, timestamps included.
+            let recipeToSave = try await database.write { db -> Recipe in
+                let recipeToSave = try RecipeWriter.save(recipeDraftToSave, in: db).recipe
 
                 // Handle category relationships
                 if !categoryIDs.isEmpty {
@@ -173,6 +167,7 @@ class RecipeDetailEditViewModel {
                         try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
                     }
                 }
+                return recipeToSave
             }
 
             // The row is durable; now the file it stopped referencing (if any) can go.
@@ -229,13 +224,12 @@ class RecipeDetailEditViewModel {
 
             // Add tag to recipe unless it already carries it
             let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipeId, tagId: tagToUse.id)
-            let added = try await database.write { db -> Bool in
-                guard try RecipeTag.insertIfAbsent(recipeTag, in: db) else { return false }
-                try Recipe.touchLastModified(recipeId: recipeId, in: db)
-                return true
+            let stamped = try await database.write { db -> Date? in
+                guard try RecipeTag.insertIfAbsent(recipeTag, in: db) else { return nil }
+                return try Recipe.touchLastModified(recipeId: recipeId, in: db)
             }
-            if added {
-                recipe.lastModifiedDate = Date()
+            if let stamped {
+                recipe.lastModifiedDate = stamped
             }
         } catch {
             logger.error("Error adding tag: \(error)")
@@ -258,14 +252,13 @@ class RecipeDetailEditViewModel {
             }
 
             // Remove the recipe-tag association
-            try await database.write { db in
+            recipe.lastModifiedDate = try await database.write { db -> Date in
                 try RecipeTag
                     .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tag.id) }
                     .delete()
                     .execute(db)
-                try Recipe.touchLastModified(recipeId: recipeId, in: db)
+                return try Recipe.touchLastModified(recipeId: recipeId, in: db)
             }
-            recipe.lastModifiedDate = Date()
 
             logger.info("Tag '\(tagName)' removed from recipe")
         } catch {

@@ -77,12 +77,11 @@ struct SchemaOrgRecipeJSONLDImporterHardeningTests {
 
     // MARK: - Durations
 
-    /// A duration with nothing but seconds in it has no hours or minutes to render. Producing an
-    /// empty label leaves a preparation time with no time in it; the original text is better.
-    @Test func durationThatRendersToNothingKeepsItsText() throws {
+    /// Contract WEB-028: a duration renders from its total, and under a minute that is seconds.
+    @Test func aDurationOfOnlySecondsReadsInSeconds() throws {
         let html = try htmlPage(jsonLD: recipeObject(["cookTime": "PT45S"]))
         let recipe = try #require(importer.parseRecipes(from: html).first)
-        #expect(recipe.preparationTimes.first?.timeString == "PT45S")
+        #expect(recipe.preparationTimes.first?.timeString == "45 sec")
     }
 
     // MARK: - Size / count caps

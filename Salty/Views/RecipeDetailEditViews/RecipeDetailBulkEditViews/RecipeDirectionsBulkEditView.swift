@@ -80,8 +80,10 @@ struct RecipeDirectionsBulkEditView: View {
         hasChanges = false
     }
     
+    /// Unchanged text keeps the existing items and ids (`hasChanges` stays true after an undone edit,
+    /// so it can't decide this). See `RecipeItemTextRoundTrip`.
     private func saveDirections() {
-        recipe.directions = DirectionTextParser.parseDirections(from: textContent)
+        recipe.applyDirectionsText(textContent)
         hasChanges = false
     }
     

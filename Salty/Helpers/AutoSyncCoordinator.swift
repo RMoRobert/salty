@@ -20,6 +20,7 @@ import Foundation
 import SQLiteData
 import GRDB
 import OSLog
+import SaltyCore
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)

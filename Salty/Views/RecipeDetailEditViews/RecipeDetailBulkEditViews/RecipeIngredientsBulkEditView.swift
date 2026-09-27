@@ -80,8 +80,10 @@ struct RecipeIngredientsBulkEditView: View {
         hasChanges = false
     }
     
+    /// Unchanged text keeps the existing items and ids (`hasChanges` stays true after an undone edit,
+    /// so it can't decide this). See `RecipeItemTextRoundTrip`.
     private func saveIngredients() {
-        recipe.ingredients = IngredientTextParser.parseIngredients(from: textContent)
+        recipe.applyIngredientsText(textContent)
         hasChanges = false
     }
     

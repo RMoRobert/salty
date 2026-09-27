@@ -10,6 +10,10 @@ import SaltyCore
 
 /// A selectable entry in the navigation sidebar.
 /// Replaces the previous string-encoded scheme (a `"0"` for for "All Recipes" or prefixes like `"_cat"`, etc. `List(selection:)`
+///
+/// Recipe-scoping cases mirror `SaltyCore.RecipeLibrarySelection`, which owns the query mapping (see
+/// `librarySelection`). Kept flat rather than wrapping the shared type because `List(selection:)`
+/// binds to it directly at many call sites.
 enum SidebarItem: Hashable {
     // Built-in "smart lists" -- predicates over the whole library, not backed by an entity row.
     case allRecipes
@@ -25,18 +29,24 @@ enum SidebarItem: Hashable {
 }
 
 extension SidebarItem {
-    /// The query scope this selection restricts the recipe list to. The smart lists all scope to
-    /// `.all` and narrow the results via `forcesFavorites`/`forcesWantToMake` instead.
-    var scope: RecipeListScope {
+    /// The shared library selection this entry means, or nil for the shopping-lists row, which
+    /// doesn't scope the recipe list at all.
+    var librarySelection: RecipeLibrarySelection? {
         switch self {
-        case .allRecipes, .favorites, .wantToMake: return .all
-        case .category(let id): return .category(id)
-        case .course(let id): return .course(id)
-        case .tag(let id): return .tag(id)
-        // Shopping lists don't scope the recipe list at all (the content column shows the lists).
-        case .allShoppingLists: return .all
+        case .allRecipes:       .allRecipes
+        case .favorites:        .favorites
+        case .wantToMake:       .wantToMake
+        case .category(let id): .category(id)
+        case .course(let id):   .course(id)
+        case .tag(let id):      .tag(id)
+        case .allShoppingLists: nil
         }
     }
+
+    /// The query scope this selection restricts the recipe list to. The smart lists all scope to
+    /// `.all` and narrow the results via `forcesFavorites`/`forcesWantToMake` instead.
+    /// Shopping lists don't scope the recipe list at all (the content column shows the lists).
+    var scope: RecipeListScope { librarySelection?.scope ?? .all }
 
     /// Whether this selection is the shopping-lists column (its own list/detail flow, not recipes).
     var isShoppingLists: Bool { self == .allShoppingLists }
@@ -54,21 +64,11 @@ extension SidebarItem {
     }
 
     /// Whether this selection forces the favorites-only filter regardless of the toolbar toggle.
-    var forcesFavorites: Bool { self == .favorites }
+    var forcesFavorites: Bool { librarySelection?.forcesFavorites ?? false }
 
     /// Whether this selection forces the want-to-make-only filter.
-    var forcesWantToMake: Bool { self == .wantToMake }
+    var forcesWantToMake: Bool { librarySelection?.forcesWantToMake ?? false }
 
     /// A stable string key identifying this selection, used in view-refresh identifiers.
-    var queryKey: String {
-        switch self {
-        case .allRecipes:       return "all"
-        case .favorites:        return "favorites"
-        case .wantToMake:       return "wantToMake"
-        case .category(let id): return "cat_\(id)"
-        case .course(let id):   return "course_\(id)"
-        case .tag(let id):      return "tag_\(id)"
-        case .allShoppingLists: return "allShoppingLists"
-        }
-    }
+    var queryKey: String { librarySelection?.queryKey ?? "allShoppingLists" }
 }

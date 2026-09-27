@@ -10,6 +10,7 @@ import Foundation
 import OSLog
 import PDFKit
 import CoreGraphics
+import SaltyCore
 
 #if os(iOS)
 import VisionKit
@@ -251,45 +252,98 @@ class RecipeOCRService {
         return context.makeImage()
     }
 
+    // MARK: - Text recognition
+
+    /// Recognises the text in one image and returns it in reading order, one block per line. OS 26+
+    /// uses Vision's document recogniser (paragraphs, tables), earlier systems plain text lines; both
+    /// go through ReadingOrderAssembler (column detection) and OCRTextCleanup.
     private func performOCR(on cgImage: CGImage) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                
-                guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(throwing: RecipeOCRError.processingFailed)
-                    return
-                }
-                
-                let recognizedStrings = observations.compactMap { observation in
-                    observation.topCandidates(1).first?.string
-                }
-                
-                let fullText = recognizedStrings.joined(separator: "\n")
-                
-                if fullText.isEmpty {
-                    continuation.resume(throwing: RecipeOCRError.noTextFound)
-                } else {
-                    continuation.resume(returning: fullText)
-                }
+        let blocks: [RecognizedTextBlock]
+        if #available(iOS 26.0, macOS 26.0, *) {
+            blocks = try await Self.documentBlocks(in: cgImage)
+        } else {
+            blocks = try await Self.lineBlocks(in: cgImage)
+        }
+        let text = OCRTextCleanup.apply(to: ReadingOrderAssembler.assemble(blocks))
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw RecipeOCRError.noTextFound
+        }
+        return text
+    }
+
+    /// Words the recogniser should prefer when a token is ambiguous. Kept short: Vision only uses these
+    /// as tie-breakers, and a long list slows recognition.
+    nonisolated private static let cookingVocabulary = ["tsp", "tbsp", "Tbsp", "lb", "lbs", "oz", "pkg", "qt", "pt"]
+
+    /// Document recognition (OS 26+): paragraphs, plus table rows when the table's text isn't already
+    /// reported as paragraphs. List items arrive as paragraphs with their marker in the text.
+    @available(iOS 26.0, macOS 26.0, *)
+    nonisolated private static func documentBlocks(in image: CGImage) async throws -> [RecognizedTextBlock] {
+        var request = RecognizeDocumentsRequest()
+        request.textRecognitionOptions.useLanguageCorrection = true
+        request.textRecognitionOptions.customWords = cookingVocabulary
+        let observations = try await request.perform(on: image)
+
+        var blocks: [RecognizedTextBlock] = []
+        for observation in observations {
+            let document = observation.document
+            let title = document.title?.transcript
+            var paragraphTexts = Set<String>()
+            for paragraph in document.paragraphs {
+                let transcript = paragraph.transcript
+                paragraphTexts.insert(transcript)
+                blocks.append(block(
+                    kind: transcript == title ? .title : .paragraph,
+                    transcript: transcript,
+                    box: paragraph.boundingRegion.boundingBox.cgRect
+                ))
             }
-            
-            // Configure the request for better accuracy
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-            request.recognitionLanguages = ["en-US"]
-            request.minimumTextHeight = 0.01 // Adjust as needed
-            
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            
-            do {
-                try handler.perform([request])
-            } catch {
-                continuation.resume(throwing: error)
+            for table in document.tables {
+                let rows = table.rows.map { row in
+                    row.map { $0.content.text.transcript.replacing("\n", with: " ") }.filter { !$0.isEmpty }
+                }
+                let cells = rows.flatMap { $0 }
+                guard !cells.isEmpty, !cells.allSatisfy({ paragraphTexts.contains($0) }) else { continue }
+                let box = table.boundingRegion.boundingBox.cgRect
+                let rowHeight = box.height / CGFloat(max(rows.count, 1))
+                for (index, row) in rows.enumerated() where !row.isEmpty {
+                    blocks.append(RecognizedTextBlock(
+                        kind: .tableRow,
+                        lines: [row.joined(separator: "  ")],
+                        x: box.minX,
+                        y: 1 - box.maxY + rowHeight * CGFloat(index),
+                        width: box.width,
+                        height: rowHeight
+                    ))
+                }
             }
         }
+        return blocks
+    }
+
+    /// Text recognition for iOS 18 / macOS 15: one block per recognised line.
+    nonisolated private static func lineBlocks(in image: CGImage) async throws -> [RecognizedTextBlock] {
+        var request = RecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.customWords = cookingVocabulary
+        let observations = try await request.perform(on: image)
+        return observations.compactMap { observation in
+            guard let text = observation.topCandidates(1).first?.string else { return nil }
+            return block(kind: .paragraph, transcript: text, box: observation.boundingBox.cgRect)
+        }
+    }
+
+    /// Vision's normalised rects have their origin at the bottom-left; blocks measure from the top. Lines
+    /// are cleaned here as well as after assembly so that the row-merging step sees "2 lbs", not "2 Ibs".
+    nonisolated private static func block(kind: RecognizedTextBlock.Kind, transcript: String, box: CGRect) -> RecognizedTextBlock {
+        RecognizedTextBlock(
+            kind: kind,
+            lines: transcript.components(separatedBy: .newlines).map { OCRTextCleanup.apply(to: $0) },
+            x: box.minX,
+            y: 1 - box.maxY,
+            width: box.width,
+            height: box.height
+        )
     }
 } 
