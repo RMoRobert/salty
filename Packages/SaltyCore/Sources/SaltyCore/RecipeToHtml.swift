@@ -14,7 +14,7 @@ public extension String {
     /// recipe text can come from untrusted sources (web import, shared .saltyRecipe files, sync)
     /// and would otherwise be interpreted as markup/script in the WKWebView and HTML exports.
     /// `&` must be replaced first so already-produced entities aren't double-escaped.
-    public var htmlEscaped: String {
+    var htmlEscaped: String {
         self.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
@@ -56,7 +56,7 @@ public extension Recipe {
     /// - Parameter imageBase64: the recipe photo as base64 JPEG, or nil. Required rather than defaulted
     ///   so a caller can't silently drop the image from an export; the app's overload of the same name
     ///   fills it in from `Recipe.imageAsBase64`.
-    public func asHtmlWithOptions(options: HTMLExportOptions, theme: RecipeHtmlTheme = .modern,
+    func asHtmlWithOptions(options: HTMLExportOptions, theme: RecipeHtmlTheme = .modern,
                            course: String? = nil, categories: [String] = [], tags: [String] = [],
                            imageBase64: String?) -> String {
         let page = RecipeHtmlPage(recipe: self, course: course, categories: categories, tags: tags,

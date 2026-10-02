@@ -189,7 +189,7 @@ public extension SaltyRecipeExport {
     ///     images live in an app-owned folder that SaltyCore knows nothing about; the app's
     ///     `fromRecipe(_:database:)` overload supplies it from `Recipe.fullImageData`.
     /// - Returns: A SaltyRecipeExport with all data populated
-    public static func fromRecipe(
+    static func fromRecipe(
         _ recipe: Recipe,
         database: any DatabaseWriter,
         imageData: Data?
@@ -264,7 +264,7 @@ public extension SaltyRecipeExport {
     /// - Parameters:
     ///   - recipe: The Recipe to convert
     /// - Returns: A SaltyRecipeExport with all data populated
-    public static func fromRecipe(_ recipe: Recipe) throws -> SaltyRecipeExport {
+    static func fromRecipe(_ recipe: Recipe) throws -> SaltyRecipeExport {
         
         return SaltyRecipeExport(
             id: recipe.id,
@@ -291,7 +291,7 @@ public extension SaltyRecipeExport {
     }
     
     /// Plain text representation of the recipe for text-only transfer operations like text messaging, etc.
-    public var plainTextRepresentation: String {
+    var plainTextRepresentation: String {
         var text = ""
         
         // Recipe name
@@ -382,13 +382,13 @@ public extension SaltyRecipeExport {
     
     /// Exports the recipe to JSON data
     /// - Returns: JSON data representation of the recipe
-    public func toJSONData() throws -> Data {
+    func toJSONData() throws -> Data {
         try SaltyRecipeFile.encode([self])
     }
     
     /// Exports the recipe to a JSON string
     /// - Returns: JSON string representation of the recipe
-    public func toJSONString() throws -> String {
+    func toJSONString() throws -> String {
         let data = try toJSONData()
         guard let string = String(data: data, encoding: .utf8) else {
             throw EncodingError.invalidValue(self, EncodingError.Context(
@@ -401,7 +401,7 @@ public extension SaltyRecipeExport {
     
     /// Converts SaltyRecipeExport to Recipe object
     /// - Returns: Recipe object with matching data from the SaltyRecipeExport
-    public func convertToRecipe() -> Recipe {
+    func convertToRecipe() -> Recipe {
         let recipe = Recipe(
             id: UUIDV7().uuidString, // Generate new ID for import
             name: name,
