@@ -227,5 +227,5 @@ public enum ShoppingListMerge {
 
 private extension Optional where Wrapped == Bool {
     /// The effective value of a nullable flag (nil == false, matching the DTO defaults).
-    public var eff: Bool { self == true }
+    var eff: Bool { self == true }
 }

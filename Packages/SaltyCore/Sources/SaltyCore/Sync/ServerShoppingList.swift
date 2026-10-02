@@ -82,7 +82,7 @@ public extension ServerShoppingList {
     ///   quietly blank a list, and the next upload would make that permanent.
     ///
     /// Both of those are cases where failing loudly loses less than recovering quietly.
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let listId = try container.decode(String.self, forKey: .id)
         id = listId
@@ -111,7 +111,7 @@ public extension ServerShoppingList {
 // Conversions stay in an extension for readability; the memberwise init is now written out in the
 // type body (see the note there), so it no longer depends on this separation to survive.
 public extension ServerShoppingList {
-    public init(list: ShoppingList) {
+    init(list: ShoppingList) {
         self.id = list.id
         self.name = list.name
         self.isFreeform = list.isFreeform
@@ -124,7 +124,7 @@ public extension ServerShoppingList {
     /// `distantPast`: a nil would compare as older than the sync watermark forever, so the list would
     /// be re-deleted on the next sync instead of kept (same hazard `coalesceNullShoppingListColumns`
     /// guards against locally).
-    public var asShoppingList: ShoppingList {
+    var asShoppingList: ShoppingList {
         ShoppingList(
             id: id,
             name: name ?? "",

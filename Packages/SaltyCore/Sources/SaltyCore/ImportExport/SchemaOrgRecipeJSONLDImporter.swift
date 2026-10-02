@@ -124,7 +124,7 @@ public extension SchemaOrgRecipeJSONLDImporter {
     /// Convenience method to parse recipes from a URL
     /// - Parameter url: URL to fetch and parse
     /// - Returns: Array of Recipe objects found at the URL
-    public func parseRecipes(from url: URL) async -> [Recipe] {
+    func parseRecipes(from url: URL) async -> [Recipe] {
         // Only fetch real web URLs: reject file://, custom schemes, and anything that could coax the app
         // into reading local resources (SSRF-style abuse of an importer that takes an arbitrary URL).
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
@@ -157,7 +157,7 @@ public extension SchemaOrgRecipeJSONLDImporter {
     /// Returns the raw image data only if the URL is a real web URL, the payload is within the size
     /// limit, and the bytes carry a known image container signature (rejects HTML error pages and junk;
     /// see `ImageDataFormat`).
-    public func downloadImageData(from urlString: String) async -> Data? {
+    func downloadImageData(from urlString: String) async -> Data? {
         // Same SSRF guard as parseRecipes(from:): the URL comes from untrusted page content.
         guard let url = URL(string: urlString),
               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {

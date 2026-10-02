@@ -66,7 +66,7 @@ public extension Date {
     /// (decoded by `ISO8601DateFormatter`) can differ by sub-microsecond amounts for the SAME wall-clock
     /// millisecond, so comparing them with `>` / `<` made sync re-upload/re-download everything forever.
     /// Normalizing both sides to whole milliseconds before comparison makes equal instants compare equal.
-    public var roundedToWireMillis: Date {
+    var roundedToWireMillis: Date {
         Date(timeIntervalSinceReferenceDate: (timeIntervalSinceReferenceDate * 1000).rounded() / 1000)
     }
 }
