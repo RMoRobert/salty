@@ -16,6 +16,7 @@ struct ShoppingListDetailView: View {
     @AppStorage("shoppingListHideCompleted") private var hideCompleted = false
     @FocusState private var focusedItemId: String?
     @State private var showingConvertConfirmation = false
+    @Environment(\.scenePhase) private var scenePhase
     /// macOS reorder arming: the row whose drag handle is under the pointer, if any. While set,
     /// every visible row is movable — arming per row instead capped drags at one position (see the
     /// move-disable note in ShoppingListItemRowView). Text stays instantly clickable because the
@@ -111,15 +112,18 @@ struct ShoppingListDetailView: View {
             viewModel.removeEmptyItems()
             viewModel.flush()
         }
+        // iOS can kill a backgrounded app without warning, so a save still sitting in the debounce
+        // is written the moment the scene stops being active rather than waiting for `onDisappear`.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                viewModel.flush()
+            }
+        }
         // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, a sync
         // download, or this same list being edited in another window) end up in the database, not in
-        // the in-memory items. Pick them up rather than saving over them.
-        .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
-            // Our own saves announce themselves too, for the sake of the other windows; reloading
-            // one here would only interrupt whoever is typing.
-            guard !ShoppingListChangeNotifier.shared.isOwnChange(listId: viewModel.listId,
-                                                                 source: viewModel.editorToken) else { return }
-            Task { await viewModel.reloadAfterExternalChange() }
+        // the in-memory items. The view model observes the row and sorts its own writes from theirs.
+        .onChange(of: viewModel.storedRow) { _, row in
+            viewModel.storedRowDidChange(to: row)
         }
         // Remove rows user never typed into (simulating Reminders app behavior, better UX)
         .onChange(of: focusedItemId) { previousId, _ in

@@ -60,8 +60,6 @@ public enum RecipeHtmlTheme: String, CaseIterable, Identifiable, Codable {
         --salty-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
     }
 
-    body { font-family: var(--salty-font-body) !important; }
-
     /* Big muted-slate title instead of the modern gradient text. */
     #recipe-name {
         background: none !important;

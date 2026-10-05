@@ -122,15 +122,10 @@ class CreateRecipeFromWebViewModel {
                 // First, save the recipe
                 let recipeToSave = try RecipeWriter.save(recipeDraftToSave, in: db).recipe
 
-                // Then, save the category relationships
-                for categoryId in categoryIDsToSave {
-                    let recipeCategory = RecipeCategory(
-                        id: UUIDV7().uuidString,
-                        recipeId: recipeToSave.id,
-                        categoryId: categoryId
-                    )
-                    try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
-                }
+                // Then its categories, through the one writer that files recipes under categories.
+                try RecipeClassificationWriter.set(
+                    categoryIds: Array(categoryIDsToSave), tagIds: nil, forRecipe: recipeToSave.id, in: db
+                )
                 return recipeToSave
             }
             logger.info("Recipe saved successfully: \(self.recipe.id) with \(self.selectedCategoryIDs.count) categories")

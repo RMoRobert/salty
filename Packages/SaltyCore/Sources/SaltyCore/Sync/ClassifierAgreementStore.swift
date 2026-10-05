@@ -75,7 +75,7 @@ public enum ClassifierAgreementStore {
         for id in ids {
             try db.execute(
                 sql: """
-                    UPDATE "\(table.rawValue)" SET "syncedModifiedDate" = "lastModifiedDate" WHERE "id" = ?
+                    UPDATE "\(table.rawValue)" SET "syncedModifiedDate" = "lastModifiedDate" WHERE "id" = ? AND "syncedModifiedDate" IS NOT "lastModifiedDate"
                     """,
                 arguments: [id]
             )
@@ -87,7 +87,7 @@ public enum ClassifierAgreementStore {
     public static func markAllAgreed(in db: Database) throws {
         for table in Table.allCases where try isAvailable(table, in: db) {
             try db.execute(
-                sql: #"UPDATE "\#(table.rawValue)" SET "syncedModifiedDate" = "lastModifiedDate""#
+                sql: #"UPDATE "\#(table.rawValue)" SET "syncedModifiedDate" = "lastModifiedDate" WHERE "syncedModifiedDate" IS NOT "lastModifiedDate""#
             )
         }
     }

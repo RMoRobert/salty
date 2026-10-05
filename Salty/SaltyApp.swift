@@ -215,7 +215,7 @@ struct SaltyApp: App {
     /// One classifier editor window. The three differ only in which table they edit, so they share
     /// both the scene shape and the view (see `LibraryClassifiersEditView`).
     private func classifierEditorWindow(_ classifier: LibraryClassifier, id: String) -> some Scene {
-        Window("Edit \(classifier.pluralLabel)", id: id) {
+        Window("Edit \(classifier.pluralName)", id: id) {
             LibraryClassifiersEditView(classifier: classifier)
                 .frame(minWidth: 320, idealWidth: 420, minHeight: 320, idealHeight: 520)
         }

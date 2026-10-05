@@ -3,8 +3,8 @@
 //  Salty
 //
 //  Keeps the display awake while Chef View is open — a recipe you're cooking from is useless if
-//  the screen dims halfway through kneading. Reference counted, because macOS can have several
-//  Chef View windows open at once.
+//  the screen dims halfway through kneading. Several holders at once are fine (macOS can have
+//  several Chef View windows open; on iOS a mirroring TV holds it alongside the phone's own view).
 //
 
 import Foundation
@@ -18,17 +18,41 @@ final class ScreenSleepBlocker {
 
     private init() {}
 
-    private var holders = 0
+    /// One holder's claim on the display. Hand it back with `release(_:)`.
+    ///
+    /// A claim rather than a bare counter: SwiftUI can fire `onAppear` twice for one appearance (the
+    /// list editors document this), and a counter bumped twice but decremented once left the screen
+    /// awake for the rest of the session. Releasing the same claim twice, or holding when a claim is
+    /// already held, does nothing.
+    final class Hold: Sendable {
+        fileprivate let id = UUID()
+        fileprivate init() {}
+    }
+
+    private var holds: Set<UUID> = []
 
     #if os(macOS)
     private var activity: (any NSObjectProtocol)?
     #endif
 
-    /// Balanced by `end()`. Callers must pair these on appear/disappear — the display is left
-    /// awake for exactly as long as something is holding it.
-    func begin() {
-        holders += 1
-        guard holders == 1 else { return }
+    /// Takes a claim on the display; the first claim switches idle sleep off.
+    func hold() -> Hold {
+        let hold = Hold()
+        let wasHeld = !holds.isEmpty
+        holds.insert(hold.id)
+        if !wasHeld {
+            keepAwake()
+        }
+        return hold
+    }
+
+    /// Gives a claim back; the last one switches idle sleep on again.
+    func release(_ hold: Hold) {
+        guard holds.remove(hold.id) != nil, holds.isEmpty else { return }
+        allowSleep()
+    }
+
+    private func keepAwake() {
         #if os(macOS)
         activity = ProcessInfo.processInfo.beginActivity(
             options: .idleDisplaySleepDisabled,
@@ -39,9 +63,7 @@ final class ScreenSleepBlocker {
         #endif
     }
 
-    func end() {
-        holders = max(0, holders - 1)
-        guard holders == 0 else { return }
+    private func allowSleep() {
         #if os(macOS)
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)

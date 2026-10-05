@@ -30,7 +30,17 @@ final class ChefViewModel {
 
     /// A snapshot rather than a live `@FetchOne`: a recipe isn't edited while it's being cooked,
     /// and a plain value keeps the step logic testable without standing up a database.
-    private(set) var recipe: Recipe?
+    private(set) var recipe: Recipe? {
+        didSet { recipeDidChange() }
+    }
+
+    /// Direction rows as Chef View shows them, headings included. Derived once per recipe snapshot
+    /// rather than parsed on every access: the list asks per row whether a step is current.
+    private(set) var steps: [ChefStep] = []
+
+    /// Just the numbered steps — headings orient the cook but are never "current" and can't be
+    /// stepped onto.
+    private(set) var cookableSteps: [ChefStep] = []
 
     private let sessionStore: ChefViewSessionStore
 
@@ -51,6 +61,7 @@ final class ChefViewModel {
         self.recipe = recipe
         self.scaleFactor = scaleFactor
         self.sessionStore = sessionStore
+        recipeDidChange()
     }
 
     /// For the macOS Chef View window, whose Codable window value carries only an id.
@@ -74,21 +85,22 @@ final class ChefViewModel {
         }
     }
 
+    /// Re-derives the step rows, and drops session progress made against an earlier revision of
+    /// the recipe: that progress is positions in the directions and ingredients, and after an edit
+    /// it would highlight the wrong step and check the wrong ingredient.
+    private func recipeDidChange() {
+        steps = ChefStep.steps(from: recipe?.directions ?? [])
+        cookableSteps = steps.filter { !$0.isHeading }
+        guard let recipe else { return }
+        let session = sessionStore.state(for: recipeId)
+        if !session.isPristine, session.recipeLastModifiedDate != recipe.lastModifiedDate {
+            sessionStore.reset(recipeId: recipeId)
+        }
+    }
+
     // MARK: - Steps
 
     var recipeName: String { recipe?.name ?? "" }
-
-    /// Direction rows as Chef View shows them, headings included. Recomputed from the snapshot;
-    /// callers that iterate should bind it to a local rather than re-reading it per row.
-    var steps: [ChefStep] {
-        ChefStep.steps(from: recipe?.directions ?? [])
-    }
-
-    /// Just the numbered steps — headings orient the cook but are never "current" and can't be
-    /// stepped onto.
-    var cookableSteps: [ChefStep] {
-        steps.filter { !$0.isHeading }
-    }
 
     var totalStepCount: Int { cookableSteps.count }
 
@@ -251,7 +263,11 @@ final class ChefViewModel {
     }
 
     private func update(_ mutate: (inout ChefSessionState) -> Void) {
-        sessionStore.update(recipeId: recipeId, mutate)
+        let stamp = recipe?.lastModifiedDate
+        sessionStore.update(recipeId: recipeId) {
+            mutate(&$0)
+            $0.recipeLastModifiedDate = stamp
+        }
     }
 
     // MARK: - Finishing

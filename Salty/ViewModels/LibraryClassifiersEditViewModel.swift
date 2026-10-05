@@ -138,7 +138,7 @@ final class LibraryClassifiersEditViewModel {
         if rows.count == 1, let only = rows.first {
             return "Delete “\(only.name)”?"
         }
-        return "Delete \(rows.count) \(rows.count == 1 ? classifier.singularLabel : classifier.pluralLabel)?"
+        return "Delete \(rows.count) \(rows.count == 1 ? classifier.singularName : classifier.pluralName)?"
     }
 
     /// What the delete costs, in recipes. Recipes are never deleted -- they only lose the classification,
@@ -154,7 +154,7 @@ final class LibraryClassifiersEditViewModel {
         // One recipe can hold two of the categories/tags being deleted, so a multi-row total is an
         // upper bound. A recipe has only one course, so that total is exact.
         let mayDoubleCount = rows.count > 1 && classifier != .course
-        let count = affected == 1 ? "1 recipe" : "\(affected) recipes"
+        let count = String(inflected: "^[\(affected) recipe](inflect: true)")
         let recipes = mayDoubleCount ? "up to \(count)" : count
 
         switch classifier {
@@ -165,10 +165,10 @@ final class LibraryClassifiersEditViewModel {
             return "\(recipes) \(affected == 1 ? "is" : "are") currently classified with this course. \(remain) This cannot be undone."
         case .category, .tag:
             if rows.count == 1 {
-                let noun = classifier.singularLabel.lowercased()
+                let noun = classifier.singularName.lowercased()
                 return "This \(noun) is being used by \(recipes). Removing it will remove it from those recipes, but the recipes will remain. This cannot be undone."
             }
-            let noun = classifier.pluralLabel.lowercased()
+            let noun = classifier.pluralName.lowercased()
             return "These \(noun) are being used by \(recipes). Removing them will remove them from those recipes, but the recipes will remain. This cannot be undone."
         }
     }
@@ -181,7 +181,7 @@ final class LibraryClassifiersEditViewModel {
 
     /// Title for the merge sheet. Counts rather than names: the names are listed right below it.
     static func mergeTitle(for rows: [LibraryClassifierItem], classifier: LibraryClassifier) -> String {
-        "Merge \(rows.count) \(rows.count == 1 ? classifier.singularLabel : classifier.pluralLabel)"
+        "Merge \(rows.count) \(rows.count == 1 ? classifier.singularName : classifier.pluralName)"
     }
 
     /// What the merge does, in the survivor's own name -- which is the whole reason the sheet exists,
@@ -195,7 +195,7 @@ final class LibraryClassifiersEditViewModel {
         classifier: LibraryClassifier
     ) -> String {
         guard let survivor = rows.first(where: { $0.id == survivorID }) else {
-            return "Choose which \(classifier.singularLabel.lowercased()) to keep."
+            return "Choose which \(classifier.singularName.lowercased()) to keep."
         }
         let losing = rows.filter { $0.id != survivor.id }
         guard !losing.isEmpty else {
@@ -207,7 +207,7 @@ final class LibraryClassifiersEditViewModel {
         if losing.count <= 3 {
             subject = losing.map { "“\($0.name)”" }.formatted(.list(type: .and))
         } else {
-            subject = "The other \(losing.count) \(classifier.pluralLabel.lowercased())"
+            subject = "The other \(losing.count) \(classifier.pluralName.lowercased())"
         }
         let plural = losing.count == 1
         let verb = plural ? "will be deleted, and its recipes" : "will be deleted, and their recipes"
@@ -341,7 +341,7 @@ final class LibraryClassifiersEditViewModel {
             scrollTarget = .afterReload(id: newID)
         } catch {
             logger.error("Error creating \(classifier.rawValue): \(error)")
-            operationError = "Couldn’t create the \(classifier.singularLabel.lowercased()). \(error.localizedDescription)"
+            operationError = "Couldn’t create the \(classifier.singularName.lowercased()). \(error.localizedDescription)"
         }
     }
 
@@ -369,7 +369,7 @@ final class LibraryClassifiersEditViewModel {
             scrollTarget = .afterReload(id: id)
         } catch {
             logger.error("Error renaming \(classifier.rawValue): \(error)")
-            operationError = "Couldn’t rename the \(classifier.singularLabel.lowercased()). \(error.localizedDescription)"
+            operationError = "Couldn’t rename the \(classifier.singularName.lowercased()). \(error.localizedDescription)"
         }
     }
 
@@ -400,7 +400,7 @@ final class LibraryClassifiersEditViewModel {
             scrollTarget = .afterReload(id: conflict.id)
         } catch {
             logger.error("Error merging \(classifier.rawValue): \(error)")
-            operationError = "Couldn’t merge the \(classifier.pluralLabel.lowercased()). \(error.localizedDescription)"
+            operationError = "Couldn’t merge the \(classifier.pluralName.lowercased()). \(error.localizedDescription)"
         }
     }
 
@@ -442,7 +442,7 @@ final class LibraryClassifiersEditViewModel {
             selection.subtract(ids)
         } catch {
             logger.error("Error deleting \(classifier.rawValue): \(error)")
-            operationError = "Couldn’t delete the \(rows.count == 1 ? classifier.singularLabel.lowercased() : classifier.pluralLabel.lowercased()). \(error.localizedDescription)"
+            operationError = "Couldn’t delete the \(rows.count == 1 ? classifier.singularName.lowercased() : classifier.pluralName.lowercased()). \(error.localizedDescription)"
         }
     }
 
@@ -490,7 +490,7 @@ final class LibraryClassifiersEditViewModel {
             scrollTarget = .afterReload(id: survivor.id)
         } catch {
             logger.error("Error merging \(classifier.rawValue): \(error)")
-            operationError = "Couldn’t merge the \(classifier.pluralLabel.lowercased()). \(error.localizedDescription)"
+            operationError = "Couldn’t merge the \(classifier.pluralName.lowercased()). \(error.localizedDescription)"
         }
     }
 }

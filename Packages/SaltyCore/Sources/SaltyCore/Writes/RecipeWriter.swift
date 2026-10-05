@@ -105,8 +105,17 @@ public enum RecipeWriter {
                            imageChanged: imageChanged, preparedChanged: preparedChanged)
     }
 
-    /// Saves an edit to the recipe's body and nothing else: the photo and "last made" are kept exactly
-    /// as they are stored now, whatever `edited` carries for them.
+    /// Which photo a body save writes.
+    public enum BodySaveImage: Sendable {
+        /// The stored photo stays, whatever `edited` carries -- an editor that never touched the photo.
+        case keepStored
+        /// `edited`'s image columns are written: the editor replaced or removed the photo itself and has
+        /// already put the new file on disk.
+        case useEdited
+    }
+
+    /// Saves an edit to the recipe's body and nothing else: "last made" is kept exactly as it is stored
+    /// now, and so is the photo unless `image` says the editor changed it.
     ///
     /// For an editor holding an older copy: a photo or "made it" that arrived since (sync, another
     /// window) would otherwise be written back and stamped as new, spreading the revert to every device.
@@ -114,14 +123,21 @@ public enum RecipeWriter {
     ///
     /// An update, never an insert: throws `RecipeWriterError.recipeNotFound` if the recipe is gone.
     @discardableResult
-    public static func saveBody(_ edited: Recipe, in db: Database, now: Date = Date()) throws -> SaveOutcome {
+    public static func saveBody(
+        _ edited: Recipe,
+        image: BodySaveImage = .keepStored,
+        in db: Database,
+        now: Date = Date()
+    ) throws -> SaveOutcome {
         guard let stored = try Recipe.where({ $0.id.eq(edited.id) }).fetchOne(db) else {
             throw RecipeWriterError.recipeNotFound(edited.id)
         }
         var merged = edited
-        merged.imageFilename = stored.imageFilename
-        merged.imageThumbnailData = stored.imageThumbnailData
-        merged.lastModifiedImageDate = stored.lastModifiedImageDate
+        if image == .keepStored {
+            merged.imageFilename = stored.imageFilename
+            merged.imageThumbnailData = stored.imageThumbnailData
+            merged.lastModifiedImageDate = stored.lastModifiedImageDate
+        }
         merged.lastPrepared = stored.lastPrepared
         merged.lastModifiedPreparedDate = stored.lastModifiedPreparedDate
         merged.courseId = try existingCourseId(merged.courseId, in: db)
@@ -136,9 +152,14 @@ public enum RecipeWriter {
     /// never upload. Image fields are dropped; attach the photo with `RecipeImageWriter`. An unknown
     /// `courseId` becomes nil.
     ///
-    /// Throws if the id is already taken; mint a fresh one for each import.
+    /// Throws `RecipeWriterError.idAlreadyInUse` if the id is already taken; mint a fresh one for each
+    /// import. Checked here because the table's primary key is `ON CONFLICT REPLACE`: a bare insert
+    /// would quietly replace the user's recipe rather than refuse.
     @discardableResult
     public static func insertImported(_ recipe: Recipe, in db: Database, now rawNow: Date = Date()) throws -> Recipe {
+        guard try Recipe.where({ $0.id.eq(recipe.id) }).fetchOne(db) == nil else {
+            throw RecipeWriterError.idAlreadyInUse(recipe.id)
+        }
         let now = rawNow.roundedToWireMillis
         var inserting = recipe
         inserting.lastModifiedDate = now

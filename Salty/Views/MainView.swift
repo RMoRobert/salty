@@ -28,13 +28,37 @@ struct MainView: View {
     // password in exactly one voice.
     @State private var manualSync = ManualSyncRunner.shared
     @State private var syncService = SaltySyncService.shared
-    
+
+    #if os(macOS)
+    @Environment(\.controlActiveState) private var controlActiveState
+    #else
+    @Environment(\.scenePhase) private var scenePhase
+    #endif
+
+    /// The sync runner and coordinator are app-wide, but their prompt and banner belong in one
+    /// window at a time: bound in every main window, the password sheet and the failure banner
+    /// used to appear in all of them at once.
+    private var isFrontmostWindow: Bool {
+        #if os(macOS)
+        controlActiveState == .key
+        #else
+        scenePhase == .active
+        #endif
+    }
+
+    /// The enrolment prompt, shown by the frontmost window only. Dismissing clears the request.
+    private var showingEnrolmentPrompt: Binding<Bool> {
+        Binding(
+            get: { manualSync.needsEnrolment && isFrontmostWindow },
+            set: { if !$0 { manualSync.needsEnrolment = false } }
+        )
+    }
 
     var body: some View {
         RecipeNavigationSplitView(viewModel: viewModel)
             .task { autoSync.start() }
             .overlay(alignment: .top) {
-                if  autoSync.showFailureBanner {
+                if autoSync.showFailureBanner && isFrontmostWindow {
                     AutoSyncFailureBanner(
                         onRetry: { Task { await autoSync.retryNow() } },
                         onDismiss: { autoSync.dismissFailureBanner() },
@@ -44,7 +68,7 @@ struct MainView: View {
                 }
             }
             .animation(.snappy, value: autoSync.showFailureBanner)
-            .syncPasswordPrompt(isPresented: $manualSync.needsEnrolment,
+            .syncPasswordPrompt(isPresented: showingEnrolmentPrompt,
                                 username: syncService.serverUsername) { password in
                 // Connect, then finish the sync the user actually asked for.
                 Task { await manualSync.connectAndSync(password: password) }

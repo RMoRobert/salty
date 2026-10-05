@@ -23,24 +23,4 @@ public enum RecipeDuplicateMatchLevel: String, CaseIterable, Identifiable, Senda
     public static let defaultLevel = Self.ingredientsAndDirections
 
     public var id: String { rawValue }
-
-    public var displayName: String {
-        switch self {
-        case .titleAndSource: return "Title and Source"
-        case .ingredientsAndDirections: return "Ingredients and Directions"
-        case .allContent: return "All Content"
-        }
-    }
-
-    /// One line describing what this level compares, shown under the list.
-    public var summaryDescription: String {
-        switch self {
-        case .titleAndSource:
-            return "Matching on title and source"
-        case .ingredientsAndDirections:
-            return "Matching on title, source, ingredients, and directions"
-        case .allContent:
-            return "Matching on all recipe content"
-        }
-    }
 }

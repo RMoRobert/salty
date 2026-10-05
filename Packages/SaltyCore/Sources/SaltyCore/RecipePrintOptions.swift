@@ -13,20 +13,10 @@
 import Foundation
 
 public struct RecipePrintOptions: Codable, Equatable, Sendable {
-
     public enum PaperSize: String, Codable, CaseIterable, Identifiable, Sendable {
         case letter, legal, a4, a5
 
         public var id: String { rawValue }
-
-        public var displayName: String {
-            switch self {
-            case .letter: "US Letter"
-            case .legal: "US Legal"
-            case .a4: "A4"
-            case .a5: "A5"
-            }
-        }
 
         /// Portrait dimensions in PostScript points (1/72 in).
         public var portraitSize: CGSize {
@@ -47,7 +37,6 @@ public struct RecipePrintOptions: Codable, Equatable, Sendable {
     public enum Orientation: String, Codable, CaseIterable, Identifiable, Sendable {
         case portrait, landscape
         public var id: String { rawValue }
-        public var displayName: String { self == .portrait ? "Portrait" : "Landscape" }
     }
 
     public enum ColorMode: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -58,13 +47,6 @@ public struct RecipePrintOptions: Codable, Equatable, Sendable {
         /// All text black and the photo desaturated.
         case grayscale
         public var id: String { rawValue }
-        public var displayName: String {
-            switch self {
-            case .color: "Color"
-            case .blackText: "Black Text"
-            case .grayscale: "Grayscale"
-            }
-        }
     }
 
     /// Which recipe sections to include (shared with HTML export).
@@ -130,7 +112,6 @@ public struct RecipePrintOptions: Codable, Equatable, Sendable {
             margin: \(pt(verticalMargin)) \(pt(Self.sideMargin));
         }
         @media print {
-
         """
         if scale != 1 {
             css += "    html { zoom: \(Self.cssNumber(scale)) !important; }\n"

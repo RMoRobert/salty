@@ -15,7 +15,7 @@ import UUIDV7
 // MARK: - Export-Optimized Structs
 
 /// Optimized Direction struct for export/import - removes internal IDs and makes optional fields truly optional
-public struct SaltyDirectionExport: Codable, Equatable {
+public struct SaltyDirectionExport: Codable, Equatable, Sendable {
     public var text: String
     public var isHeading: Bool?
     
@@ -34,7 +34,7 @@ public struct SaltyDirectionExport: Codable, Equatable {
 }
 
 /// Optimized Ingredient struct for export/import - removes internal IDs and makes optional fields truly optional
-public struct SaltyIngredientExport: Codable, Equatable {
+public struct SaltyIngredientExport: Codable, Equatable, Sendable {
     public var text: String
     public var isHeading: Bool?
     public var isMain: Bool?
@@ -56,7 +56,7 @@ public struct SaltyIngredientExport: Codable, Equatable {
 }
 
 /// Optimized PreparationTime struct for export/import - removes internal IDs
-public struct SaltyPreparationTimeExport: Codable, Equatable {
+public struct SaltyPreparationTimeExport: Codable, Equatable, Sendable {
     public var type: String
     public var timeString: String
     
@@ -75,7 +75,7 @@ public struct SaltyPreparationTimeExport: Codable, Equatable {
 }
 
 /// Optimized Variation struct for export/import - removes internal IDs
-public struct SaltyVariationExport: Codable, Equatable {
+public struct SaltyVariationExport: Codable, Equatable, Sendable {
     public var variationName: String
     public var text: String
     
@@ -97,7 +97,7 @@ public struct SaltyVariationExport: Codable, Equatable {
 /// A Recipe-like object generally suitable for export, sharing, and ease of later import via similar importer object. Small
 /// differences from `Recipe` exist, e.g., most properties optional (and may be excluded from export if not provided);
 /// image data stored directly instead of via filename; and category, course, and tags provided by name and not ID references
-public struct SaltyRecipeExport: Codable, Equatable {
+public struct SaltyRecipeExport: Codable, Equatable, Sendable {
     public var version: String = "1.0"  // not sure if we'll need this, but should help with future-proofing if major changes are needed
     public var id: String
     public var name: String
@@ -212,7 +212,7 @@ public extension SaltyRecipeExport {
                 .map { $0.categoryId }
             
             return try Category
-                .where { recipeCategoryIds.contains($0.id) }
+                .where { $0.id.in(recipeCategoryIds) }
                 .fetchAll(db)
                 .map { $0.name }
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -226,7 +226,7 @@ public extension SaltyRecipeExport {
                 .map { $0.tagId }
             
             return try Tag
-                .where { recipeTagIds.contains($0.id) }
+                .where { $0.id.in(recipeTagIds) }
                 .fetchAll(db)
                 .map { $0.name }
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -342,17 +342,14 @@ public extension SaltyRecipeExport {
         // Directions
         if !directions.isEmpty {
             text += "\nDirections:\n"
-            // Numbered by counting only real steps, so a section heading doesn't consume a number --
-            // the same prefix-count-of-non-headings convention RecipeDetailView and ChefStep use, and
-            // what the KMP app's plain-text export produces. Numbering by array index (as this did)
-            // made every heading skip a number: "1, 2, [Sauce], 4".
-            var stepNumber = 0
-            for direction in directions {
-                if direction.isHeading == true {
-                    text += "\n\(direction.text)\n"
+            // Numbered by ChefStep, as every other reading of a recipe is: headings and blank rows
+            // don't take a number. (Numbering by array index, as this once did, made every heading
+            // skip one: "1, 2, [Sauce], 4".)
+            for step in ChefStep.steps(from: directions.map { Direction(id: "", isHeading: $0.isHeading, text: $0.text) }) {
+                if let number = step.number {
+                    text += "\(number). \(step.text)\n"
                 } else {
-                    stepNumber += 1
-                    text += "\(stepNumber). \(direction.text)\n"
+                    text += "\n\(step.text)\n"
                 }
             }
         }

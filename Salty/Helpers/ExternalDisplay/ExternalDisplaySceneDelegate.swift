@@ -47,15 +47,22 @@ final class ExternalDisplaySceneDelegate: NSObject, UIWindowSceneDelegate {
         self.window = window
         window.isHidden = false
 
-        ScreenSleepBlocker.shared.begin()
+        sleepHold = ScreenSleepBlocker.shared.hold()
         ChefExternalDisplayCoordinator.shared.externalSceneDidConnect()
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
-        ScreenSleepBlocker.shared.end()
+        if let sleepHold {
+            ScreenSleepBlocker.shared.release(sleepHold)
+            self.sleepHold = nil
+        }
         ChefExternalDisplayCoordinator.shared.externalSceneDidDisconnect()
         window = nil
     }
+
+    /// This scene's claim on the display; nil until the scene connects, so a connection that bails out
+    /// early releases nothing.
+    private var sleepHold: ScreenSleepBlocker.Hold?
 }
 
 #endif

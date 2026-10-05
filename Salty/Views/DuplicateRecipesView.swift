@@ -88,7 +88,7 @@ struct DuplicateRecipesView: View {
                 Task { await viewModel.deleteConfirmedRecipes() }
             }
         } message: {
-            Text("Are you sure you want to delete \(viewModel.deleteCandidateIDs.count) recipe\(viewModel.deleteCandidateIDs.count == 1 ? "" : "s")? This action cannot be undone.")
+            Text("Are you sure you want to delete ^[\(viewModel.deleteCandidateIDs.count) recipe](inflect: true)? This action cannot be undone.")
         }
         .errorAlert($viewModel.operationError)
         .task(id: matchLevel) {

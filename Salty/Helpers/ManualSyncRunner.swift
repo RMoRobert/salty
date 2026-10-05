@@ -52,7 +52,7 @@ final class ManualSyncRunner {
         } catch let error where SyncError.isCancellation(error) {
             // The user stopped it from Settings; their choice, not a failure.
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlySyncMessage(error)
         }
     }
 

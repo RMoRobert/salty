@@ -77,13 +77,13 @@ struct ConsolidateDuplicatesView: View {
                 Task { await viewModel.mergeSelected() }
             }
         } message: {
-            Text("\(viewModel.selectedRemovalCount) item\(viewModel.selectedRemovalCount == 1 ? "" : "s") will be removed, and the recipes using them moved to the item that remains. This can’t be undone.")
+            Text("^[\(viewModel.selectedRemovalCount) item](inflect: true) will be removed, and the recipes using them moved to the item that remains. This can’t be undone.")
         }
         .alert("Merge Complete", isPresented: mergeSummaryPresented) {
             Button("OK") { viewModel.lastMergeSummary = nil }
         } message: {
             if let summary = viewModel.lastMergeSummary {
-                Text("Removed \(summary.removedItems) duplicate item\(summary.removedItems == 1 ? "" : "s") across \(summary.mergedGroups) name\(summary.mergedGroups == 1 ? "" : "s"), updating \(summary.touchedRecipes) recipe\(summary.touchedRecipes == 1 ? "" : "s").")
+                Text("Removed ^[\(summary.removedItems) duplicate item](inflect: true) across ^[\(summary.mergedGroups) name](inflect: true), updating ^[\(summary.touchedRecipes) recipe](inflect: true).")
             }
         }
         .errorAlert($viewModel.operationError)
@@ -115,7 +115,7 @@ struct ConsolidateDuplicatesView: View {
                         }
                     }
                 } header: {
-                    Text(section.kind.pluralLabel)
+                    Text(section.kind.pluralName)
                 }
             }
         }
@@ -140,12 +140,21 @@ struct ConsolidateDuplicatesView: View {
 private struct DuplicateGroupSummaryView: View {
     let group: LibraryDuplicateGroup
 
+    /// The sidebar's icon for this kind of row.
+    private var kindSymbol: String {
+        switch group.kind {
+        case .category: "rectangle.stack"
+        case .course: "fork.knife"
+        case .tag: "tag"
+        }
+    }
+
     /// "“breads” (2 recipes), “Breads ” (no recipes)" — the rows this merge removes.
     private var duplicatesDescription: String {
         group.duplicates
             .map { item in
                 let count = item.recipeCount
-                let recipes = count == 0 ? "no recipes" : "\(count) recipe\(count == 1 ? "" : "s")"
+                let recipes = count == 0 ? "no recipes" : String(inflected: "^[\(count) recipe](inflect: true)")
                 return "“\(item.name)” (\(recipes))"
             }
             .formatted(.list(type: .and))
@@ -154,9 +163,9 @@ private struct DuplicateGroupSummaryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Label(group.name, systemImage: group.kind.systemImage)
+                Label(group.name, systemImage: kindSymbol)
                 Spacer()
-                Text(group.survivor.recipeCount == 1 ? "1 recipe" : "\(group.survivor.recipeCount) recipes")
+                Text("^[\(group.survivor.recipeCount) recipe](inflect: true)")
                     .foregroundStyle(.secondary)
             }
             Text("Absorbs \(duplicatesDescription)")

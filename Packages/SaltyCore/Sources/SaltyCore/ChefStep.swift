@@ -2,9 +2,11 @@
 //  ChefStep.swift
 //  SaltyCore
 //
-//  One row of a recipe's directions as Chef View shows it: the text, whether it's a section
-//  heading, and — for real steps — its "Step 3 of 9" number. Pure value type so the numbering
-//  rules (which is what silently regresses) can be tested without a view.
+//  One row of a recipe's directions as it is read: the text, whether it's a section heading, and —
+//  for real steps — its "Step 3 of 9" number. Chef View, the detail view, the printout and the
+//  plain-text export all number steps through `steps(from:)`, so a recipe reads the same
+//  everywhere. (The editor numbers its own rows, blank ones included, since it shows them.) Pure
+//  value type so the numbering rules, which are what silently regress, can be tested without a view.
 //
 
 import Foundation
@@ -25,12 +27,12 @@ public struct ChefStep: Identifiable, Hashable, Sendable {
         self.number = number
     }
 
-    /// Builds the Chef View rows for a recipe's directions.
+    /// Builds the rows for reading a recipe's directions.
     ///
-    /// Headings are kept (they orient the cook) but aren't numbered, matching the
-    /// prefix-count-of-non-headings convention `RecipeDetailView` uses. Blank rows — usually an
-    /// artifact of adding a direction row in the editor and never typing in it — are dropped
-    /// rather than rendered as an empty giant step in focus mode.
+    /// Headings are kept (they orient the cook) but aren't numbered. Blank rows — usually an
+    /// artifact of adding a direction row in the editor and never typing in it — are dropped and
+    /// don't take a number, rather than showing as an empty step (a giant one in Chef View's focus
+    /// mode).
     public static func steps(from directions: [Direction]) -> [ChefStep] {
         var steps: [ChefStep] = []
         var stepNumber = 0

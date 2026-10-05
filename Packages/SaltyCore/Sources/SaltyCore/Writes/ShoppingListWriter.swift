@@ -30,6 +30,11 @@ public enum ShoppingListWriter {
     ///   - id: the list to edit.
     ///   - db: the transaction to write in.
     ///   - now: the stamp to apply. Injectable for tests; leave it alone in app code.
+    ///   - expected: the stamp the caller's copy of the list carried when it was loaded. When given,
+    ///     the write refuses with `ShoppingListWriterError.modifiedElsewhere` if the stored row is
+    ///     stamped differently: an editor that saves its whole copy back (the checklist and freeform
+    ///     editors do) would otherwise land it over a sync download or another window's edit that
+    ///     arrived in between. Leave nil for a write that only adds to whatever is stored.
     ///   - changes: mutates the stored list in place.
     /// - Returns: the list as written, or nil if no list with `id` exists (a list deleted in another
     ///   window while an editor was still open — the write is simply dropped).
@@ -38,11 +43,15 @@ public enum ShoppingListWriter {
         id: String,
         in db: Database,
         now rawNow: Date = Date(),
+        expecting expected: ShoppingListStamp? = nil,
         _ changes: (inout ShoppingList) throws -> Void
     ) throws -> ShoppingList? {
         // DATE-009, as in `RecipeWriter.save` — see the note there.
         let now = rawNow.roundedToWireMillis
         guard let stored = try ShoppingList.where({ $0.id.eq(id) }).fetchOne(db) else { return nil }
+        if let expected, expected != ShoppingListStamp(of: stored) {
+            throw ShoppingListWriterError.modifiedElsewhere(id)
+        }
 
         var edited = stored
         try changes(&edited)
@@ -59,8 +68,14 @@ public enum ShoppingListWriter {
     }
 
     /// Inserts a new list, stamping it as modified now so sync has something to compare.
+    ///
+    /// Throws `ShoppingListWriterError.idAlreadyInUse` rather than letting the table's `ON CONFLICT
+    /// REPLACE` key swallow an existing list; mint a fresh id for each new list.
     @discardableResult
     public static func insert(_ list: ShoppingList, in db: Database, now rawNow: Date = Date()) throws -> ShoppingList {
+        guard try ShoppingList.where({ $0.id.eq(list.id) }).fetchOne(db) == nil else {
+            throw ShoppingListWriterError.idAlreadyInUse(list.id)
+        }
         let now = rawNow.roundedToWireMillis   // DATE-009
         var inserting = list
         inserting.lastModifiedDate = max(list.lastModifiedDate ?? .distantPast, now)

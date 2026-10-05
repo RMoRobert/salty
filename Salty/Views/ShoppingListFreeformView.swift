@@ -17,6 +17,7 @@ struct ShoppingListFreeformView: View {
     /// Sticky across lists and launches — a user who prefers reading their list formatted shouldn't
     /// have to flip this every time.
     @AppStorage("shoppingListFreeformShowsPreview") private var showsPreview = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init(listId: String) {
         _viewModel = State(initialValue: ShoppingListFreeformViewModel(listId: listId))
@@ -64,15 +65,18 @@ struct ShoppingListFreeformView: View {
         .onDisappear {
             viewModel.flush()
         }
+        // iOS can kill a backgrounded app without warning, so a save still sitting in the debounce
+        // is written the moment the scene stops being active rather than waiting for `onDisappear`.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                viewModel.flush()
+            }
+        }
         // Writes this view model didn't make (a recipe's "Add to Shopping List" sheet, a sync
         // download, or this same list being edited in another window) go to the database, not to the
-        // in-memory text. Pick them up rather than saving over them.
-        .onChange(of: ShoppingListChangeNotifier.shared.changeCount(for: viewModel.listId)) {
-            // Our own saves announce themselves too, for the sake of the other windows; reloading
-            // one here would only interrupt whoever is typing.
-            guard !ShoppingListChangeNotifier.shared.isOwnChange(listId: viewModel.listId,
-                                                                 source: viewModel.editorToken) else { return }
-            Task { await viewModel.reloadAfterExternalChange() }
+        // in-memory text. The view model observes the row and sorts its own writes from theirs.
+        .onChange(of: viewModel.storedRow) { _, row in
+            viewModel.storedRowDidChange(to: row)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

@@ -42,7 +42,15 @@ class SaltySyncService {
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
 
-    var isSyncing = false
+    var isSyncing = false {
+        didSet { activity.isSyncing = isSyncing }
+    }
+
+    /// `isSyncing`, readable from any thread. Auto-sync's database observer runs on GRDB's writer queue
+    /// and has to decide there, at commit time, whether a write was sync's own; reading `isSyncing`
+    /// after a hop to the main actor could land after the sync finished and count its writes as edits.
+    @ObservationIgnored
+    nonisolated let activity = SyncActivity()
 
     /// When the last sync finished successfully. Persisted (see `lastSyncDateKey`) so the Settings screen
     /// can still show it after a relaunch; `nil` only until the first successful sync on this device.
@@ -63,6 +71,16 @@ class SaltySyncService {
     /// The engine running the current operation, so a cancel can tell it to say so.
     @ObservationIgnored
     private var currentEngine: ServerSyncEngine?
+
+    /// Whatever sync is running, cancellable or not, so enrolment and sign-out can wait for it to finish
+    /// rather than swap the credentials out from under it.
+    @ObservationIgnored
+    private var runningSync: Task<Void, Error>?
+
+    /// True while `enroll` or `signOut` is changing this device's credentials. No sync starts meanwhile,
+    /// so one triggered in the gap (auto-sync, pull to refresh) can't run on half-swapped credentials.
+    @ObservationIgnored
+    private var isChangingCredentials = false
 
     /// True between the user asking to cancel and the sync unwinding. Drives the "Cancelling…" button state.
     private(set) var isCancelling = false
@@ -163,9 +181,6 @@ class SaltySyncService {
             images: RecipeImageManager.shared,
             deviceName: deviceName,
             prepareImage: { await SyncImagePreparer.prepare($0) },
-            // A list open in a checklist/freeform editor is held in memory; without this, its next
-            // keystroke would save the pre-sync content straight back over what was downloaded.
-            shoppingListChanged: { id in await ShoppingListChangeNotifier.shared.noteExternalChange(listId: id) },
             onProgress: { continuation.yield($0) }
         )
         let observer = Task {
@@ -194,6 +209,9 @@ class SaltySyncService {
 
     /// Enrols this device: the one and only time the password is needed. See `ServerSyncEngine.enroll`.
     func enroll(username: String, password: String) async throws {
+        isChangingCredentials = true
+        defer { isChangingCredentials = false }
+        await stopRunningSync()
         try await withEngine { try await $0.enroll(username: username, password: password) }
     }
 
@@ -209,7 +227,20 @@ class SaltySyncService {
     /// asks for the password again. See `ServerSyncEngine.signOut`.
     @discardableResult
     func signOut() async -> ForgetOutcome {
-        await withEngine { await $0.signOut() }
+        isChangingCredentials = true
+        defer { isChangingCredentials = false }
+        await stopRunningSync()
+        return await withEngine { await $0.signOut() }
+    }
+
+    /// Cancels the running sync if it can be cancelled, then waits for it (or for a force re-sync, which
+    /// can't) to finish. A sync left running across a sign-out would carry on under the old token and
+    /// device id, and its failure would then be reported against the new ones.
+    private func stopRunningSync() async {
+        guard let runningSync else { return }
+        logger.info("Waiting for the running sync before changing this device's credentials")
+        cancelSync()
+        _ = try? await runningSync.value
     }
 
     // MARK: - Public Sync Methods
@@ -244,8 +275,8 @@ class SaltySyncService {
             throw SyncError.credentialsNotConfigured
         }
 
-        guard !isSyncing else {
-            logger.warning("Sync already in progress, skipping")
+        guard !isSyncing, !isChangingCredentials else {
+            logger.warning("Sync already in progress or credentials changing, skipping")
             return
         }
 
@@ -265,9 +296,11 @@ class SaltySyncService {
             try await self.performFullSync()
         }
         currentSyncTask = task
+        runningSync = task
 
         defer {
             currentSyncTask = nil
+            runningSync = nil
             isCancelling = false
             isSyncing = false
         }
@@ -285,9 +318,9 @@ class SaltySyncService {
     func cancelSync() {
         guard let currentSyncTask else { return }
         guard !isCancelling else { return }
-        logger.info("Sync cancellation requested during '\(self.syncProgress.currentStep)'")
+        logger.info("Sync cancellation requested during '\(self.syncProgress.step.rawValue)'")
         isCancelling = true
-        syncProgress.currentStep = "Cancelling..."
+        syncProgress.step = .cancelling
         if let currentEngine {
             // The engine owns the progress display, so it has to be the one to say "Cancelling...".
             // Told before the cancel, so the "Sync cancelled" it sets while unwinding can't be overtaken.
@@ -317,18 +350,23 @@ class SaltySyncService {
     func forceFullResyncFromServer() async throws {
         guard serverEnabled, !serverUrl.isEmpty else { throw SyncError.serverNotConfigured }
         guard hasCredentials else { throw SyncError.credentialsNotConfigured }
-        guard !isSyncing else {
-            logger.warning("Sync already in progress, skipping force re-sync")
+        guard !isSyncing, !isChangingCredentials else {
+            logger.warning("Sync already in progress or credentials changing, skipping force re-sync")
             return
         }
 
         isSyncing = true
         lastSyncError = nil
         syncProgress = SyncProgress()
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            runningSync = nil
+        }
 
         do {
-            try await withEngine { try await $0.forceFullResyncFromServer() }
+            let task = Task { @MainActor in try await self.withEngine { try await $0.forceFullResyncFromServer() } }
+            runningSync = task
+            try await task.value
             lastSyncDate = Date()
         } catch {
             lastSyncError = friendlySyncMessage(error)
@@ -341,18 +379,23 @@ class SaltySyncService {
     func forceFullResyncToServer() async throws {
         guard serverEnabled, !serverUrl.isEmpty else { throw SyncError.serverNotConfigured }
         guard hasCredentials else { throw SyncError.credentialsNotConfigured }
-        guard !isSyncing else {
-            logger.warning("Sync already in progress, skipping force re-sync")
+        guard !isSyncing, !isChangingCredentials else {
+            logger.warning("Sync already in progress or credentials changing, skipping force re-sync")
             return
         }
 
         isSyncing = true
         lastSyncError = nil
         syncProgress = SyncProgress()
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            runningSync = nil
+        }
 
         do {
-            try await withEngine { try await $0.forceFullResyncToServer() }
+            let task = Task { @MainActor in try await self.withEngine { try await $0.forceFullResyncToServer() } }
+            runningSync = task
+            try await task.value
             lastSyncDate = Date()
         } catch {
             lastSyncError = friendlySyncMessage(error)

@@ -82,7 +82,7 @@ struct LibraryClassifierMergeView: View {
                     }
                 }
             } header: {
-                Text("\(classifier.singularLabel.capitalized) to keep")
+                Text("\(classifier.singularName.capitalized) to keep")
             } footer: {
                 Text(message)
             }
@@ -113,7 +113,7 @@ private struct LibraryClassifierMergeCandidateRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(item.recipeCount == 1 ? "\(item.name), 1 recipe" : "\(item.name), \(item.recipeCount) recipes")
+        .accessibilityLabel(Text("\(item.name), ^[\(item.recipeCount) recipe](inflect: true)"))
         .accessibilityAddTraits(isSurvivor ? [.isSelected] : [])
     }
 }

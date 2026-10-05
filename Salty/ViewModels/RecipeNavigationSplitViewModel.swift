@@ -20,24 +20,8 @@ import UIKit
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let createNewRecipe = Notification.Name("createNewRecipe")
-    static let exportSelectedRecipes = Notification.Name("exportSelectedRecipes")
-    static let showImportFromFileSheet = Notification.Name("showImportFromFileSheet")
-    static let showCreateFromWebSheet = Notification.Name("showCreateFromWebSheet")
-    static let sheetStateChanged = Notification.Name("sheetStateChanged")
-    static let showRecipeInfoInspector = Notification.Name("showRecipeInfoInspector")
-    static let recipeSelectionChanged = Notification.Name("recipeSelectionChanged")
-    static let exportSelectedRecipesAsHTML = Notification.Name("exportSelectedRecipesAsHTML")
-    static let exportSelectedRecipesAsJSONLD = Notification.Name("exportSelectedRecipesAsJSONLD")
-    static let printSelectedRecipes = Notification.Name("printSelectedRecipes")
-    static let openSelectedRecipesInNewWindows = Notification.Name("openSelectedRecipesInNewWindows")
-    static let showDuplicateRecipes = Notification.Name("showDuplicateRecipes")
-    static let showConsolidateDuplicates = Notification.Name("showConsolidateDuplicates")
-    // "Last Made" actions on the current selection. These mirror the recipe context menu — the menu bar
-    // carries them too because a contextual menu shouldn't be the only way to reach a command.
-    static let markSelectedRecipesMadeToday = Notification.Name("markSelectedRecipesMadeToday")
-    static let setSelectedRecipesLastMadeDate = Notification.Name("setSelectedRecipesLastMadeDate")
-    static let clearSelectedRecipesLastMade = Notification.Name("clearSelectedRecipesLastMade")
+    // Menu-bar commands used to be posted here too; they are now scene-scoped focused values
+    // (`MainWindowCommands`), so a command reaches the frontmost main window and no other.
     /// Posted after a web import saves a recipe (userInfo["recipeId"]: String), so the main window/view can scroll to it
     static let recipeImportedFromWeb = Notification.Name("recipeImportedFromWeb")
 }
@@ -47,50 +31,14 @@ extension Notification.Name {
 class RecipeNavigationSplitViewModel {
     var isNewLaunch = false // true if first launch of app, view should use to show reasonable default instead of blank-looking page on mobile
     
-    init(isNewLaunch: Bool = false) {
+    /// Sort order and search fields, shared with the menu bar and every other main window.
+    let settings: RecipeListSettings
+
+    init(isNewLaunch: Bool = false, settings: RecipeListSettings = .shared) {
         self.isNewLaunch = isNewLaunch
-
-        // Initialize sort settings from UserDefaults (only if they exist, otherwise use defaults)
-        if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortOrder"),
-           let setting = RecipeListSortOrderSetting(rawValue: rawValue) {
-            recipeListSortOrder = setting
-        }
-        
-        if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortDirection"),
-           let direction = RecipeListSortDirection(rawValue: rawValue) {
-            recipeListSortDirection = direction
-        }
-        
-        // Observe UserDefaults changes for sort settings (from menu updates)
-        NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // Delivered on `.main` (the queue above), so we're already on the main actor;
-            // assumeIsolated lets us touch this @MainActor model without a warning or a hop.
-            MainActor.assumeIsolated {
-                guard let self = self else { return }
-                // Update stored properties if UserDefaults changed externally
-                if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortOrder"),
-                   let setting = RecipeListSortOrderSetting(rawValue: rawValue),
-                   setting != self.recipeListSortOrder {
-                    self.recipeListSortOrder = setting
-                }
-
-                if let rawValue = UserDefaults.standard.string(forKey: "recipeListSortDirection"),
-                   let direction = RecipeListSortDirection(rawValue: rawValue),
-                   direction != self.recipeListSortDirection {
-                    self.recipeListSortDirection = direction
-                }
-            }
-        }
+        self.settings = settings
     }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    
+
     /// Call this method after the database is loaded to set up the initial state
     func setupInitialState() {
         // Set default selection to "All Recipes" if currently nothing selected
@@ -146,29 +94,28 @@ class RecipeNavigationSplitViewModel {
     var selectedShoppingListIDs = Set<String>()
     var isFavoritesFilterActive = false
     
-    var recipeListSortOrder: RecipeListSortOrderSetting = .byName {
-        didSet {
-            // Only write to UserDefaults if the value in UserDefaults is different
-            // This prevents redundant writes when syncing from external changes
-            if UserDefaults.standard.string(forKey: "recipeListSortOrder") != recipeListSortOrder.rawValue {
-                UserDefaults.standard.set(recipeListSortOrder.rawValue, forKey: "recipeListSortOrder")
-            }
-        }
+    var recipeListSortOrder: RecipeListSortOrderSetting {
+        get { settings.sortOrder }
+        set { settings.sortOrder = newValue }
     }
-    
-    var recipeListSortDirection: RecipeListSortDirection = .ascending {
-        didSet {
-            // Only write to UserDefaults if the value in UserDefaults is different
-            // This prevents redundant writes when syncing from external changes
-            if UserDefaults.standard.string(forKey: "recipeListSortDirection") != recipeListSortDirection.rawValue {
-                UserDefaults.standard.set(recipeListSortDirection.rawValue, forKey: "recipeListSortDirection")
-            }
-        }
+
+    var recipeListSortDirection: RecipeListSortDirection {
+        get { settings.sortDirection }
+        set { settings.sortDirection = newValue }
     }
-    
+
+    /// Everything that decides which rows the list shows, for the view's `task(id:)` that reloads it.
+    var recipeQueryKey: String {
+        "\(searchString)||\(selectedSidebarItem?.queryKey ?? "")||\(isFavoritesFilterActive)||\(settings.queryKey)"
+    }
+
     var showingEditSheet = false
     var recipeToEditID: String?
-    var shouldScrollToNewRecipe = false
+    /// A recipe just saved or imported that the list should select and scroll to once its row
+    /// arrives. The row isn't there yet when this is set: the write has to propagate through
+    /// `@FetchAll`, and the list query is usually re-issued at the same time (the scope and search
+    /// are reset so the recipe can be seen). `reconcileSelection()` clears it when the row shows up.
+    private(set) var pendingRecipeID: String?
     var draftRecipe: Recipe?
     
     // Export-related state
@@ -218,25 +165,13 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
-    // Helper to get selected search options from UserDefaults
-    private func getSelectedSearchOptions() -> Set<RecipeListSearchOptions> {
-        var options: Set<RecipeListSearchOptions> = []
-        for option in RecipeListSearchOptions.allCases {
-            if UserDefaults.standard.bool(forKey: option.userDefaultsKey) {
-                options.insert(option)
-            }
-        }
-        // Default to name if none selected
-        return options.isEmpty ? [.name] : options
-    }
-
     // MARK: - Recipe list query (single dynamic builder)
 
     /// Reloads `recipes` for the current sidebar scope, search text/fields, favorites filter,
     /// and sort settings. One dynamic SQL builder replaces the previous hand-enumerated
     /// per-combination queries (which silently fell back to name-only for unhandled combos).
     func updateRecipesQuery() async {
-        let options = getSelectedSearchOptions()
+        let options = settings.searchOptions
         let trimmed = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
         let pattern: String? = trimmed.isEmpty ? nil : "%\(trimmed)%"
         // The "Favorites" smart list forces the favorites filter; the toolbar toggle composes with any
@@ -264,6 +199,28 @@ class RecipeNavigationSplitViewModel {
     private var currentScope: RecipeListScope {
         selectedSidebarItem?.scope ?? .all
     }
+
+    /// Keeps the selection within the rows on screen. Called whenever `recipes` changes: a scope
+    /// switch, un-favouriting, a sync delete or a search can all drop a selected row from the list,
+    /// and the detail column and the menu commands used to keep acting on it.
+    ///
+    /// Returns the id of a pending recipe whose row has just arrived, so the view can scroll to it.
+    /// Nothing is pruned while that row is still on its way: the selection would be lost before it
+    /// could be shown.
+    @discardableResult
+    func reconcileSelection() -> String? {
+        let visibleIDs = Set(recipes.map(\.id))
+        if let pending = pendingRecipeID {
+            guard visibleIDs.contains(pending) else { return nil }
+            pendingRecipeID = nil
+            selectedRecipeIDs.formIntersection(visibleIDs)
+            return pending
+        }
+        if !selectedRecipeIDs.isSubset(of: visibleIDs) {
+            selectedRecipeIDs.formIntersection(visibleIDs)
+        }
+        return nil
+    }
     
     // MARK: - Public Methods
     func addNewRecipe() {
@@ -282,9 +239,14 @@ class RecipeNavigationSplitViewModel {
         showingEditSheet = true
     }
     
-    func deleteSelectedRecipes() async {
-        // Snapshot main-actor state for the off-actor @Sendable closures.
-        let idsToDelete = selectedRecipeIDs
+    func deleteRecipe(id: String) async {
+        await deleteRecipes(ids: [id])
+    }
+
+    /// Deletes recipes in one transaction -- a swipe across several rows used to run one per row --
+    /// and drops them from the selection, so a deleted recipe can't stay selected.
+    func deleteRecipes(ids idsToDelete: Set<String>) async {
+        guard !idsToDelete.isEmpty else { return }
         do {
             // Note the image filenames first; the files go only after the rows are gone.
             let imageFilenames = try await database.read { db in
@@ -311,40 +273,12 @@ class RecipeNavigationSplitViewModel {
                 RecipeImageManager.shared.deleteImage(filename: filename)
             }
 
-            selectedRecipeIDs.removeAll()
+            selectedRecipeIDs.subtract(idsToDelete)
         } catch {
-            logger.error("Error deleting recipes: \(error)")
+            logger.error("Error deleting \(idsToDelete.count) recipe(s): \(error)")
         }
     }
 
-    func deleteRecipe(id: String) async {
-        do {
-            // Note the image filename first; the file goes only after the row is gone.
-            let imageFilenames = try await database.read { db in
-                try Recipe
-                    .select { $0.imageFilename }
-                    .where { $0.id.eq(id) }
-                    .fetchAll(db)
-            }
-
-            // Delete the recipe from the database, with its tombstone. See the bulk path above.
-            try await database.write { db in
-                try Recipe
-                    .where { $0.id.eq(id) }
-                    .delete()
-                    .execute(db)
-                try RecipeTombstoneWriter.recordDeletion(id, in: db)
-            }
-
-            // Row is gone; now the file. Same ordering rule as the bulk path.
-            for case let filename? in imageFilenames {
-                RecipeImageManager.shared.deleteImage(filename: filename)
-            }
-        } catch {
-            logger.error("Error deleting recipe \(id): \(error)")
-        }
-    }
-    
     /// Sets (or clears, with `date: nil`) the "last made on" date for one or more recipes.
     ///
     /// A picked calendar day is stored at local noon; "Today" sets current time. Usually only displayed as date, but noon should
@@ -423,9 +357,9 @@ class RecipeNavigationSplitViewModel {
         searchString = ""
         isFavoritesFilterActive = false
 
-        // Select the newly saved recipe and scroll to it
+        // Select the newly saved recipe; the list scrolls to it once its row arrives.
         selectedRecipeIDs = [recipeId]
-        shouldScrollToNewRecipe = true
+        pendingRecipeID = recipeId
 
         // Clear the draft since it's now persisted
         draftRecipe = nil
@@ -447,39 +381,39 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
-    // MARK: - Export Methods
-    
-    /// Exports a single recipe to JSON format
-    /// - Parameter recipeId: The ID of the recipe to export
-    func exportRecipe(_ recipeId: String) {
-        Task {
-            do {
-                guard let recipe = fullRecipe(id: recipeId) else {
-                    await MainActor.run {
-                        exportErrorMessage = "Recipe not found"
-                        showingExportErrorAlert = true
-                    }
-                    return
-                }
+    // MARK: - Export
 
-                let exportRecipe = try SaltyRecipeExport.fromRecipe(recipe, database: database)
-                let jsonData = try exportRecipe.toJSONData()
-                
-                await MainActor.run {
-                    exportData = jsonData
-                    exportContentType = .saltyRecipe
-                    exportFileName = "\(recipe.name).saltyRecipe"
-                    showingExportSheet = true
-                }
-            } catch {
-                await MainActor.run {
-                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
-                    showingExportErrorAlert = true
-                }
-            }
-        }
+    /// Builds export files; the app supplies the photos, which live in its own folder.
+    nonisolated private static let exporter = RecipeExporter(
+        imageData: { $0.fullImageData },
+        htmlImageBase64: { $0.imageAsBase64 }
+    )
+
+    /// The selected recipes in the order the list shows them.
+    private var selectedRecipesInListOrder: [Recipe] {
+        fullRecipes(ids: recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id))
     }
-    
+
+    /// Exports one recipe as a `.saltyRecipe` file.
+    func exportRecipe(_ recipeId: String) {
+        presentExport(of: fullRecipe(id: recipeId).map { [$0] } ?? [], as: .saltyFile, whenEmpty: "Recipe not found")
+    }
+
+    /// Exports the selected recipes as one `.saltyRecipe` file.
+    func exportSelectedRecipes() {
+        presentExport(of: selectedRecipesInListOrder, as: .saltyFile, whenEmpty: "No recipes selected for export")
+    }
+
+    /// Exports one recipe as schema.org/Recipe JSON-LD.
+    func exportRecipeAsJSONLD(_ recipeId: String) {
+        presentExport(of: fullRecipe(id: recipeId).map { [$0] } ?? [], as: .jsonLD, whenEmpty: "Recipe not found")
+    }
+
+    /// Exports the selected recipes as schema.org/Recipe JSON-LD (one object, or an array if several).
+    func exportSelectedRecipesAsJSONLD() {
+        presentExport(of: selectedRecipesInListOrder, as: .jsonLD, whenEmpty: "No recipes selected for export")
+    }
+
     /// Creates a shareable recipe export for the given recipe
     /// - Parameter recipe: The recipe to convert to a shareable format
     /// - Returns: A SaltyRecipeExport if successful, nil otherwise
@@ -493,117 +427,6 @@ class RecipeNavigationSplitViewModel {
         }
     }
     
-    /// Exports multiple selected recipes to JSON format
-    func exportSelectedRecipes() {
-        Task {
-            do {
-                // Preserve the displayed order via the projection's ids, then fetch full rows.
-                let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
-                let recipesToExport = fullRecipes(ids: orderedIds)
-
-                if recipesToExport.isEmpty {
-                    await MainActor.run {
-                        exportErrorMessage = "No recipes selected for export"
-                        showingExportErrorAlert = true
-                    }
-                    return
-                }
-
-                let exportRecipes = try recipesToExport.map { recipe in
-                    try SaltyRecipeExport.fromRecipe(recipe, database: database)
-                }
-                
-                let encoder = JSONEncoder()
-                encoder.dateEncodingStrategy = .iso8601
-                // This can be useful for testing:
-                //encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                let jsonData = try encoder.encode(exportRecipes)
-                
-                await MainActor.run {
-                    exportData = jsonData
-                    exportContentType = .saltyRecipe
-                    let count = recipesToExport.count
-                    exportFileName = count == 1 ? "\(recipesToExport.first!.name).saltyRecipe" : "\(count)_recipes.saltyRecipe"
-                    showingExportSheet = true
-                }
-            } catch {
-                await MainActor.run {
-                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
-                    showingExportErrorAlert = true
-                }
-            }
-        }
-    }
-    
-    // MARK: - Schema.org JSON-LD export
-
-    /// Exports a single recipe as schema.org/Recipe JSON-LD.
-    func exportRecipeAsJSONLD(_ recipeId: String) {
-        Task {
-            do {
-                guard let recipe = fullRecipe(id: recipeId) else {
-                    await MainActor.run {
-                        exportErrorMessage = "Recipe not found"
-                        showingExportErrorAlert = true
-                    }
-                    return
-                }
-                let data = try SchemaOrgRecipeJSONLDExporter().data(for: recipe, metadata: jsonLDMetadata(for: recipe))
-                await MainActor.run {
-                    exportData = data
-                    exportContentType = .json
-                    exportFileName = "\(recipe.name).json"
-                    showingExportSheet = true
-                }
-            } catch {
-                await MainActor.run {
-                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
-                    showingExportErrorAlert = true
-                }
-            }
-        }
-    }
-
-    /// Exports the selected recipes as schema.org/Recipe JSON-LD (one object, or an array if several).
-    func exportSelectedRecipesAsJSONLD() {
-        Task {
-            do {
-                let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
-                let recipesToExport = fullRecipes(ids: orderedIds)
-
-                guard !recipesToExport.isEmpty else {
-                    await MainActor.run {
-                        exportErrorMessage = "No recipes selected for export"
-                        showingExportErrorAlert = true
-                    }
-                    return
-                }
-
-                let items = recipesToExport.map { (recipe: $0, metadata: jsonLDMetadata(for: $0)) }
-                let data = try SchemaOrgRecipeJSONLDExporter().data(for: items)
-                await MainActor.run {
-                    exportData = data
-                    exportContentType = .json
-                    let count = recipesToExport.count
-                    exportFileName = count == 1 ? "\(recipesToExport.first!.name).json" : "\(count)_recipes.json"
-                    showingExportSheet = true
-                }
-            } catch {
-                await MainActor.run {
-                    exportErrorMessage = "Export failed: \(error.localizedDescription)"
-                    showingExportErrorAlert = true
-                }
-            }
-        }
-    }
-
-    /// Resolves the course / category / tag names for a recipe (best-effort — returns empty metadata on
-    /// error so the export still proceeds without them).
-    private func jsonLDMetadata(for recipe: Recipe) -> SchemaOrgRecipeJSONLDExporter.LibraryMetadata {
-        let names = recipe.libraryNames(database: database)
-        return .init(courseName: names.course, categoryNames: names.categories, tagNames: names.tags)
-    }
-
     /// Shows HTML export settings for a single recipe
     /// - Parameter recipeId: The ID of the recipe to export
     func showHTMLExportSettingsForRecipe(_ recipeId: String) {
@@ -631,81 +454,51 @@ class RecipeNavigationSplitViewModel {
         htmlExportOptions = HTMLExportOptions() // Reset to defaults
     }
     
-    /// Performs the actual HTML export after settings are confirmed
+    /// Exports HTML once its settings sheet is confirmed: the one recipe it was opened for, or else the
+    /// selection.
     func performHTMLExport() {
-        Task {
-            // Determine which recipes to export
-                let recipesToExport: [Recipe]
-                if let recipeId = htmlExportRecipeId {
-                    // Single recipe export from detail view
-                    guard let recipe = fullRecipe(id: recipeId) else {
-                        await MainActor.run {
-                            exportErrorMessage = "Recipe not found"
-                            showingExportErrorAlert = true
-                        }
-                        return
-                    }
-                    recipesToExport = [recipe]
-                } else {
-                    // Multiple recipes from list view (preserve displayed order via projection ids)
-                    let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
-                    recipesToExport = fullRecipes(ids: orderedIds)
-
-                    if recipesToExport.isEmpty {
-                        await MainActor.run {
-                            exportErrorMessage = "No recipes selected for export"
-                            showingExportErrorAlert = true
-                        }
-                        return
-                    }
-                }
-                
-                if recipesToExport.count == 1 {
-                    // Single recipe export
-                    let recipe = recipesToExport.first!
-                    let names = recipe.libraryNames(database: database)
-                    let htmlString = recipe.asHtmlWithOptions(options: htmlExportOptions, course: names.course, categories: names.categories, tags: names.tags)
-                    guard let htmlData = htmlString.data(using: .utf8) else {
-                        await MainActor.run {
-                            exportErrorMessage = "Failed to convert HTML to data"
-                            showingExportErrorAlert = true
-                        }
-                        return
-                    }
-                    
-                    await MainActor.run {
-                        exportData = htmlData
-                        exportContentType = .html
-                        exportFileName = "\(recipe.name).html"
-                        showingExportSheet = true
-                        // Clear the single recipe ID after export
-                        htmlExportRecipeId = nil
-                    }
-                } else {
-                    // Multiple recipes: one document, one stylesheet, one <main> per recipe.
-                    let combinedHTML = RecipeHtmlDocument.render(recipesToExport.map { $0.htmlPage(database: database) },
-                                                                 options: htmlExportOptions,
-                                                                 title: "\(recipesToExport.count) Recipes")
-                    
-                    guard let htmlData = combinedHTML.data(using: .utf8) else {
-                        await MainActor.run {
-                            exportErrorMessage = "Failed to convert HTML to data"
-                            showingExportErrorAlert = true
-                        }
-                        return
-                    }
-                    
-                    await MainActor.run {
-                        exportData = htmlData
-                        exportContentType = .html
-                        let count = recipesToExport.count
-                        exportFileName = count == 1 ? "\(recipesToExport.first!.name).html" : "\(count)_recipes.html"
-                        showingExportSheet = true
-                    }
-                }
+        let format = RecipeExportFormat.html(htmlExportOptions)
+        if let recipeId = htmlExportRecipeId {
+            htmlExportRecipeId = nil
+            presentExport(of: fullRecipe(id: recipeId).map { [$0] } ?? [], as: format, whenEmpty: "Recipe not found")
+        } else {
+            presentExport(of: selectedRecipesInListOrder, as: format, whenEmpty: "No recipes selected for export")
         }
     }
-    
+
+    /// Builds the file off the main actor (encoding photos for many recipes takes a moment), then shows
+    /// the save panel, or an alert saying why there is nothing to save.
+    private func presentExport(of recipesToExport: [Recipe], as format: RecipeExportFormat, whenEmpty emptyMessage: String) {
+        guard !recipesToExport.isEmpty else {
+            exportErrorMessage = emptyMessage
+            showingExportErrorAlert = true
+            return
+        }
+        let database = database
+        Task {
+            do {
+                let file = try await Task.detached(priority: .userInitiated) {
+                    try Self.exporter.export(recipesToExport, as: format, database: database)
+                }.value
+                exportData = file.data
+                exportFileName = file.fileName
+                exportContentType = Self.contentType(for: file.format)
+                showingExportSheet = true
+            } catch {
+                exportErrorMessage = "Export failed: \(error.localizedDescription)"
+                showingExportErrorAlert = true
+            }
+        }
+    }
+
+    private static func contentType(for format: RecipeExportFormat) -> UTType {
+        switch format {
+        case .saltyFile: .saltyRecipe
+        case .jsonLD: .json
+        case .html: .html
+        }
+    }
+
     /// Prints every selected recipe as one job, in list order, each starting on its own page.
     func printSelectedRecipes() {
         let orderedIds = recipes.filter { selectedRecipeIDs.contains($0.id) }.map(\.id)
@@ -836,7 +629,7 @@ class RecipeNavigationSplitViewModel {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            try await database.write { db in
+            _ = try await database.write { db in
                 try ShoppingListWriter.update(id: id, in: db) { list in
                     list.name = trimmed
                 }
@@ -930,11 +723,7 @@ class PreviewRecipeNavigationSplitViewModel: RecipeNavigationSplitViewModel {
         // No-op for preview
     }
     
-    override func deleteSelectedRecipes() async {
-        // No-op for preview
-    }
-
-    override func deleteRecipe(id: String) async {
+    override func deleteRecipes(ids: Set<String>) async {
         // No-op for preview
     }
 }

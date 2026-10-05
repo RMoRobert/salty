@@ -38,7 +38,6 @@ public actor ServerSyncEngine {
     private let images: any SyncImageStore
     private let deviceName: String
     private let prepareImage: @Sendable (Data) async -> PreparedSyncImage
-    private let shoppingListChanged: @Sendable (String) async -> Void
     private let onProgress: @Sendable (SyncProgress) -> Void
 
     /// What the current operation is doing. Every change is also passed to the `onProgress` callback, in
@@ -53,8 +52,6 @@ public actor ServerSyncEngine {
     ///     shopping list's conflicted copy.
     ///   - prepareImage: Readies an image for upload. The default only labels PNG/JPEG/GIF/WebP by their
     ///     header; the Apple app converts HEIC and WebP (`SyncImagePreparer`).
-    ///   - shoppingListChanged: Called after sync writes or deletes a shopping list locally, so an editor
-    ///     holding that list in memory reloads instead of saving its stale copy back.
     ///   - onProgress: Called with every change to `progress`. Synchronous and on the engine's executor,
     ///     so keep it short: hand the value to whatever displays it.
     public init(
@@ -65,7 +62,6 @@ public actor ServerSyncEngine {
         images: any SyncImageStore,
         deviceName: String,
         prepareImage: @escaping @Sendable (Data) async -> PreparedSyncImage = { PreparedSyncImage.passThrough($0) },
-        shoppingListChanged: @escaping @Sendable (String) async -> Void = { _ in },
         onProgress: @escaping @Sendable (SyncProgress) -> Void = { _ in }
     ) {
         self.resolveDatabase = database
@@ -75,12 +71,17 @@ public actor ServerSyncEngine {
         self.images = images
         self.deviceName = deviceName
         self.prepareImage = prepareImage
-        self.shoppingListChanged = shoppingListChanged
         self.onProgress = onProgress
     }
 
+    /// The configured base URL, trimmed and without trailing slashes, so "https://host/" and
+    /// "https://host" build the same request URLs (the former used to produce "https://host//api/…").
     private var serverUrl: String {
-        settings.serverURL()
+        var url = settings.serverURL().trimmingCharacters(in: .whitespacesAndNewlines)
+        while url.hasSuffix("/") {
+            url.removeLast()
+        }
+        return url
     }
 
     // MARK: - Authentication Properties
@@ -121,13 +122,28 @@ public actor ServerSyncEngine {
     /// server-side (one token per device id). That supersession is what keeps two live devices from
     /// quietly sharing one server-side watermark: the old phone is signed out and has to be
     /// reconnected deliberately.
-    private var deviceId: String {
+    private var resolvedDeviceId: String?
+
+    /// The id this device syncs under, resolved once per engine.
+    ///
+    /// The first call stores a fresh id when the credential store has none. A store that refuses to
+    /// keep it (a locked keychain, a sandbox missing its entitlement) used to be ignored, so every read
+    /// minted another id and one sync enrolled, registered, completed and deleted as four different
+    /// devices -- the server listed phantoms and the real watermark never advanced.
+    private func deviceIdentifier() throws -> String {
+        if let resolvedDeviceId {
+            return resolvedDeviceId
+        }
         if let existing = credentials.deviceId(), !existing.isEmpty {
+            resolvedDeviceId = existing
             return existing
         }
         let newId = UUID().uuidString
-        credentials.setDeviceId(newId)
+        guard credentials.setDeviceId(newId) else {
+            throw SyncError.deviceIdUnavailable
+        }
         logger.info("Generated new device ID: \(newId)")
+        resolvedDeviceId = newId
         return newId
     }
 
@@ -140,7 +156,7 @@ public actor ServerSyncEngine {
     /// Updates the progress text to show a cancel is underway. The cancel itself is the caller
     /// cancelling the operation's task.
     public func noteCancelling() {
-        progress.currentStep = "Cancelling..."
+        progress.step = .cancelling
     }
 
     // MARK: - Authentication Methods
@@ -170,9 +186,7 @@ public actor ServerSyncEngine {
             throw SyncError.authenticationFailed("Username and password are required")
         }
 
-        guard let url = URL(string: "\(serverUrl)/api/auth/login") else {
-            throw SyncError.authenticationFailed("Invalid server URL")
-        }
+        let url = try makeURL(endpoint: "/api/auth/login")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -184,6 +198,7 @@ public actor ServerSyncEngine {
             let deviceId: String
             let deviceName: String
         }
+        let deviceId = try deviceIdentifier()
         request.httpBody = try JSONEncoder().encode(
             EnrolmentRequest(username: username, password: password,
                              deviceId: deviceId, deviceName: deviceName)
@@ -191,7 +206,7 @@ public actor ServerSyncEngine {
 
         logger.info("Enrolling device for user: \(username)")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.authenticationFailed("Invalid response from server")
@@ -238,15 +253,13 @@ public actor ServerSyncEngine {
         guard let token = deviceToken, !token.isEmpty else {
             throw SyncError.enrolmentRequired
         }
-        guard let url = URL(string: "\(serverUrl)/api/auth/token/verify") else {
-            throw SyncError.authenticationFailed("Invalid server URL")
-        }
+        let url = try makeURL(endpoint: "/api/auth/token/verify")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.authenticationFailed("Invalid response from server")
@@ -334,7 +347,7 @@ public actor ServerSyncEngine {
     /// a device they've asked to sign out of.
     private func revokeDeviceTokenOnServer() async -> SyncForgetOutcome {
         guard let token = deviceToken, !token.isEmpty,
-              let url = URL(string: "\(serverUrl)/api/auth/token/revoke") else {
+              let url = try? makeURL(endpoint: "/api/auth/token/revoke") else {
             return .localOnly
         }
 
@@ -346,7 +359,7 @@ public actor ServerSyncEngine {
         request.timeoutInterval = 15
 
         do {
-            let (_, response) = try await session.data(for: request)
+            let (_, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
             guard let httpResponse = response as? HTTPURLResponse else { return .localOnly }
             // 401 means the token was already dead -- revoked from the devices page, or invalidated by
             // a password change. The point of the call is met, so don't alarm the user about it.
@@ -415,74 +428,74 @@ public actor ServerSyncEngine {
         do {
             // Step 0: Authenticate with server
             logger.info("Step 0: Authenticating...")
-            progress.currentStep = "Authenticating..."
+            progress.step = .authenticating
             try await ensureAuthenticated()
             logger.info("Authentication successful")
             
             // Step 1: Register device with server
             logger.info("Step 1: Registering device...")
-            progress.currentStep = "Registering device..."
+            progress.step = .registeringDevice
             let deviceInfo = try await registerDevice()
-            logger.info("Device registered: \(self.deviceId), isFirstSync: \(deviceInfo.isFirstSync)")
+            logger.info("Device registered: \(deviceInfo.deviceId), isFirstSync: \(deviceInfo.isFirstSync)")
             
             // Step 2: Sync courses (with deletion detection)
             logger.info("Step 2: Syncing courses...")
-            progress.currentStep = "Syncing courses..."
+            progress.step = .syncingCourses
             try await syncCoursesWithDeletions(deviceInfo: deviceInfo)
             logger.info("Courses synced successfully")
             
             // Step 3: Sync categories (with deletion detection)
             logger.info("Step 3: Syncing categories...")
-            progress.currentStep = "Syncing categories..."
+            progress.step = .syncingCategories
             try await syncCategoriesWithDeletions(deviceInfo: deviceInfo)
             logger.info("Categories synced successfully")
             
             // Step 4: Sync tags (with deletion detection)
             logger.info("Step 4: Syncing tags...")
-            progress.currentStep = "Syncing tags..."
+            progress.step = .syncingTags
             try await syncTagsWithDeletions(deviceInfo: deviceInfo)
             logger.info("Tags synced successfully")
             
             // Step 4b: Sync shopping lists (with deletion detection)
             logger.info("Step 4b: Syncing shopping lists...")
-            progress.currentStep = "Syncing shopping lists..."
+            progress.step = .syncingShoppingLists
             try await syncShoppingListsWithDeletions(deviceInfo: deviceInfo)
             logger.info("Shopping lists synced successfully")
 
             // Step 5: Sync recipes (with deletion detection)
             logger.info("Step 5: Syncing recipes...")
-            progress.currentStep = "Syncing recipes..."
+            progress.step = .syncingRecipes
             try await syncRecipesWithDeletions(deviceInfo: deviceInfo)
             logger.info("Recipes synced successfully")
             
             // Step 6: Sync images
             logger.info("Step 6: Syncing images...")
-            progress.currentStep = "Syncing images..."
+            progress.step = .syncingImages
             try await syncImages()
             logger.info("Images synced successfully")
 
             // Step 6b: fold any same-named courses/categories/tags into one row
-            progress.currentStep = "Tidying categories, courses, and tags..."
+            progress.step = .tidyingLibrary
             await consolidateDuplicateLibraryItems()
 
             // Step 7: Mark sync complete on server. Explicitly checked first: completing marks this device
             // caught up, so it must never run after a cancel that skipped work (step 6b doesn't throw).
             try Task.checkCancellation()
             logger.info("Step 7: Completing sync...")
-            progress.currentStep = "Completing sync..."
+            progress.step = .completing
             try await completeSyncOnServer()
             logger.info("Sync marked complete on server")
 
-            progress.currentStep = "Sync complete!"
+            progress.step = .complete
             logger.info("Sync completed successfully")
 
         } catch {
             if SyncError.isCancellation(error) {
-                logger.info("Sync cancelled at step '\(self.progress.currentStep)'")
-                progress.currentStep = "Sync cancelled"
+                logger.info("Sync cancelled at step '\(self.progress.step.rawValue)'")
+                progress.step = .cancelled
                 throw SyncError.cancelled
             }
-            logger.error("Sync failed at step '\(self.progress.currentStep)': \(error)")
+            logger.error("Sync failed at step '\(self.progress.step.rawValue)': \(error)")
             throw error
         }
     }
@@ -494,12 +507,12 @@ public actor ServerSyncEngine {
         progress = SyncProgress()
 
         do {
-            progress.currentStep = "Authenticating..."
+            progress.step = .authenticating
             try await ensureAuthenticated()
             _ = try await registerDevice() // ensure the device is registered (state is otherwise ignored)
 
             // Fetch the full server state first (so a failed download leaves local data intact).
-            progress.currentStep = "Downloading from server..."
+            progress.step = .downloadingFromServer
             let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
             let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
             let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
@@ -530,15 +543,11 @@ public actor ServerSyncEngine {
             let listRows = Self.deduplicated(shoppingListRows, by: \.id)
             let recipeRows = Self.deduplicated(serverRecipes, by: \.id)
 
-            let oldShoppingListIds = try await database.read { db in
-                try ShoppingList.fetchAll(db).map { $0.id }
-            }
-
             // Wipe and repopulate in ONE transaction. Anything that fails from here to the commit --
             // a decode error, a foreign-key clash, the app being killed -- rolls the wipe back too, so
             // the worst outcome is the library the user already had, never an empty one. Image files
             // are deleted only after the commit, for the same reason.
-            progress.currentStep = "Replacing local data..."
+            progress.step = .replacingLocalData
             let oldImageFilenames = try await database.write { db -> [String] in
                 let previousImages = try Recipe.fetchAll(db).compactMap { $0.imageFilename }
 
@@ -580,31 +589,25 @@ public actor ServerSyncEngine {
             for filename in oldImageFilenames {
                 images.deleteImage(filename: filename)
             }
-
-            // Every list was replaced (or removed) wholesale; any open editor must reload rather
-            // than save its pre-wipe content back.
-            for id in Set(oldShoppingListIds).union(listRows.map { $0.id }) {
-                await shoppingListChanged(id)
-            }
             progress.itemsDownloaded += courseRows.count + categoryRows.count + tagRows.count + listRows.count
             progress.itemsDownloaded += recipeRows.count
             progress.downloadedRecipeIds.formUnion(recipeRows.map { $0.id })
 
             // Images: local files were wiped, so this only downloads (nothing to upload).
-            progress.currentStep = "Downloading images..."
+            progress.step = .downloadingImages
             try await syncImages()
 
             // The server's own classifiers can contain same-named rows; don't rebuild the local
             // library with them. The merge tombstones each loser, so the next ordinary sync deletes
             // it on the server too.
-            progress.currentStep = "Tidying categories, courses, and tags..."
+            progress.step = .tidyingLibrary
             await consolidateDuplicateLibraryItems()
 
             try await completeSyncOnServer()
-            progress.currentStep = "Full re-sync complete!"
+            progress.step = .fullResyncComplete
             logger.info("Force full re-sync complete: \(serverRecipes.count) recipes")
         } catch {
-            logger.error("Force full re-sync failed at '\(self.progress.currentStep)': \(error)")
+            logger.error("Force full re-sync failed at '\(self.progress.step.rawValue)': \(error)")
             throw error
         }
     }
@@ -621,12 +624,12 @@ public actor ServerSyncEngine {
         progress = SyncProgress()
 
         do {
-            progress.currentStep = "Authenticating..."
+            progress.step = .authenticating
             try await ensureAuthenticated()
             _ = try await registerDevice() // ensure the device is registered (state is otherwise ignored)
 
             // Snapshot the current server inventory so we know which items to overwrite vs. delete.
-            progress.currentStep = "Inspecting server..."
+            progress.step = .inspectingServer
             let serverCourses = try await fetchListFromServer(ServerCourse.self, endpoint: "/api/courses")
             let serverCategories = try await fetchListFromServer(ServerCategory.self, endpoint: "/api/categories")
             let serverTags = try await fetchListFromServer(ServerTag.self, endpoint: "/api/tags")
@@ -655,7 +658,7 @@ public actor ServerSyncEngine {
             // Push courses/categories/tags first. Recipes link them by id, which must already exist
             // server-side. Update items the server already has, create the rest. `force` marks these
             // as deliberate mirror-this-device overwrites (see `forceWriteHeader`).
-            progress.currentStep = "Uploading to server..."
+            progress.step = .uploadingToServer
             for c in localCourses {
                 if serverCourseIds.contains(c.id) {
                     try await putToServer(c, endpoint: "/api/courses/\(c.id)", force: true)
@@ -698,7 +701,7 @@ public actor ServerSyncEngine {
             progress.itemsUploaded += localCourses.count + localCategories.count + localTags.count + localShoppingLists.count
 
             // Push recipes (uploadRecipe overwrites existing or creates new as needed).
-            progress.currentStep = "Uploading recipes..."
+            progress.step = .uploadingRecipes
             for recipe in localRecipes {
                 try await uploadRecipe(recipe, force: true)
                 progress.itemsUploaded += 1
@@ -707,7 +710,7 @@ public actor ServerSyncEngine {
 
             // Remove anything on the server that no longer exists locally (it was deleted from the
             // source of truth). Recipes first, then classifiers they may reference.
-            progress.currentStep = "Removing stale server data..."
+            progress.step = .removingStaleServerData
             let localRecipeIds = Set(localRecipes.map { $0.id })
             let orphanRecipeIds = serverRecipeIds.filter { !localRecipeIds.contains($0) }
             if !orphanRecipeIds.isEmpty {
@@ -732,7 +735,7 @@ public actor ServerSyncEngine {
 
             // Images: reconciled by timestamp. Because every recipe was just pushed with this device's
             // image metadata, the server never wins here; local images upload to fill any gaps.
-            progress.currentStep = "Uploading images..."
+            progress.step = .uploadingImages
             try await syncImages()
 
             // The server now mirrors this library exactly, so every local row is agreed by
@@ -749,10 +752,10 @@ public actor ServerSyncEngine {
             }
 
             try await completeSyncOnServer()
-            progress.currentStep = "Full re-sync complete!"
+            progress.step = .fullResyncComplete
             logger.info("Force full re-sync to server complete: \(localRecipes.count) recipes")
         } catch {
-            logger.error("Force full re-sync to server failed at '\(self.progress.currentStep)': \(error)")
+            logger.error("Force full re-sync to server failed at '\(self.progress.step.rawValue)': \(error)")
             throw error
         }
     }
@@ -883,11 +886,6 @@ public actor ServerSyncEngine {
                 for id in toDeleteLocally {
                     try ShoppingList.where { $0.id.eq(id) }.delete().execute(db)
                 }
-            }
-            for id in toDeleteLocally {
-                // An open editor for a deleted list should show it empty, not keep a ghost copy
-                // whose edits would silently persist nowhere.
-                await shoppingListChanged(id)
             }
             if !toDeleteLocally.isEmpty {
                 logger.info("Deleted \(toDeleteLocally.count) shopping list(s) locally (were deleted on server)")
@@ -1047,9 +1045,6 @@ public actor ServerSyncEngine {
             try ShoppingList.upsert { row }.execute(db)
         }
         progress.itemsDownloaded += 1
-        // The list may be open in a checklist/freeform editor, which holds its content in memory —
-        // without this, its next keystroke would save the pre-download content right back.
-        await shoppingListChanged(server.id)
     }
 
     /// Records the server agreement after a successful *upload* without touching the row's contents:
@@ -1104,7 +1099,7 @@ public actor ServerSyncEngine {
         addAuthHeader(to: &request)
         request.httpBody = try makeWireEncoder().encode(list)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.uploadFailed("No HTTP response saving shopping list \(list.id)")
         }
@@ -1130,7 +1125,7 @@ public actor ServerSyncEngine {
             request.setValue(String(expectedRevision), forHTTPHeaderField: "If-Match")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.uploadFailed("No HTTP response deleting shopping list \(id)")
         }
@@ -1176,7 +1171,7 @@ public actor ServerSyncEngine {
             request.setValue(Self.wireDateString(expectedLastModified), forHTTPHeaderField: "If-Match")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.uploadFailed("No HTTP response for DELETE \(endpoint)")
         }
@@ -1698,22 +1693,21 @@ public actor ServerSyncEngine {
     
     /// Register this device with the server
     private func registerDevice() async throws -> DeviceInfo {
-        guard let url = URL(string: "\(serverUrl)/api/recipes/sync/device") else {
-            throw SyncError.uploadFailed("Invalid server URL")
-        }
+        let url = try makeURL(endpoint: "/api/recipes/sync/device")
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuthHeader(to: &request)
         
+        let deviceId = try deviceIdentifier()
         let body: [String: String] = [
             "deviceId": deviceId,
             "deviceName": deviceName
         ]
         request.httpBody = try JSONEncoder().encode(body)
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -1756,15 +1750,14 @@ public actor ServerSyncEngine {
     
     /// Mark sync as complete on server. Public so its non-2xx throw is unit-testable.
     public func completeSyncOnServer() async throws {
-        guard let url = URL(string: "\(serverUrl)/api/recipes/sync/device/\(deviceId)/complete") else {
-            throw SyncError.uploadFailed("Invalid server URL")
-        }
+        let deviceId = try deviceIdentifier()
+        let url = try makeURL(endpoint: "/api/recipes/sync/device/\(deviceId)/complete")
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         addAuthHeader(to: &request)
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -1786,6 +1779,21 @@ public actor ServerSyncEngine {
         //     An edit still beats a delete, and manifest is fetched first so the tombstones
         //     can be checked against it before anything is pushed.
         var tombstones = Set(try await database.read { db in try RecipeTombstoneWriter.pending(in: db) })
+        if !tombstones.isEmpty {
+            // A recipe deleted and then brought back under the same id (an import of an export, say) is
+            // live again here: pushing its old deletion would remove it from every other device. The
+            // classifier passes drop such tombstones the same way.
+            // A join rather than an IN list: a mass delete can leave more ids than SQLite binds.
+            let revived = Set(try await database.read { db in
+                try String.fetchAll(db, sql: #"SELECT "recipe"."id" FROM "recipe" JOIN "deletedRecipe" ON "deletedRecipe"."id" = "recipe"."id""#)
+            })
+            if !revived.isEmpty {
+                logger.info("Dropping \(revived.count) tombstone(s) for recipes that exist here again")
+                let toClear = Array(revived)
+                try await database.write { db in try RecipeTombstoneWriter.clear(toClear, in: db) }
+                tombstones.subtract(revived)
+            }
+        }
         if !tombstones.isEmpty {
             let manifestById = Dictionary(fullManifest.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
             let editedSinceDeleted = tombstones.filter { id in
@@ -1859,10 +1867,12 @@ public actor ServerSyncEngine {
         logger.info("Sync plan: \(plan.toUpload.count) upload, \(plan.toDownload.count) download, \(plan.toDeleteLocally.count) delete-local, \(plan.toDeleteOnServer.count) delete-server (manifest \(manifest.count), delta \(deltaRecipes.count))")
 
         // 5. Uploads. Each is a single request, so a cancel between them just leaves the rest for next time.
+        //    The full manifest already says which ids the server holds, so no HEAD is needed per recipe.
+        let serverIds = Set(fullManifest.map(\.id))
         for recipeId in plan.toUpload {
             try Task.checkCancellation()
             guard let localRecipe = localRecipesById[recipeId] else { continue }
-            try await uploadRecipe(localRecipe)
+            try await uploadRecipe(localRecipe, existsOnServer: serverIds.contains(recipeId))
             progress.itemsUploaded += 1
             progress.uploadedRecipeIds.insert(recipeId)
         }
@@ -2008,7 +2018,7 @@ public actor ServerSyncEngine {
             let serverStamp = (entry.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
             let localStamp = (local.lastModifiedPreparedDate ?? .distantPast).roundedToWireMillis
             if localStamp > serverStamp, !uploadedBodies.contains(entry.id) {
-                try await uploadRecipe(local)
+                try await uploadRecipe(local, existsOnServer: true)   // it is in the manifest
                 uploaded += 1
             } else if serverStamp > localStamp, !downloadedBodies.contains(entry.id) {
                 // Targeted write, like the image path: deliberately does NOT touch lastModifiedDate.
@@ -2034,22 +2044,21 @@ public actor ServerSyncEngine {
 
     /// Delete recipes on the server. Public so its non-2xx throw is unit-testable.
     public func deleteRecipesOnServer(recipeIds: [String]) async throws {
-        guard let url = URL(string: "\(serverUrl)/api/recipes/sync/delete") else {
-            throw SyncError.uploadFailed("Invalid server URL")
-        }
+        let url = try makeURL(endpoint: "/api/recipes/sync/delete")
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuthHeader(to: &request)
         
+        let deviceId = try deviceIdentifier()
         let body: [String: Any] = [
             "deviceId": deviceId,
             "recipeIds": recipeIds
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -2068,7 +2077,9 @@ public actor ServerSyncEngine {
         SyncWireDate.date(from: dateStr)
     }
     
-    private func uploadRecipe(_ recipe: Recipe, force: Bool = false) async throws {
+    /// - Parameter existsOnServer: Whether the server already holds this id, when the caller knows from
+    ///   the manifest; PUT if so, POST if not. Nil asks the server with a HEAD first.
+    private func uploadRecipe(_ recipe: Recipe, force: Bool = false, existsOnServer: Bool? = nil) async throws {
         // Convert to server format
         var serverRecipe = ServerRecipe.from(recipe)
         
@@ -2085,11 +2096,24 @@ public actor ServerSyncEngine {
         serverRecipe.categoryIds = categoryIds
         serverRecipe.tagIds = tagIds
         
-        // Check if recipe exists on server
-        let exists = try await checkExists(endpoint: "/api/recipes/\(recipe.id)")
+        let exists: Bool
+        if let existsOnServer {
+            exists = existsOnServer
+        } else {
+            exists = try await checkExists(endpoint: "/api/recipes/\(recipe.id)")
+        }
         
         if exists {
-            try await putToServer(serverRecipe, endpoint: "/api/recipes/\(recipe.id)", force: force)
+            do {
+                try await putToServer(serverRecipe, endpoint: "/api/recipes/\(recipe.id)", force: force)
+            } catch SyncError.uploadFailed(let message) where existsOnServer == true {
+                // The manifest can be a few seconds old: another device may have deleted the recipe
+                // since. Only then is it created instead; any other refusal stands.
+                guard try await !checkExists(endpoint: "/api/recipes/\(recipe.id)") else {
+                    throw SyncError.uploadFailed(message)
+                }
+                try await postToServer(serverRecipe, endpoint: "/api/recipes", force: force)
+            }
         } else {
             try await postToServer(serverRecipe, endpoint: "/api/recipes", force: force)
         }
@@ -2246,6 +2270,9 @@ public actor ServerSyncEngine {
             try Task.checkCancellation()
             let server = serverById[id]
             let local = localById[id]
+            // A recipe the server doesn't hold has nowhere to put an image: its body upload failed or was
+            // held back, and the image follows once the body is there. Trying anyway fails every sync.
+            if server == nil, local != nil { continue }
             let serverDate = (server?.lastModifiedImageDate ?? .distantPast).roundedToWireMillis
             let localDate = (local?.lastModifiedImageDate ?? .distantPast).roundedToWireMillis
             let serverFile = server?.imageFilename
@@ -2296,6 +2323,9 @@ public actor ServerSyncEngine {
         }
 
         logger.info("Image sync: \(self.progress.imagesUploaded) uploaded, \(self.progress.imagesDownloaded) downloaded, \(imageErrors.count) failed")
+        // The sync still completes when some photos failed (the recipes themselves synced), so the
+        // count is reported in the summary rather than lost in the log.
+        progress.imagesFailed = imageErrors.count
         if !imageErrors.isEmpty, progress.imagesUploaded == 0, progress.imagesDownloaded == 0 {
             throw SyncError.uploadFailed("Image sync failed for: \(imageErrors.joined(separator: ", "))")
         }
@@ -2305,10 +2335,10 @@ public actor ServerSyncEngine {
     /// stored verbatim server-side so this device never sees the server image as "newer" and re-downloads it.
     private func uploadImage(_ imageData: Data, for recipeId: String, imageDate: Date?) async throws {
         // URL-encode the recipe ID
-        guard let encodedRecipeId = recipeId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "\(serverUrl)/api/recipes/\(encodedRecipeId)/image") else {
+        guard let encodedRecipeId = recipeId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             throw SyncError.uploadFailed("Invalid recipe ID for URL: \(recipeId)")
         }
+        let url = try makeURL(endpoint: "/api/recipes/\(encodedRecipeId)/image")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -2337,7 +2367,7 @@ public actor ServerSyncEngine {
 
         request.httpBody = body
         
-        let (responseData, response) = try await session.data(for: request)
+        let (responseData, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncError.uploadFailed("No HTTP response received")
@@ -2372,10 +2402,10 @@ public actor ServerSyncEngine {
                        maxBytes: Int = ServerSyncEngine.maxImageDownloadBytes) async throws {
         // `filename` is server-controlled; percent-encode it and guard the URL so a malformed name
         // surfaces as a recoverable error instead of crashing the sync.
-        guard let encodedFilename = Self.encodedImagePathComponent(filename),
-              let url = URL(string: "\(serverUrl)/api/recipes/images/\(encodedFilename)") else {
+        guard let encodedFilename = Self.encodedImagePathComponent(filename) else {
             throw SyncError.downloadFailed("Invalid image URL for filename: \(filename)")
         }
+        let url = try makeURL(endpoint: "/api/recipes/images/\(encodedFilename)")
         logger.debug("Downloading image from: \(url)")
 
         var request = URLRequest(url: url)
@@ -2432,14 +2462,15 @@ public actor ServerSyncEngine {
         guard let encodedId = recipeId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             throw SyncError.uploadFailed("Invalid recipe ID for URL: \(recipeId)")
         }
-        var components = URLComponents(string: "\(serverUrl)/api/recipes/\(encodedId)/image")
+        let imageURL = try makeURL(endpoint: "/api/recipes/\(encodedId)/image")
+        var components = URLComponents(url: imageURL, resolvingAgainstBaseURL: false)
         if let imageDate { components?.queryItems = [URLQueryItem(name: "lastModifiedImageDate", value: Self.wireDateString(imageDate))] }
         guard let url = components?.url else { throw SyncError.uploadFailed("Invalid URL for image delete: \(recipeId)") }
 
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         addAuthHeader(to: &request)
-        let (_, response) = try await session.data(for: request)
+        let (_, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw SyncError.uploadFailed("Image delete failed for recipe \(recipeId)")
         }
@@ -2478,6 +2509,14 @@ public actor ServerSyncEngine {
     /// Page size for the paginated recipe delta.
     private static let syncPageSize = 100
 
+    /// How many delta pages are fetched when the server sends no `X-Total-Count`: a million recipes.
+    static let maxDeltaPagesWithoutTotal = 10_000
+
+    /// The largest JSON response a sync accepts. The whole manifest for tens of thousands of recipes is
+    /// a few megabytes, and a delta page is 100 recipes, so this only stops something that isn't a
+    /// Salty server from filling memory.
+    public static let maxJSONResponseBytes = 64 * 1024 * 1024   // 64 MB
+
     /// Fetches the lightweight recipe manifest (id + lastModifiedDate for ALL of the user's recipes).
     /// Uses the X-Total-Count completeness check, since this is the set deletion reconciliation relies on.
     private func fetchManifest() async throws -> [ServerRecipeManifestEntry] {
@@ -2505,14 +2544,25 @@ public actor ServerSyncEngine {
         var all: [ServerRecipe] = []
         var page = 0
         var expectedTotal: Int?
+        // Offset paging over a table other devices write to: a server that keeps answering full pages
+        // (or omits the total) must not loop forever. The first page's total fixes how many pages can
+        // exist; without one, `maxDeltaPagesWithoutTotal` stands in.
+        var pageLimit = Self.maxDeltaPagesWithoutTotal
         while true {
             let endpoint = "/api/recipes?\(sinceParam)page=\(page)&size=\(Self.syncPageSize)"
             let (items, totalCount) = try await fetchFromServerWithTotalCount([ServerRecipe].self, endpoint: endpoint)
-            if expectedTotal == nil { expectedTotal = totalCount }
+            if page == 0, let totalCount {
+                expectedTotal = totalCount
+                pageLimit = totalCount / Self.syncPageSize + 1
+            }
             all.append(contentsOf: items)
             if let total = expectedTotal, all.count >= total { break }
             if items.count < Self.syncPageSize { break }   // short page → no more results
             page += 1
+            if page >= pageLimit {
+                logger.error("Paged recipe delta still returning full pages after \(page) pages; aborting.")
+                throw SyncError.networkError("The server kept sending recipe pages past the expected end (\(all.count) recipes so far)")
+            }
         }
 
         if let total = expectedTotal, all.count != total {
@@ -2537,9 +2587,23 @@ public actor ServerSyncEngine {
 
     /// Builds a request URL from `serverUrl` and an endpoint path, throwing rather than force-unwrapping
     /// so a misconfigured server URL can't crash a sync.
+    ///
+    /// Every request goes through here. The eleven hand-built `URL(string:)` calls this replaced each had
+    /// their own idea of a malformed address, and none checked that there was a scheme or a host.
     private func makeURL(endpoint: String) throws -> URL {
-        guard let url = URL(string: "\(serverUrl)\(endpoint)") else {
-            throw SyncError.networkError("Invalid URL: \(serverUrl)\(endpoint)")
+        let base = serverUrl
+        guard !base.isEmpty else {
+            throw SyncError.serverNotConfigured
+        }
+        guard let url = URL(string: "\(base)\(endpoint)"),
+              let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = url.host, !host.isEmpty else {
+            throw SyncError.networkError("Invalid server URL: \(base)")
+        }
+        if scheme == "http" {
+            // Apple's App Transport Security refuses this before it leaves the device; hosts without
+            // ATS (the shared engine on Windows and Android) would send the sync token in clear.
+            logger.warning("Server URL uses plain http, so the sync token travels unencrypted: \(base)")
         }
         return url
     }
@@ -2550,7 +2614,7 @@ public actor ServerSyncEngine {
         var request = URLRequest(url: url)
         addAuthHeader(to: &request)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -2622,7 +2686,7 @@ public actor ServerSyncEngine {
         let encoder = makeWireEncoder()
         request.httpBody = try encoder.encode(object)
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -2643,7 +2707,7 @@ public actor ServerSyncEngine {
         let encoder = makeWireEncoder()
         request.httpBody = try encoder.encode(object)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -2654,15 +2718,13 @@ public actor ServerSyncEngine {
     }
     
     private func deleteOnServer(endpoint: String) async throws {
-        guard let url = URL(string: "\(serverUrl)\(endpoint)") else {
-            throw SyncError.uploadFailed("Invalid URL for DELETE: \(endpoint)")
-        }
+        let url = try makeURL(endpoint: endpoint)
         
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         addAuthHeader(to: &request)
         
-        let (_, response) = try await session.data(for: request)
+        let (_, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 404 else {
@@ -2671,7 +2733,7 @@ public actor ServerSyncEngine {
     }
     
     private func checkExists(endpoint: String) async throws -> Bool {
-        guard let url = URL(string: "\(serverUrl)\(endpoint)") else {
+        guard let url = try? makeURL(endpoint: endpoint) else {
             logger.warning("Invalid URL for checkExists: \(self.serverUrl)\(endpoint)")
             return false
         }
@@ -2681,7 +2743,7 @@ public actor ServerSyncEngine {
         addAuthHeader(to: &request)
         
         do {
-            let (_, response) = try await session.data(for: request)
+            let (_, response) = try await session.data(for: request, maxBytes: Self.maxJSONResponseBytes)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 return false
@@ -2689,10 +2751,10 @@ public actor ServerSyncEngine {
             
             return httpResponse.statusCode == 200
         } catch {
-            // Network errors shouldn't necessarily mean "doesn't exist"
-            // Log and return false to trigger upload attempt
+            // Not reaching the server says nothing about whether the recipe is there; guessing "no" would
+            // POST a row that may already exist. The upload fails and is retried next sync.
             logger.warning("checkExists failed for \(endpoint): \(error.localizedDescription)")
-            return false
+            throw error
         }
     }
 

@@ -12,255 +12,46 @@ import SwiftUI
 
 struct IngredientsEditView: View {
     @Binding var recipe: Recipe
-    /// Where a dragged row would land, or nil when nothing is being dragged over the list.
-    @State private var dropTarget: RecipeItemListEditor.DropTarget?
-    /// A row that was just added: scrolled to and focused, then cleared.
-    @State private var scrollToNewItem: String?
-    @FocusState private var focusedIngredientID: String?
-    @Environment(\.dismiss) private var dismiss
+    /// A row that was just added, for the list to scroll to and focus.
+    @State private var newRowID: String?
 
     var showToolbar: Bool = true
     var showBottomButtons: Bool = false
 
     var body: some View {
-        Group {
-            if showToolbar {
-                // Standalone view with toolbar (for sheet presentation)
-                content
-                    .navigationTitle("Edit Ingredients")
-                    .toolbar {
-                        ToolbarItemGroup(placement: .automatic) {
-                            Button {
-                                addIngredient()
-                            } label: {
-                                Label("New Ingredient", systemImage: "plus.circle")
-                            }
-
-                            Button {
-                                addHeading()
-                            } label: {
-                                Label("New Heading", systemImage: "folder.badge.plus")
-                            }
-                            .keyboardShortcut("n", modifiers: [.command, .shift])
-                        }
-
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") {
-                                dismiss()
-                            }
-                            .keyboardShortcut(.return, modifiers: [.command])
-                        }
-                    }
-                    .frame(minWidth: 600, idealWidth: 700, maxWidth: 800,
-                           minHeight: 500, idealHeight: 600, maxHeight: 800)
-                    .presentationSizing(.fitted)
-            } else {
-                // Embedded view (no toolbar, no frame constraints)
-                VStack(spacing: 0) {
-                    content
-                    if showBottomButtons {
-                        BottomActionButtonsView(
-                            onAddNewIngredient: { addIngredient() },
-                            onAddNewMainIngredient: { addMainIngredient() },
-                            onAddNewHeading: { addHeading() }
-                        )
-                        .padding(.top, 4)
-                    }
-                }
+        RecipeRowEditorShell(title: "Edit Ingredients", isStandalone: showToolbar, showsBottomButtons: showBottomButtons) {
+            RecipeRowListEditor(
+                items: $recipe.ingredients,
+                newRowID: $newRowID,
+                isStandalone: showToolbar,
+                newRow: { .emptyRow() }
+            ) { $ingredient, context in
+                IngredientEditRowView(ingredient: $ingredient, context: context)
             }
-        }
-    }
-
-    private var content: some View {
-        IngredientsContentView(
-            ingredients: $recipe.ingredients,
-            dropTarget: $dropTarget,
-            scrollToNewItem: $scrollToNewItem,
-            focusedIngredientID: $focusedIngredientID,
-            showToolbar: showToolbar
-        )
-    }
-
-    // MARK: - Adding
-
-    private func addIngredient() {
-        append(.emptyRow(isHeading: false))
-    }
-
-    private func addMainIngredient() {
-        append(.emptyRow(isHeading: false, isMain: true))
-    }
-
-    private func addHeading() {
-        append(.emptyRow(isHeading: true))
-    }
-
-    private func append(_ ingredient: Ingredient) {
-        withAnimation(.easeIn) {
-            scrollToNewItem = RecipeItemListEditor.append(ingredient, to: &recipe.ingredients)
-        }
-    }
-}
-
-// MARK: - Supporting Views
-
-struct IngredientsContentView: View {
-    @Binding var ingredients: [Ingredient]
-    @Binding var dropTarget: RecipeItemListEditor.DropTarget?
-    @Binding var scrollToNewItem: String?
-    var focusedIngredientID: FocusState<String?>.Binding
-    let showToolbar: Bool
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            IngredientsListView(
-                ingredients: $ingredients,
-                dropTarget: $dropTarget,
-                scrollToNewItem: $scrollToNewItem,
-                focusedIngredientID: focusedIngredientID
-            )
-            // Standalone gets its own padding; embedded takes the host's.
-            .padding(.horizontal, showToolbar ? nil : 0)
-            .padding(.top, showToolbar ? nil : 0)
-            .onChange(of: scrollToNewItem) { _, newID in
-                guard let newID else { return }
-                withAnimation(.easeOut) {
-                    proxy.scrollTo(newID, anchor: .center)
-                }
-                // Focus once the row has been laid out.
-                Task {
-                    try? await Task.sleep(for: .seconds(0.2))
-                    focusedIngredientID.wrappedValue = newID
-                    scrollToNewItem = nil
-                }
-            }
-        }
-    }
-}
-
-struct BottomActionButtonsView: View {
-    let onAddNewIngredient: () -> Void
-    let onAddNewMainIngredient: () -> Void
-    let onAddNewHeading: () -> Void
-
-    var body: some View {
-        HStack {
+        } actions: {
+            // The split "New Ingredient" button, as it has always looked: click adds an ingredient,
+            // the menu half holds the main-ingredient variant.
             ComboButtonRepresentable(
                 title: "New Ingredient",
                 image: NSImage(systemSymbolName: "plus.circle", accessibilityDescription: nil),
                 menuItems: [
-                    MenuItem(title: "Add New Main Ingredient", image: NSImage(named: "recipe-new-main-ingredient-image"), action: onAddNewMainIngredient)
+                    MenuItem(title: "Add New Main Ingredient", image: NSImage(named: "recipe-new-main-ingredient-image"), action: { add(.emptyRow(isHeading: false, isMain: true)) })
                 ],
-                onPrimaryAction: onAddNewIngredient
+                onPrimaryAction: { add(.emptyRow()) }
             )
             .fixedSize()
             .keyboardShortcut("n", modifiers: [.command])
 
-            Button {
-                onAddNewHeading()
-            } label: {
-                Label("New Heading", systemImage: "folder.badge.plus")
+            Button("New Heading", systemImage: "folder.badge.plus") {
+                add(.emptyRow(isHeading: true))
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
-
-            Spacer()
         }
-        .padding(.top, 2)
-    }
-}
-
-struct MenuItem {
-    let title: String
-    let image: NSImage?
-    let action: () -> Void
-}
-
-struct IngredientsListView: View {
-    /// The list's own width, measured so a dragged row's preview can match it.
-    @State private var listWidth: CGFloat = 0
-    @Binding var ingredients: [Ingredient]
-    @Binding var dropTarget: RecipeItemListEditor.DropTarget?
-    @Binding var scrollToNewItem: String?
-    var focusedIngredientID: FocusState<String?>.Binding
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(ingredients) { ingredient in
-                let id = ingredient.id
-                RecipeListDropIndicator(isActive: dropTarget == .above(id))
-                IngredientEditRowView(
-                    ingredient: RecipeItemListEditor.binding(for: id, in: $ingredients, fallback: ingredient),
-                    dragPreviewWidth: listWidth,
-                    isAlternateRow: RecipeItemListEditor.isAlternateRow(id: id, in: ingredients),
-                    focusedIngredientID: focusedIngredientID,
-                    onAdd: { addIngredient(below: id) },
-                    onDelete: { delete(id: id) },
-                    onDrop: { droppedID in move(droppedID, to: .above(id)) },
-                    onDropTargetChanged: { isTargeted in setDropTarget(.above(id), isTargeted: isTargeted) },
-                    onMoveUp: { moveUp(id: id) },
-                    onMoveDown: { moveDown(id: id) }
-                )
-                .id(id)
-            }
-            RecipeListEndDropZone(
-                isActive: dropTarget == .end,
-                onDrop: { droppedID in move(droppedID, to: .end) },
-                onDropTargetChanged: { isTargeted in setDropTarget(.end, isTargeted: isTargeted) }
-            )
-        }
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.width
-            } action: { width in
-                listWidth = width
-            }
     }
 
-    // MARK: - Editing
-
-    private func addIngredient(below id: String) {
+    private func add(_ ingredient: Ingredient) {
         withAnimation(.easeIn) {
-            scrollToNewItem = RecipeItemListEditor.insert(
-                .emptyRow(isHeading: false),
-                below: id,
-                in: &ingredients
-            )
-        }
-    }
-
-    private func delete(id: String) {
-        withAnimation(.easeIn) {
-            RecipeItemListEditor.delete(id: id, from: &ingredients)
-        }
-    }
-
-    private func move(_ id: String, to target: RecipeItemListEditor.DropTarget) -> Bool {
-        var moved = false
-        withAnimation(.snappy) {
-            moved = RecipeItemListEditor.move(id: id, to: target, in: &ingredients)
-            dropTarget = nil
-        }
-        return moved
-    }
-
-    private func moveUp(id: String) -> Bool {
-        withAnimation(.snappy) {
-            RecipeItemListEditor.moveUp(id: id, in: &ingredients)
-        }
-    }
-
-    private func moveDown(id: String) -> Bool {
-        withAnimation(.snappy) {
-            RecipeItemListEditor.moveDown(id: id, in: &ingredients)
-        }
-    }
-
-    /// Only the row currently being hovered clears the indicator: dragging from one row to the next
-    /// reports the new row as targeted before the old one reports that it isn't.
-    private func setDropTarget(_ target: RecipeItemListEditor.DropTarget, isTargeted: Bool) {
-        if isTargeted {
-            dropTarget = target
-        } else if dropTarget == target {
-            dropTarget = nil
+            newRowID = RecipeItemListEditor.append(ingredient, to: &recipe.ingredients)
         }
     }
 }
@@ -269,29 +60,22 @@ struct IngredientsListView: View {
 
 struct IngredientEditRowView: View {
     @Binding var ingredient: Ingredient
-    /// Width of the list, so the drag preview can match it.
-    let dragPreviewWidth: CGFloat
-    let isAlternateRow: Bool
-    var focusedIngredientID: FocusState<String?>.Binding
-    let onAdd: () -> Void
-    let onDelete: () -> Void
-    /// Returns whether the drop was accepted.
-    let onDrop: (String) -> Bool
-    let onDropTargetChanged: (Bool) -> Void
-    /// Each returns whether the row actually moved.
-    let onMoveUp: () -> Bool
-    let onMoveDown: () -> Bool
+    let context: RecipeRowContext
+
+    private var placeholder: String {
+        ingredient.isHeadingRow ? "Heading Title" : "Ingredient"
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 3) {
             // Text field column - flexible width
-            TextField(ingredient.isHeadingRow ? "Heading Title" : "Ingredient", text: $ingredient.text, axis: .vertical)
+            TextField(placeholder, text: $ingredient.text, axis: .vertical)
                 .font(ingredient.isHeadingRow ? .headline : .body)
                 .fontWeight(ingredient.isHeadingRow ? .semibold : .regular)
                 .lineLimit(1...3)
                 .textFieldStyle(.plain)
-                .focused(focusedIngredientID, equals: ingredient.id)
-                .modifier(RecipeRowKeyboardReordering(onMoveUp: onMoveUp, onMoveDown: onMoveDown))
+                .focused(context.focus, equals: ingredient.id)
+                .modifier(context.keyboardReordering)
                 .padding([.top, .bottom], 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -317,59 +101,35 @@ struct IngredientEditRowView: View {
                 }
                 .frame(width: 30)
 
-                // Add button column
-                Button {
-                    onAdd()
-                } label: {
-                    Label("Add", systemImage: "plus.circle.fill")
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.green)
-                .frame(width: 24)
-
-                // Delete button column
-                Button {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "minus.circle.fill")
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
-                .frame(width: 24)
-
-                // Drag handle column - fixed width. The payload is the row's id, so a drop can tell a
-                // real row from a stray text drag and never acts on a stale index.
-                Label("Drag to Move", systemImage: "line.3.horizontal")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.tertiary)
+                RecipeRowAddButton(context: context)
                     .frame(width: 24)
-                    .draggable(ingredient.id) {
-                        RecipeRowDragPreview(
-                            listWidth: dragPreviewWidth,
-                            text: ingredient.text,
-                            placeholder: ingredient.isHeadingRow ? "Heading Title" : "Ingredient",
-                            isHeading: ingredient.isHeadingRow
-                        )
-                    }
+
+                RecipeRowDeleteButton(context: context)
+                    .frame(width: 24)
+
+                RecipeRowDragHandle(
+                    context: context,
+                    text: ingredient.text,
+                    placeholder: placeholder,
+                    isHeading: ingredient.isHeadingRow
+                )
+                .frame(width: 24)
             }
         }
         .padding(.vertical, 2)
         .padding(.horizontal, 0)
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isAlternateRow ? Color(nsColor: .tertiarySystemFill) : .clear)
-        }
-        .dropDestination(for: String.self) { droppedIDs, _ in
-            guard let droppedID = droppedIDs.first else { return false }
-            return onDrop(droppedID)
-        } isTargeted: { isTargeted in
-            onDropTargetChanged(isTargeted)
+                .fill(context.isAlternateRow ? Color(nsColor: .tertiarySystemFill) : .clear)
         }
     }
 }
 
+struct MenuItem {
+    let title: String
+    let image: NSImage?
+    let action: () -> Void
+}
 
 struct ComboButtonRepresentable: NSViewRepresentable {
     var title: String

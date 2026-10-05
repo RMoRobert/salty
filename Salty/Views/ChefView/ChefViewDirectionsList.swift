@@ -54,10 +54,17 @@ struct ChefViewDirectionsList: View {
             .padding()
         }
         .scrollPosition($scrollPosition)
-        .onChange(of: viewModel.currentStep?.id) { _, stepId in
+        // `initial: true` so re-entering a recipe mid-cook opens on its current step rather than at
+        // the top. That first positioning is a jump, not a scroll: there is nothing on screen yet
+        // to animate from.
+        .onChange(of: viewModel.currentStep?.id, initial: true) { previous, stepId in
             guard let stepId else { return }
-            withAnimation(.smooth) {
+            if previous == stepId {
                 scrollPosition.scrollTo(id: stepId, anchor: .center)
+            } else {
+                withAnimation(.smooth) {
+                    scrollPosition.scrollTo(id: stepId, anchor: .center)
+                }
             }
         }
     }

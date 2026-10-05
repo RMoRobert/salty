@@ -85,7 +85,7 @@ struct JunctionUniquenessTests {
     func anUnguardedInsertIsWhatTheIndexWouldHaveBroken() throws {
         let (queue, recipeId, categoryId) = try library()
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try RecipeCategory.insertIfAbsent(
                 RecipeCategory(id: SaltyId.new(), recipeId: recipeId, categoryId: categoryId),
                 in: db

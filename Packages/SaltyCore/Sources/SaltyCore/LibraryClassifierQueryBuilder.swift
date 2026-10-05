@@ -32,13 +32,6 @@ public enum LibraryClassifierSortOrder: String, CaseIterable, Identifiable, Send
 
     public var id: String { rawValue }
 
-    public var label: String {
-        switch self {
-        case .name: return "Name"
-        case .mostUsed: return "Most Used"
-        }
-    }
-
     public var column: LibraryClassifierSortColumn {
         switch self {
         case .name: return .name
@@ -52,7 +45,6 @@ public enum LibraryClassifierSortOrder: String, CaseIterable, Identifiable, Send
 }
 
 public enum LibraryClassifierQueryBuilder {
-
     /// The full statement, ready for `$items.load`.
     public static func statement(
         classifier: LibraryClassifier,

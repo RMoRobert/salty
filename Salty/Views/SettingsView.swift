@@ -64,6 +64,16 @@ struct DatabaseSettingsView: View {
                     Text(FileManager.customSaltyLibraryDirectory?.path ?? FileManager.defaultDatabaseFileFullPath.path)
                         .font(.caption)
                         .textSelection(.enabled)
+                    if FileManager.hasPendingLocationChange {
+                        Text("A different location was chosen. Restart Salty to use it.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if AppRelauncher.isAvailable {
+                            Button("Relaunch Now") {
+                                Task { await AppRelauncher.relaunch() }
+                            }
+                        }
+                    }
                     Button("Select Custom Database Location…") {
                             showingOpenDatabaseSheet = true
                         }
@@ -116,7 +126,10 @@ struct DatabaseSettingsView: View {
         } message: {
             Text("This will reset your database location to the default location. You'll need to restart the app for changes to take effect.")
         }
-        .sheet(isPresented: $showingOpenDatabaseSheet) {
+        .sheet(isPresented: $showingOpenDatabaseSheet, onDismiss: {
+            // Redraws the location section, which notes a pending change.
+            diagnosticsInfo = FileManager.getDatabaseAccessDiagnostics()
+        }) {
             OpenDBView()
             #if os(macOS)
             .frame(minWidth: 400, minHeight: 500)
@@ -300,7 +313,8 @@ struct ServerSettingsView: View {
                 .buttonStyle(.link)
                 #endif
                 .controlSize(.small)
-                .disabled(syncService.isSyncing)
+                // Not `.disabled(isSyncing)` on the row: Cancel only exists while a sync is running, so
+                // that disabled the one button meant to be used during a sync. Each button carries its own.
 
                 Button(role: .destructive) {
                     showingForceResyncConfirm = true
@@ -315,10 +329,10 @@ struct ServerSettingsView: View {
 
                 if syncService.isSyncing {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(syncService.syncProgress.currentStep)
+                        Text(syncService.syncProgress.step.label)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(syncService.syncProgress.summary)
+                        Text(syncService.syncProgress.countsSummary)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -447,7 +461,7 @@ struct ServerSettingsView: View {
             // Settings is the deliberate, watch-it-happen sync, so it bypasses the recently-synced guard.
             try await syncService.syncNow(force: true)
             syncAlertTitle = "Sync Complete"
-            syncAlertMessage = "Successfully synced with server.\n\(syncService.syncProgress.summary)"
+            syncAlertMessage = "Successfully synced with server.\n\(syncService.syncProgress.countsSummary)"
             showingSyncAlert = true
         } catch {
             // A cancel is the user's own doing, so it gets a neutral title rather than "Sync Failed".
@@ -461,7 +475,7 @@ struct ServerSettingsView: View {
         do {
             try await syncService.forceFullResyncFromServer()
             syncAlertTitle = "Sync Complete"
-            syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.summary)"
+            syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.countsSummary)"
             showingSyncAlert = true
         } catch {
             syncAlertTitle = "Sync Failed"
@@ -474,7 +488,7 @@ struct ServerSettingsView: View {
         do {
             try await syncService.forceFullResyncToServer()
             syncAlertTitle = "Sync Complete"
-            syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.summary)"
+            syncAlertMessage = "Full re-sync complete.\n\(syncService.syncProgress.countsSummary)"
             showingSyncAlert = true
         } catch {
             syncAlertTitle = "Sync Failed"

@@ -636,16 +636,9 @@ private struct DirectionsSection: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Directions")
                 .modifier(TitleStyle())
-            ForEach(recipe.directions.indices, id: \.self) { index in
-                let direction = recipe.directions[index]
-                if direction.isHeading ?? false {
-                    Text(direction.text)
-                        .modifier(SubheadingStyle())
-                        .padding(.top, 8)
-                        .padding(.bottom, 6)
-                } else {
-                    // Omit headings from step count
-                    let stepNumber = recipe.directions.prefix(index).filter { $0.isHeading != true }.count + 1
+            // Numbered as Chef View and the printout number them: headings and blank rows don't count.
+            ForEach(ChefStep.steps(from: recipe.directions)) { step in
+                if let stepNumber = step.number {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(stepNumber).")
                             .bold()
@@ -653,10 +646,15 @@ private struct DirectionsSection: View {
                             .foregroundStyle(.recipeDetailBoxForeground2)
                             // Fixed column so the text starts at the same x for "9." and "10."
                             .frame(minWidth: 24, alignment: .trailing)
-                        Text(direction.text)
+                        Text(step.text)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.bottom, 8)
+                } else {
+                    Text(step.text)
+                        .modifier(SubheadingStyle())
+                        .padding(.top, 8)
+                        .padding(.bottom, 6)
                 }
             }
             if viewModel.isIngredientScaleActive {

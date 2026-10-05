@@ -32,7 +32,7 @@ public extension Recipe {
     // This is what a user-supplied theme file would slot into (see RecipeHtmlTheme).
     //
     // Theme variables (most colors/fonts route through these — overriding them restyles the whole page):
-    //   --salty-font-body, --salty-font-heading
+    //   --salty-font-body, --salty-font-heading, --salty-font-size, --salty-font-weight, --salty-line-height
     //   --salty-page-bg, --salty-surface, --salty-panel-bg
     //   --salty-text, --salty-text-secondary, --salty-heading
     //   --salty-accent, --salty-link, --salty-link-hover, --salty-border
@@ -192,20 +192,19 @@ public extension Recipe {
                 Section {
                     H2("Directions").id("recipe-directions-heading")
                     Ul {
-                        for (index, direction) in directions.enumerated() {
-                            if let isHeading = direction.isHeading, isHeading {
-                                    Li(direction.text.htmlEscaped)
-                                        .class("recipe-directions-heading")
-                            }
-                            else {
-                                let stepNumber = directions.prefix(index + 1).filter { $0.isHeading != true }.count
+                        // Numbered as Chef View and the detail view number them (see ChefStep).
+                        for step in ChefStep.steps(from: directions) {
+                            if let number = step.number {
                                 Li {
-                                    Span("\(stepNumber).")
+                                    Span("\(number).")
                                         .class("recipe-directions-step-number")
-                                    Span(direction.text.htmlEscaped)
+                                    Span(step.text.htmlEscaped)
                                         .class("recipe-directions-step-text")
                                 }
                                 .class("recipe-directions-step")
+                            } else {
+                                Li(step.text.htmlEscaped)
+                                    .class("recipe-directions-heading")
                             }
                         }
                     }
@@ -772,12 +771,15 @@ html {
    See RecipeHtmlTheme.swift and the "Theming" doc comment in asHtmlWithOptions.
    =========================================================================== */
 :root {
-    --salty-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    --salty-font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
     --salty-font-heading: var(--salty-font-body);
+    --salty-font-size: 14rem;
+    --salty-font-weight: 400;
+    --salty-line-height: 1.6;
     --salty-page-bg: #ffffff;
     --salty-surface: #ffffff;
     --salty-panel-bg: #f8f9fa;
-    --salty-text: rgb(25, 25, 25);
+    --salty-text: #1d1d1f;
     --salty-text-secondary: #5a5a5e;
     --salty-heading: #1d1d1f;
     --salty-accent: #0a84ff;
@@ -790,11 +792,12 @@ html {
     --salty-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
+/* The page's type and colours come from the theme tokens in :root, so a theme sets them there. */
 body {
     font-family: var(--salty-font-body);
-    font-size: 14rem;
-    font-weight: 400;
-    line-height: 1.2;
+    font-size: var(--salty-font-size);
+    font-weight: var(--salty-font-weight);
+    line-height: var(--salty-line-height);
     padding: 2rem;
     background: var(--salty-page-bg);
     color: var(--salty-text);
@@ -818,7 +821,9 @@ main {
     display: grid;
     grid-template-columns: 1fr;
     gap: 2rem;
-    padding: 1rem;
+    padding: 2rem;
+    background: var(--salty-surface);
+    min-height: 100vh;
 }
 
 /* A combined document (multi-recipe export / print) holds one main element per recipe; rule them
@@ -908,66 +913,10 @@ main + main {
    }
 }
 
-#recipe-name {
-    font-size: 200%;
-    font-weight: bold;
-    margin: 0.75em 0;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
-}
-
-#recipe-source,
-#recipe-sourceDetails {
-    margin: 0.5em 0;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-}
-
 /* Ingredients Section */
-.recipe-ingredients-container {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
 .recipe-ingredients-list {
     margin-top: 0.5rem;
 }
-
-.recipe-ingredient-heading {
-    font-weight: bold;
-    margin-top: 1em;
-    margin-bottom: 0.5em;
-    color: rgb(75, 75, 75);
-}
-
-.recipe-ingredient {
-    margin: 0.25em 0;
-    padding-left: 1em;
-}
-
-/* Directions Section */
-.recipe-directions-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.recipe-directions-step,
-.recipe-directions-step-with-name {
-    margin: 1em 0;
-    padding-left: 1em;
-    position: relative;
-}
-
-.recipe-directions-step-with-name {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25em;
-}
-
-
 
 /* Typography */
 h1,
@@ -1103,6 +1052,9 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     background-clip: text;
     letter-spacing: -0.02em;
     line-height: 1.1;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
 }
 
 #recipe-source,
@@ -1111,6 +1063,8 @@ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); */
     color: var(--salty-text-secondary);
     font-size: 0.95em;
     font-weight: 400;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 /* Preparation Time Styling - Capsule Design */
@@ -1191,6 +1145,7 @@ h2 {
 .recipe-directions-step {
     margin: 1em 0;
     padding: 0.5em 0;
+    position: relative;
     line-height: 1.6;
     display: flex;
     gap: 0.5em;
@@ -1355,26 +1310,6 @@ h2 {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
     border: 1px solid #f2f2f2;
     transition: all 0.3s ease;
-}
-
-/* Removed hover effects for static design */
-
-/* Main Layout Improvements */
-main {
-    background: white;
-    min-height: 100vh;
-    padding: 2rem;
-}
-
-body {
-    background: white;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
-    font-size: 14rem;
-    font-weight: 400;
-    line-height: 1.6;
-    color: var(--salty-heading);
-    max-width: 1200px;
-    margin: 0 auto;
 }
 
 /* Responsive Design */

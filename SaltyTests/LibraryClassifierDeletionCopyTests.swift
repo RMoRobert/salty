@@ -107,7 +107,7 @@ struct LibraryClassifierDeletionCopyTests {
     @Test func severalRowsAreDescribedInThePlural() {
         let rows = [item("Breads", used: 1), item("Soups", used: 2)]
         let text = message(rows, .category)
-        #expect(text.localizedCaseInsensitiveContains(LibraryClassifier.category.pluralLabel))
+        #expect(text.localizedCaseInsensitiveContains(LibraryClassifier.category.pluralName))
         #expect(text != message([item("Breads", used: 3)], .category))
     }
 
@@ -118,8 +118,8 @@ struct LibraryClassifierDeletionCopyTests {
             let text = message([item("Zzz", used: 4)], classifier)
             for other in LibraryClassifier.allCases where other != classifier {
                 #expect(
-                    !text.localizedCaseInsensitiveContains(other.singularLabel),
-                    "a \(classifier.rawValue) delete mentioned \(other.singularLabel): \(text)"
+                    !text.localizedCaseInsensitiveContains(other.singularName),
+                    "a \(classifier.rawValue) delete mentioned \(other.singularName): \(text)"
                 )
             }
         }

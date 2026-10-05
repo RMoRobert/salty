@@ -187,8 +187,9 @@ extension Recipe {
 
     @discardableResult
     public static func touchLastModified(
-        recipeIds: some Sequence<String>, in db: Database, now: Date = Date()
+        recipeIds: some Sequence<String>, in db: Database, now rawNow: Date = Date()
     ) throws -> Date {
+        let now = rawNow.roundedToWireMillis
         for recipeId in Set(recipeIds) {
             try touchLastModified(recipeId: recipeId, in: db, now: now)
         }

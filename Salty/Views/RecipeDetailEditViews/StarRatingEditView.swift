@@ -293,7 +293,7 @@ private struct RatingStarRow: View {
                 )
                 // Twice the stock speed: a quick nod, not a full hop.
                 .symbolEffect(.bounce, options: .speed(2), value: bounces[star, default: 0])
-                .help(star.rawValue == 1 ? "1 star" : "\(star.rawValue) stars")
+                .help(String(inflected: "^[\(star.rawValue) star](inflect: true)"))
             }
         }
         .coordinateSpace(.named(Self.coordinateSpace))

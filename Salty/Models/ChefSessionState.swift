@@ -15,7 +15,12 @@ struct ChefSessionState: Equatable {
     var completedStepIds: Set<Int> = []
     /// Indices into the recipe's `ingredients` array.
     var checkedIngredientIds: Set<Int> = []
+    /// The recipe's `lastModifiedDate` when this progress was made. Everything above is a position
+    /// in the recipe's arrays, so once the recipe has been edited it points at the wrong rows;
+    /// `ChefViewModel` drops progress whose stamp no longer matches.
+    var recipeLastModifiedDate: Date?
 
+    /// No progress worth keeping. The stamp alone is nothing to keep.
     var isPristine: Bool {
         currentStepId == nil && completedStepIds.isEmpty && checkedIngredientIds.isEmpty
     }

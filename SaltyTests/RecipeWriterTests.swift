@@ -67,6 +67,87 @@ struct RecipeWriterTests {
     private let past = Date(timeIntervalSince1970: 1_000_000)
     private let now = Date(timeIntervalSince1970: 2_000_000)
 
+    // MARK: - saveBody
+
+    @Test("a body save keeps the stored photo and last-made, whatever the editor carries")
+    func bodySaveKeepsStoredPhotoAndLastMade() throws {
+        let queue = try library()
+        let stored = try storedRecipe(in: queue, at: past) {
+            $0.imageFilename = "fresh.jpg"
+            $0.imageThumbnailData = Data([1])
+            $0.lastModifiedImageDate = now
+            $0.lastPrepared = now
+            $0.lastModifiedPreparedDate = now
+        }
+        // The editor's copy predates the photo and the "made it" that arrived by sync.
+        var edited = stored
+        edited.name = "Rye"
+        edited.imageFilename = nil
+        edited.imageThumbnailData = nil
+        edited.lastModifiedImageDate = nil
+        edited.lastPrepared = nil
+        edited.lastModifiedPreparedDate = nil
+        let later = now.addingTimeInterval(60)
+
+        let outcome = try queue.write { db in try RecipeWriter.saveBody(edited, in: db, now: later) }
+
+        #expect(outcome.recipe.name == "Rye")
+        #expect(outcome.bodyChanged)
+        #expect(!outcome.imageChanged)
+        #expect(!outcome.preparedChanged)
+        #expect(outcome.recipe.imageFilename == "fresh.jpg")
+        #expect(try imageStamp(stored.id, in: queue) == now)
+        #expect(try preparedStamp(stored.id, in: queue) == now)
+        let lastPrepared: Date? = try row(stored.id, from: queue)["lastPrepared"]
+        #expect(lastPrepared == now)
+    }
+
+    @Test("a body save writes the editor's photo only when told the editor changed it")
+    func bodySaveUsesEditedPhotoOnRequest() throws {
+        let queue = try library()
+        let stored = try storedRecipe(in: queue, at: past) {
+            $0.imageFilename = "old.jpg"
+            $0.imageThumbnailData = Data([1])
+            $0.lastModifiedImageDate = past
+            $0.lastPrepared = now
+            $0.lastModifiedPreparedDate = now
+        }
+        var edited = stored
+        // What `PendingRecipeImage.apply` leaves on the draft after writing the new file.
+        edited.imageFilename = "new.jpg"
+        edited.imageThumbnailData = Data([2])
+        edited.lastModifiedImageDate = now
+        // ...while its "last made" is still the stale copy.
+        edited.lastPrepared = nil
+        edited.lastModifiedPreparedDate = nil
+        let later = now.addingTimeInterval(60)
+
+        let outcome = try queue.write { db in
+            try RecipeWriter.saveBody(edited, image: .useEdited, in: db, now: later)
+        }
+
+        #expect(outcome.imageChanged)
+        #expect(outcome.recipe.imageFilename == "new.jpg")
+        #expect(try imageStamp(stored.id, in: queue) == later)
+        #expect(try preparedStamp(stored.id, in: queue) == now, "the photo policy never touches last-made")
+        let lastPrepared: Date? = try row(stored.id, from: queue)["lastPrepared"]
+        #expect(lastPrepared == now)
+    }
+
+    @Test("a body save never inserts: a recipe deleted elsewhere stays deleted")
+    func bodySaveRefusesAMissingRecipe() throws {
+        let queue = try library()
+        let ghost = Recipe(id: SaltyId.new(), name: "Gone")
+
+        #expect(throws: RecipeWriterError.recipeNotFound(ghost.id)) {
+            try queue.write { db in try RecipeWriter.saveBody(ghost, in: db) }
+        }
+        let found = try queue.read { db in
+            try Row.fetchOne(db, sql: #"SELECT "id" FROM "recipe" WHERE "id" = ?"#, arguments: [ghost.id])
+        }
+        #expect(found == nil)
+    }
+
     // MARK: - lastModifiedDate
 
     @Test("a body edit bumps lastModifiedDate")
@@ -117,7 +198,7 @@ struct RecipeWriterTests {
         }
 
         recipe.introduction = "A long ferment."
-        try queue.write { db in try RecipeWriter.save(recipe, in: db, now: now) }
+        _ = try queue.write { db in try RecipeWriter.save(recipe, in: db, now: now) }
 
         #expect(try modified(recipe.id, in: queue) == now)
         #expect(try imageStamp(recipe.id, in: queue) == past)
@@ -151,7 +232,7 @@ struct RecipeWriterTests {
         var recipe = try storedRecipe(in: queue, at: future)
 
         recipe.name = "Edited while the clock was wrong"
-        try queue.write { db in try RecipeWriter.save(recipe, in: db, now: now) }
+        _ = try queue.write { db in try RecipeWriter.save(recipe, in: db, now: now) }
 
         #expect(try modified(recipe.id, in: queue) == future)
     }
@@ -274,7 +355,7 @@ struct RecipeWriterTests {
         let messy = Date(timeIntervalSince1970: 1_700_000_000.1234567)
         let outcome = try queue.write { db in try RecipeWriter.save(recipe, in: db, now: messy) }
 
-        let returned = try #require(outcome.recipe.lastModifiedDate)
+        let returned = outcome.recipe.lastModifiedDate
         let stored = try #require(try modified(recipe.id, in: queue))
         #expect(returned == stored, "the row handed back must be the row stored")
         #expect(returned == returned.roundedToWireMillis, "the stamp should already be whole milliseconds")
@@ -313,7 +394,7 @@ struct RecipeWriterTests {
         var recipe = try storedRecipe(in: queue, at: past)
 
         recipe.isFavorite.toggle()
-        try queue.write { db in try RecipeWriter.save(recipe, in: db, now: now) }
+        _ = try queue.write { db in try RecipeWriter.save(recipe, in: db, now: now) }
 
         #expect(try modified(recipe.id, in: queue) == now)
     }

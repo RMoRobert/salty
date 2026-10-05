@@ -102,10 +102,10 @@ struct SyncCancelStateTests {
 
         // Wait for the sync to be parked on the request that never answers.
         let deadline = ContinuousClock.now + .seconds(10)
-        while service.syncProgress.currentStep != "Registering device...", ContinuousClock.now < deadline {
+        while service.syncProgress.step != .registeringDevice, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(service.syncProgress.currentStep == "Registering device...")
+        #expect(service.syncProgress.step == .registeringDevice)
         #expect(service.isCancellable)
 
         service.cancelSync()
@@ -120,7 +120,7 @@ struct SyncCancelStateTests {
             Issue.record("expected SyncError.cancelled, got \(error)")
         }
 
-        #expect(service.syncProgress.currentStep == "Sync cancelled")
+        #expect(service.syncProgress.step == .cancelled)
         #expect(service.lastSyncError == nil, "a cancel is not a failure to report")
         #expect(!service.isSyncing)
         #expect(!service.isCancelling)

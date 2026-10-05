@@ -104,6 +104,7 @@ enum JSONLDValue: Decodable, Sendable {
 
     /// `number` as a person would write it: no fractional part when it is whole.
     static func decimalText(_ number: Double) -> String {
+        guard number.isFinite else { return "0" }
         if number.rounded() == number, abs(number) < 1e15 {
             return String(Int64(number))
         }

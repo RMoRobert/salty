@@ -116,6 +116,23 @@ struct LibraryWritesTests {
         #expect(try row(imported.id, from: queue) != nil)
     }
 
+    /// The table's primary key is `ON CONFLICT REPLACE`, so a bare insert would quietly replace the
+    /// user's recipe; the writer refuses instead.
+    @Test func anImportRefusesAnIdTheLibraryAlreadyHolds() throws {
+        let queue = try library()
+        let original = Recipe(id: SaltyId.new(), name: "Original")
+        _ = try queue.write { db in try RecipeWriter.insertImported(original, in: db, now: past) }
+        var replacement = original
+        replacement.name = "Replacement"
+
+        #expect(throws: RecipeWriterError.idAlreadyInUse(original.id)) {
+            try queue.write { db in try RecipeWriter.insertImported(replacement, in: db, now: now) }
+        }
+        let stored = try #require(try row(original.id, from: queue))
+        let name: String = stored["name"]
+        #expect(name == "Original")
+    }
+
     // MARK: - RecipeDeleter
 
     @Test func deletingRecipesTombstonesThemAndReturnsTheirPhotos() throws {
@@ -206,7 +223,7 @@ struct LibraryWritesTests {
         #expect(!unchanged, "the same set in another order is no change")
         #expect((try #require(try row(recipe.id, from: queue))["lastModifiedDate"] as Date?) == now)
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try RecipeClassificationWriter.set(categoryIds: ["cat-a"], tagIds: [], forRecipe: recipe.id, in: db, now: later)
         }
         #expect(try count(#"SELECT COUNT(*) FROM "recipeCategory" WHERE "recipeId" = ?"#, [recipe.id], in: queue) == 1)

@@ -44,7 +44,7 @@ final class DuplicateRecipesViewModel {
     var summaryText: String {
         let recipes = duplicateRecipeCount
         let sets = groups.count
-        let counts = "\(recipes) total recipe\(recipes == 1 ? "" : "s") in \(sets) group\(sets == 1 ? "" : "s")"
+        let counts = String(inflected: "^[\(recipes) total recipe](inflect: true) in ^[\(sets) group](inflect: true)")
         return "\(counts). \(matchLevel.summaryDescription)"
     }
 

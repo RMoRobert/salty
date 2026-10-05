@@ -37,8 +37,14 @@ struct SaltyLogger: Sendable {
     func critical(_ message: @autoclosure () -> String) { emit("CRITICAL", message()) }
     func fault(_ message: @autoclosure () -> String) { emit("FAULT", message()) }
 
+    /// Best-effort: a log line that can't be written is dropped. The throwing `write(contentsOf:)`
+    /// with `try?`, not the legacy `write(_:)`, which `try!`s and traps when the write fails. A
+    /// Windows GUI app started from Explorer has no stderr (Foundation's handle comes from
+    /// `_fileno(stderr)`, which is -2 there), so every log line used to kill the host process with
+    /// 0xC000001D -- the SaltyUno crash of 2026-10-04 on the first launch after a migration.
     private func emit(_ level: String, _ message: String) {
-        FileHandle.standardError.write(Data("[\(subsystem)] [\(category)] \(level): \(message)\n".utf8))
+        let line = Data("[\(subsystem)] [\(category)] \(level): \(message)\n".utf8)
+        try? FileHandle.standardError.write(contentsOf: line)
     }
 }
 #endif

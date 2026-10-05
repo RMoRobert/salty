@@ -71,19 +71,23 @@ final class KeychainHelper: Sendable {
     /// - Returns: True if successful
     @discardableResult
     func save(_ data: Data, forKey key: String, accessible: CFString = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly) -> Bool {
-        // Delete any existing item first
-        delete(forKey: key)
-
-        var query = baseQuery(forKey: key)
-        query[kSecValueData as String] = data
         // Keychain items are never in an unencrypted backup. The default class, ThisDeviceOnly, also
         // keeps them out of encrypted backups and device-to-device transfer, which is right for a
         // credential: a token that followed a restore onto a second phone would let both sync as one
         // device. Items that are *meant* to follow a restore (the device id) pass a portable class.
-        query[kSecAttrAccessible as String] = accessible
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: accessible,
+        ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-        
+        // Update in place, adding only when there is nothing to update. Deleting first and then adding
+        // left a window in which the app being killed lost the sync token outright.
+        var status = SecItemUpdate(baseQuery(forKey: key) as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            let query = baseQuery(forKey: key).merging(attributes) { _, new in new }
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
+
         if status == errSecSuccess {
             logger.debug("Saved keychain item for key: \(key)")
             return true
@@ -265,13 +269,19 @@ final class KeychainHelper: Sendable {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: Self.thisDeviceOnlyUpgradeDefaultsKey) else { return }
 
+        var rewritten = true
         for key in [Key.serverPassword, .deviceToken] {
             if let data = getData(forKey: key.rawValue) {
-                save(data, forKey: key.rawValue)
+                rewritten = save(data, forKey: key.rawValue) && rewritten
             }
         }
         _ = getDeviceId()
 
+        // A refused write (a locked keychain at launch, say) is tried again next launch.
+        guard rewritten else {
+            logger.error("Keychain protection upgrade incomplete; will retry next launch")
+            return
+        }
         defaults.set(true, forKey: Self.thisDeviceOnlyUpgradeDefaultsKey)
         logger.info("Keychain items now use the ThisDeviceOnly protection class")
     }

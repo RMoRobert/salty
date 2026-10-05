@@ -934,7 +934,7 @@ struct RecipeWebImportEditView: View {
         }
         .background(Color(.controlBackgroundColor))
         .sheet(isPresented: $viewModel.showingCategoriesSheet) {
-            CategoryEditView(recipe: $viewModel.recipe, selectedCategoryIDs: $viewModel.selectedCategoryIDs)
+            CategoryEditView(selectedCategoryIDs: $viewModel.selectedCategoryIDs)
         }
         .sheet(isPresented: $viewModel.showingPreparationTimesSheet) {
             PreparationTimesEditView(recipe: $viewModel.recipe)

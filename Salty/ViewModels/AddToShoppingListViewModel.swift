@@ -163,12 +163,12 @@ final class AddToShoppingListViewModel {
         let newList = ShoppingList(
             id: UUIDV7().uuidString,
             name: trimmed.isEmpty ? Self.availableNewListName(among: shoppingLists) : trimmed,
-            isFreeform: false,
-            lastModifiedDate: Date()
+            isFreeform: false
         )
         do {
-            try await database.write { db in
-                try ShoppingList.insert { newList }.execute(db)
+            // The writer owns the sync stamp (rounded to wire millis), as for every other list write.
+            _ = try await database.write { db in
+                try ShoppingListWriter.insert(newList, in: db)
             }
             selectedListId = newList.id
             refreshDuplicates()
@@ -193,7 +193,7 @@ final class AddToShoppingListViewModel {
 
         let heading = recipeName.isEmpty ? nil : recipeName
         do {
-            try await database.write { db in
+            _ = try await database.write { db in
                 // The closure sees the stored list, so this appends to what's really there rather
                 // than to a copy this view model loaded earlier.
                 try ShoppingListWriter.update(id: listId, in: db) { list in
@@ -217,7 +217,6 @@ final class AddToShoppingListViewModel {
         }
 
         UserDefaults.standard.set(listId, forKey: Self.lastUsedListKey)
-        ShoppingListChangeNotifier.shared.noteExternalChange(listId: listId)
         return true
     }
 

@@ -34,6 +34,15 @@ struct SchemaOrgRecipeJSONLDImporterShapeTests {
         #expect(recipe.lastModifiedDate == recipe.createdDate)
     }
 
+    /// A page can carry any digit run in a duration; converting it to `Int` used to trap the import.
+    @Test func survivesAnAbsurdDuration() throws {
+        let html = #"<script type="application/ld+json">{"@type":"Recipe","name":"Long","prepTime":"PT99999999999999999999999M","cookTime":"PT30M"}</script>"#
+        let recipe = try #require(importer.parseRecipes(from: html).first)
+        let times = Dictionary(recipe.preparationTimes.map { ($0.type, $0.timeString) }, uniquingKeysWith: { $1 })
+        #expect(times["Prep"] == "PT99999999999999999999999M", "shown as it came rather than converted")
+        #expect(times["Cook"] == "30 min")
+    }
+
     @Test func parsesBareJsonLdWithNoPageAroundIt() {
         let scanned = importer.scanJSONLD(Data(#"{"@type":"Recipe","name":"Bare","image":"b.jpg"}"#.utf8), pageURL: "https://example.com/r/")
         #expect(scanned.map(\.recipe.name) == ["Bare"])

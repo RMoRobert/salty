@@ -168,12 +168,11 @@ public enum IngredientScaler {
             return mixed
         }
 
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 3
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.3f", value)
+        // No grouping: "1500 g" is what `parseNumberToken` reads back; "1,500" is not.
+        let style = FloatingPointFormatStyle<Double>(locale: Locale(identifier: "en_US_POSIX"))
+            .precision(.fractionLength(0...3))
+            .grouping(.never)
+        return value.formatted(style)
     }
 
     /// Denominators a cook would actually write (halves, thirds, quarters, sixths, eighths),
@@ -185,7 +184,9 @@ public enum IngredientScaler {
     /// ~1e-15 (1/3 × 4 = 1.333…). A genuinely inexact amount, even a close decimal approximation
     /// like 0.667 (off from 2/3 by 3e-4), returns nil and keeps its decimal form.
     private static func mixedFractionString(_ value: Double) -> String? {
-        guard value > 0 else { return nil }
+        // `Int(value)` traps past 2^63, and an imported file ("amount": 1e19) can carry any Double.
+        // Nothing that large has a cooking fraction, so it keeps its decimal form.
+        guard value > 0, value < 1e15 else { return nil }
         let whole = Int(value)
         let frac = value - Double(whole)
         // Whole numbers already render cleanly as decimals ("2"); only step in for a fractional part.

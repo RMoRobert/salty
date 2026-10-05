@@ -53,6 +53,14 @@ struct IngredientScalerTests {
         #expect(parts.remainder == "pinch salt")
     }
     
+    @Test func formatScaledAmountSurvivesAbsurdValues() {
+        // An imported file can carry any Double; `Int(_:)` past 2^63 used to trap.
+        #expect(IngredientScaler.formatScaledAmount(1e19) == "10000000000000000000")
+        #expect(IngredientScaler.formatScaledAmount(1e19, preferFraction: false) == "10000000000000000000")
+        #expect(IngredientScaler.formatScaledAmount(.infinity) == "0")
+        #expect(IngredientScaler.formatScaledAmount(1500) == "1500", "no grouping separator: the parser reads it back")
+    }
+
     @Test func formatScaledAmountTrimsZeros() {
         #expect(IngredientScaler.formatScaledAmount(1.5, preferFraction: false) == "1.5")
         #expect(IngredientScaler.formatScaledAmount(2.0) == "2")

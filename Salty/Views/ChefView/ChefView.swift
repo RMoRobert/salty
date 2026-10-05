@@ -20,6 +20,8 @@ import SaltyCore
 struct ChefView: View {
     @State private var viewModel: ChefViewModel
     @Environment(\.dismiss) private var dismiss
+    /// This view's claim on the display staying awake; see `ScreenSleepBlocker`.
+    @State private var sleepHold: ScreenSleepBlocker.Hold?
 
     @AppStorage(ChefViewDisplayStyle.storageKey) private var displayStyle: ChefViewDisplayStyle = .continuous
     @AppStorage(ChefViewTextSize.storageKey) private var textSizeLevel = ChefViewTextSize.defaultLevel
@@ -98,7 +100,10 @@ struct ChefView: View {
         // mirroring TV shows this recipe (see ExternalChefDisplayView); when it goes, the TV
         // returns to its placeholder.
         .onAppear {
-            ScreenSleepBlocker.shared.begin()
+            // One claim per appearance, however many times `onAppear` fires for it.
+            if sleepHold == nil {
+                sleepHold = ScreenSleepBlocker.shared.hold()
+            }
             #if !os(macOS)
             ChefExternalDisplayCoordinator.shared.chefViewAppeared(
                 ChefViewLaunch(recipeId: viewModel.recipeId, scalePercent: viewModel.scaleFactor)
@@ -106,7 +111,10 @@ struct ChefView: View {
             #endif
         }
         .onDisappear {
-            ScreenSleepBlocker.shared.end()
+            if let sleepHold {
+                ScreenSleepBlocker.shared.release(sleepHold)
+                self.sleepHold = nil
+            }
             #if !os(macOS)
             ChefExternalDisplayCoordinator.shared.chefViewDisappeared(recipeId: viewModel.recipeId)
             #endif

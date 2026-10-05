@@ -63,7 +63,7 @@ struct SplitRecipesView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create \(groups.count) Recipe\(groups.count == 1 ? "" : "s")") {
+                    Button("Create ^[\(groups.count) Recipe](inflect: true)") {
                         onCreate(RecipePageSplitter.groupTexts(pageTexts: pageTexts, startPages: startPages))
                         dismiss()
                     }

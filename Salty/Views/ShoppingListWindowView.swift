@@ -15,7 +15,7 @@ import SaltyCore
 ///
 /// Routes to the same two editors the detail column uses (`ShoppingListDetailView` for a checklist,
 /// `ShoppingListFreeformView` for a text list), so a list behaves identically wherever it's open.
-/// Editors in different windows keep each other current through `ShoppingListChangeNotifier`.
+/// Editors in different windows keep each other current by each observing the list's row.
 struct ShoppingListWindowView: View {
     /// The window's value — the list's id. A binding because `WindowGroup(id:for:)` hands one over;
     /// this view only reads it.

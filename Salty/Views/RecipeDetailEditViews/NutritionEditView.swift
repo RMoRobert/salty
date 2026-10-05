@@ -4,229 +4,41 @@
 //
 //  Created by Robert on 7/15/25.
 //
+//  The sheet lays out the fields; what they hold, whether it is a number, and what gets stored is
+//  `NutritionEditModel`'s business (in SaltyCore, with tests).
+//
 
 import SwiftUI
 import SaltyCore
 
-// MARK: - Validated Text Field Component
-struct ValidatedTextField: View {
-    let placeholder: String
-    @Binding var text: String
-    @Binding var isValid: Bool
-    let allowEmpty: Bool
-    
-    init(_ placeholder: String, text: Binding<String>, isValid: Binding<Bool>, allowEmpty: Bool = true) {
-        self.placeholder = placeholder
-        self._text = text
-        self._isValid = isValid
-        self.allowEmpty = allowEmpty
-    }
-    
-    var body: some View {
-        #if !os(macOS)
-        LabeledContent(placeholder) {
-            HStack {
-                TextField("No Information", text: $text)
-                    .textFieldStyle(.plain)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .onChange(of: text) { _, newValue in
-                        validateNumericField(newValue)
-                    }
-                
-                if !isValid {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                }
-            }
-        }
-        #else
-        HStack {
-            TextField(placeholder + ":", text: $text)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .onChange(of: text) { _, newValue in
-                    validateNumericField(newValue)
-                }
-            
-            if !isValid {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                    .font(.caption)
-            }
-        }
-        #endif
-    }
-    
-    private func validateNumericField(_ text: String) {
-        if text.isEmpty && allowEmpty {
-            isValid = true
-        } else {
-            isValid = Double(text) != nil
-        }
-    }
-}
-
 struct NutritionEditView: View {
     @Binding var recipe: Recipe
-    @State private var editingNutrition = NutritionInformation()
+    @State private var model: NutritionEditModel
     @Environment(\.dismiss) private var dismiss
-    
-    // String representations for text fields
-    @State private var servingSizeText: String = ""
-    @State private var caloriesText: String = ""
-    @State private var proteinText: String = ""
-    @State private var carbohydratesText: String = ""
-    @State private var fatText: String = ""
-    @State private var saturatedFatText: String = ""
-    @State private var transFatText: String = ""
-    @State private var fiberText: String = ""
-    @State private var sugarText: String = ""
-    @State private var addedSugarText: String = ""
-    @State private var sodiumText: String = ""
-    @State private var cholesterolText: String = ""
-    @State private var vitaminDText: String = ""
-    @State private var calciumText: String = ""
-    @State private var ironText: String = ""
-    @State private var potassiumText: String = ""
-    @State private var vitaminAText: String = ""
-    @State private var vitaminCText: String = ""
-    
-    // Validation state
-    @State private var isCaloriesValid: Bool = true
-    @State private var isProteinValid: Bool = true
-    @State private var isCarbohydratesValid: Bool = true
-    @State private var isFatValid: Bool = true
-    @State private var isSaturatedFatValid: Bool = true
-    @State private var isTransFatValid: Bool = true
-    @State private var isFiberValid: Bool = true
-    @State private var isSugarValid: Bool = true
-    @State private var isAddedSugarValid: Bool = true
-    @State private var isSodiumValid: Bool = true
-    @State private var isCholesterolValid: Bool = true
-    @State private var isVitaminDValid: Bool = true
-    @State private var isCalciumValid: Bool = true
-    @State private var isIronValid: Bool = true
-    @State private var isPotassiumValid: Bool = true
-    @State private var isVitaminAValid: Bool = true
-    @State private var isVitaminCValid: Bool = true
-    
-    // Computed property to check if there are any validation errors
-    private var hasValidationErrors: Bool {
-        !isCaloriesValid || !isProteinValid || !isCarbohydratesValid || !isFatValid ||
-        !isSaturatedFatValid || !isTransFatValid || !isFiberValid || !isSugarValid ||
-        !isAddedSugarValid || !isSodiumValid || !isCholesterolValid || !isVitaminDValid ||
-        !isCalciumValid || !isIronValid || !isPotassiumValid || !isVitaminAValid || !isVitaminCValid
+
+    init(recipe: Binding<Recipe>) {
+        _recipe = recipe
+        _model = State(initialValue: NutritionEditModel(recipe.wrappedValue.nutrition))
     }
 
-    struct PlatformSpecificSectionHeading: View {
-        let baseText: String
-        var body: some View {
-            #if os(macOS)
-            Text(baseText + ":")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-            #else
-            Text(baseText)
-            #endif
-        }
-    }
-    
-
-    @ViewBuilder
-    private var nutritionFormContent: some View {
-        Section(header: PlatformSpecificSectionHeading(baseText: "General")) {
-            #if !os(macOS)
-            LabeledContent("Serving Size") {
-                TextField("e.g., 1 cup, 2 slices", text: $servingSizeText)
-                    .textFieldStyle(.plain)
-                    .multilineTextAlignment(.trailing)
-            }
-            #else
-            TextField("Serving Size:", text: $servingSizeText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-            #endif
-            
-            ValidatedTextField("Calories", text: $caloriesText, isValid: $isCaloriesValid)
-        }
-        
-        Section(header: PlatformSpecificSectionHeading(baseText: "Macronutrients")) {
-            ValidatedTextField("Protein (g)", text: $proteinText, isValid: $isProteinValid)
-            ValidatedTextField("Carbohydrates (g)", text: $carbohydratesText, isValid: $isCarbohydratesValid)
-            ValidatedTextField("Total Fat (g)", text: $fatText, isValid: $isFatValid)
-            ValidatedTextField("Saturated Fat (g)", text: $saturatedFatText, isValid: $isSaturatedFatValid)
-            ValidatedTextField("Trans Fat (g)", text: $transFatText, isValid: $isTransFatValid)
-            ValidatedTextField("Fiber (g)", text: $fiberText, isValid: $isFiberValid)
-            ValidatedTextField("Sugar (g)", text: $sugarText, isValid: $isSugarValid)
-            ValidatedTextField("Added Sugar (g)", text: $addedSugarText, isValid: $isAddedSugarValid)
-        }
-        
-        Section(header: PlatformSpecificSectionHeading(baseText: "Other Nutrients")) {
-            ValidatedTextField("Sodium (mg)", text: $sodiumText, isValid: $isSodiumValid)
-            ValidatedTextField("Cholesterol (mg)", text: $cholesterolText, isValid: $isCholesterolValid)
-        }
-        
-        Section(header: PlatformSpecificSectionHeading(baseText: "Vitamins and Minerals")) {
-            ValidatedTextField("Vitamin D (μg)", text: $vitaminDText, isValid: $isVitaminDValid)
-            ValidatedTextField("Calcium (mg)", text: $calciumText, isValid: $isCalciumValid)
-            ValidatedTextField("Iron (mg)", text: $ironText, isValid: $isIronValid)
-            ValidatedTextField("Potassium (mg)", text: $potassiumText, isValid: $isPotassiumValid)
-            ValidatedTextField("Vitamin A (μg)", text: $vitaminAText, isValid: $isVitaminAValid)
-            ValidatedTextField("Vitamin C (mg)", text: $vitaminCText, isValid: $isVitaminCValid)
-        }
-    }
-    
     var body: some View {
         NavigationStack {
             #if os(macOS)
             ScrollView {
                 Form {
-                    nutritionFormContent
+                    NutritionFormContent(model: $model)
                 }
                 .padding()
             }
             .navigationTitle("Edit Nutrition Information")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveChanges()
-                        dismiss()
-                    }
-                    .disabled(hasValidationErrors)
-                }
-            }
-            .onAppear {
-                loadInitialValues()
-            }
+            .toolbar { toolbarContent }
             #else
             Form {
-                nutritionFormContent
+                NutritionFormContent(model: $model)
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("Edit Nutrition Information")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveChanges()
-                        dismiss()
-                    }
-                    .disabled(hasValidationErrors)
-                }
-            }
-            .onAppear {
-                loadInitialValues()
-            }
+            .toolbar { toolbarContent }
             #endif
         }
         #if os(macOS)
@@ -235,100 +47,176 @@ struct NutritionEditView: View {
         .presentationSizing(.fitted)
         #endif
     }
-    
-    private func loadInitialValues() {
-        let nutrition = recipe.nutrition ?? NutritionInformation()
-        editingNutrition = nutrition
-        
-        servingSizeText = nutrition.servingSize ?? ""
-        caloriesText = nutrition.calories?.formatted() ?? ""
-        proteinText = nutrition.protein?.formatted() ?? ""
-        carbohydratesText = nutrition.carbohydrates?.formatted() ?? ""
-        fatText = nutrition.fat?.formatted() ?? ""
-        saturatedFatText = nutrition.saturatedFat?.formatted() ?? ""
-        transFatText = nutrition.transFat?.formatted() ?? ""
-        fiberText = nutrition.fiber?.formatted() ?? ""
-        sugarText = nutrition.sugar?.formatted() ?? ""
-        addedSugarText = nutrition.addedSugar?.formatted() ?? ""
-        sodiumText = nutrition.sodium?.formatted() ?? ""
-        cholesterolText = nutrition.cholesterol?.formatted() ?? ""
-        vitaminDText = nutrition.vitaminD?.formatted() ?? ""
-        calciumText = nutrition.calcium?.formatted() ?? ""
-        ironText = nutrition.iron?.formatted() ?? ""
-        potassiumText = nutrition.potassium?.formatted() ?? ""
-        vitaminAText = nutrition.vitaminA?.formatted() ?? ""
-        vitaminCText = nutrition.vitaminC?.formatted() ?? ""
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") {
+                dismiss()
+            }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Save") {
+                recipe.nutrition = model.nutrition
+                dismiss()
+            }
+            .disabled(model.hasInvalidFields)
+        }
     }
-    
-    private func updateNutrition() {
-        editingNutrition.servingSize = servingSizeText.isEmpty ? nil : servingSizeText
-        editingNutrition.calories = Double(caloriesText)
-        editingNutrition.protein = Double(proteinText)
-        editingNutrition.carbohydrates = Double(carbohydratesText)
-        editingNutrition.fat = Double(fatText)
-        editingNutrition.saturatedFat = Double(saturatedFatText)
-        editingNutrition.transFat = Double(transFatText)
-        editingNutrition.fiber = Double(fiberText)
-        editingNutrition.sugar = Double(sugarText)
-        editingNutrition.addedSugar = Double(addedSugarText)
-        editingNutrition.sodium = Double(sodiumText)
-        editingNutrition.cholesterol = Double(cholesterolText)
-        editingNutrition.vitaminD = Double(vitaminDText)
-        editingNutrition.calcium = Double(calciumText)
-        editingNutrition.iron = Double(ironText)
-        editingNutrition.potassium = Double(potassiumText)
-        editingNutrition.vitaminA = Double(vitaminAText)
-        editingNutrition.vitaminC = Double(vitaminCText)
+}
+
+// MARK: - Form
+
+private struct NutritionFormContent: View {
+    @Binding var model: NutritionEditModel
+
+    var body: some View {
+        ForEach(NutritionEditModel.Section.allCases, id: \.self) { section in
+            Section(header: PlatformSpecificSectionHeading(baseText: section.title)) {
+                if section == .general {
+                    ServingSizeField(text: $model.servingSize)
+                }
+                ForEach(section.fields, id: \.self) { field in
+                    NutritionAmountField(
+                        field.label,
+                        text: Binding(get: { model[field] }, set: { model[field] = $0 }),
+                        isValid: model.isValid(field)
+                    )
+                }
+            }
+        }
     }
-    
-    private func saveChanges() {
-        updateNutrition()
-        
-        // Only save if there's actual nutrition data, otherwise set to nil
-        let hasAnyData = !servingSizeText.isEmpty ||
-                        !caloriesText.isEmpty ||
-                        !proteinText.isEmpty ||
-                        !carbohydratesText.isEmpty ||
-                        !fatText.isEmpty ||
-                        !saturatedFatText.isEmpty ||
-                        !transFatText.isEmpty ||
-                        !fiberText.isEmpty ||
-                        !sugarText.isEmpty ||
-                        !addedSugarText.isEmpty ||
-                        !sodiumText.isEmpty ||
-                        !cholesterolText.isEmpty ||
-                        !vitaminDText.isEmpty ||
-                        !calciumText.isEmpty ||
-                        !ironText.isEmpty ||
-                        !potassiumText.isEmpty ||
-                        !vitaminAText.isEmpty ||
-                        !vitaminCText.isEmpty
-        
-        // Create a new instance to ensure SwiftUI detects the change
-        if hasAnyData {
-            let newNutrition = NutritionInformation(
-                servingSize: editingNutrition.servingSize,
-                calories: editingNutrition.calories,
-                protein: editingNutrition.protein,
-                carbohydrates: editingNutrition.carbohydrates,
-                fat: editingNutrition.fat,
-                saturatedFat: editingNutrition.saturatedFat,
-                transFat: editingNutrition.transFat,
-                fiber: editingNutrition.fiber,
-                sugar: editingNutrition.sugar,
-                sodium: editingNutrition.sodium,
-                cholesterol: editingNutrition.cholesterol,
-                addedSugar: editingNutrition.addedSugar,
-                vitaminD: editingNutrition.vitaminD,
-                calcium: editingNutrition.calcium,
-                iron: editingNutrition.iron,
-                potassium: editingNutrition.potassium,
-                vitaminA: editingNutrition.vitaminA,
-                vitaminC: editingNutrition.vitaminC
-            )
-            recipe.nutrition = newNutrition
+}
+
+private struct ServingSizeField: View {
+    @Binding var text: String
+
+    var body: some View {
+        #if !os(macOS)
+        LabeledContent("Serving Size") {
+            TextField("e.g., 1 cup, 2 slices", text: $text)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.trailing)
+        }
+        #else
+        TextField("Serving Size:", text: $text)
+            .textFieldStyle(.roundedBorder)
+        #endif
+    }
+}
+
+/// An amount field that shows a warning while what it holds isn't a number.
+private struct NutritionAmountField: View {
+    let label: String
+    @Binding var text: String
+    let isValid: Bool
+
+    init(_ label: String, text: Binding<String>, isValid: Bool) {
+        self.label = label
+        self._text = text
+        self.isValid = isValid
+    }
+
+    var body: some View {
+        #if !os(macOS)
+        LabeledContent(label) {
+            HStack {
+                TextField("No Information", text: $text)
+                    .textFieldStyle(.plain)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                InvalidAmountMark(isShown: !isValid)
+            }
+        }
+        #else
+        HStack {
+            TextField(label + ":", text: $text)
+                .textFieldStyle(.roundedBorder)
+            InvalidAmountMark(isShown: !isValid)
+        }
+        #endif
+    }
+}
+
+private struct InvalidAmountMark: View {
+    let isShown: Bool
+
+    var body: some View {
+        if isShown {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+                .font(.caption)
+                .accessibilityLabel("Not a number")
+        }
+    }
+}
+
+private struct PlatformSpecificSectionHeading: View {
+    let baseText: String
+
+    var body: some View {
+        #if os(macOS)
+        Text(baseText + ":")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.top, 4)
+        #else
+        Text(baseText)
+        #endif
+    }
+}
+
+// MARK: - Labels
+
+private extension NutritionEditModel.Section {
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .macronutrients: "Macronutrients"
+        case .otherNutrients: "Other Nutrients"
+        case .vitaminsAndMinerals: "Vitamins and Minerals"
+        }
+    }
+}
+
+private extension NutritionEditModel.Field {
+    var label: String {
+        if let unit {
+            "\(name) (\(unit.symbol))"
         } else {
-            recipe.nutrition = nil
+            name
+        }
+    }
+
+    private var name: String {
+        switch self {
+        case .calories: "Calories"
+        case .protein: "Protein"
+        case .carbohydrates: "Carbohydrates"
+        case .fat: "Total Fat"
+        case .saturatedFat: "Saturated Fat"
+        case .transFat: "Trans Fat"
+        case .fiber: "Fiber"
+        case .sugar: "Sugar"
+        case .addedSugar: "Added Sugar"
+        case .sodium: "Sodium"
+        case .cholesterol: "Cholesterol"
+        case .vitaminD: "Vitamin D"
+        case .calcium: "Calcium"
+        case .iron: "Iron"
+        case .potassium: "Potassium"
+        case .vitaminA: "Vitamin A"
+        case .vitaminC: "Vitamin C"
+        }
+    }
+}
+
+private extension NutritionEditModel.Unit {
+    var symbol: String {
+        switch self {
+        case .grams: "g"
+        case .milligrams: "mg"
+        case .micrograms: "μg"
         }
     }
 }

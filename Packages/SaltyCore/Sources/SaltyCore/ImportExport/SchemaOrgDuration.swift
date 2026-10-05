@@ -62,6 +62,10 @@ enum SchemaOrgDuration {
 
         let weeks = values[2] ?? 0, days = values[3] ?? 0
         let hours = values[4] ?? 0, minutes = values[5] ?? 0, seconds = values[6] ?? 0
-        return weeks * 604_800 + days * 86_400 + hours * 3_600 + minutes * 60 + seconds
+        let total = weeks * 604_800 + days * 86_400 + hours * 3_600 + minutes * 60 + seconds
+        // A page can carry "PT99999999999999999999M"; `display` converts to `Int`, which traps past
+        // 2^63. Nothing over a year is a cooking time, so such text is shown as it came.
+        guard total.isFinite, total <= 366 * 86_400 else { return nil }
+        return total
     }
 }

@@ -48,7 +48,7 @@ struct LibraryClassifiersEditView: View {
 
     var body: some View {
         classifierContent
-            .navigationTitle("Edit \(classifier.pluralLabel)")
+            .navigationTitle("Edit \(classifier.pluralName)")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -121,7 +121,7 @@ struct LibraryClassifiersEditView: View {
         Table(viewModel.items, selection: $viewModel.selection, sortOrder: $viewModel.tableSortOrder) {
             TableColumn("Name", value: \.name) { item in
                 if viewModel.isEditing(item.id) {
-                    nameField(prompt: classifier.singularLabel, conflictAction: .merge)
+                    nameField(prompt: classifier.singularName, conflictAction: .merge)
                 } else {
                     Text(item.name)
                 }
@@ -130,7 +130,7 @@ struct LibraryClassifiersEditView: View {
                 Text(item.recipeCount, format: .number)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel(item.recipeCount == 1 ? "1 recipe" : "\(item.recipeCount) recipes")
+                    .accessibilityLabel(Text("^[\(item.recipeCount) recipe](inflect: true)"))
             }
             .width(min: 55, ideal: 70, max: 90)
             .alignment(.numeric)
@@ -172,7 +172,7 @@ struct LibraryClassifiersEditView: View {
     private var newRowBar: some View {
         VStack(spacing: 0) {
             Divider()
-            nameField(prompt: "New \(classifier.singularLabel)", conflictAction: .reveal)
+            nameField(prompt: "New \(classifier.singularName)", conflictAction: .reveal)
                 .padding(10)
         }
         .background(.bar)
@@ -186,7 +186,7 @@ struct LibraryClassifiersEditView: View {
         List(selection: $viewModel.selection) {
             ForEach(viewModel.items) { item in
                 if viewModel.isEditing(item.id) {
-                    nameField(prompt: classifier.singularLabel, conflictAction: .merge)
+                    nameField(prompt: classifier.singularName, conflictAction: .merge)
                 } else if isSelecting {
                     // Plain content in Select mode, so taps toggle the checkmark instead of firing
                     // a rename.
@@ -227,7 +227,7 @@ struct LibraryClassifiersEditView: View {
                 }
             }
             if viewModel.isCreating {
-                nameField(prompt: "New \(classifier.singularLabel)", conflictAction: .reveal)
+                nameField(prompt: "New \(classifier.singularName)", conflictAction: .reveal)
                     .id(LibraryClassifiersEditViewModel.newRowID)
             }
         }
@@ -315,14 +315,14 @@ struct LibraryClassifiersEditView: View {
             }
         }
         if ids.isEmpty {
-            Button("New \(classifier.singularLabel)", systemImage: "plus") {
+            Button("New \(classifier.singularName)", systemImage: "plus") {
                 Task { await viewModel.beginCreating() }
             }
         } else {
             Button(role: .destructive) {
                 viewModel.requestDeletion(ids: ids)
             } label: {
-                Label(ids.count == 1 ? "Delete" : "Delete \(ids.count) \(classifier.pluralLabel)", systemImage: "trash")
+                Label(ids.count == 1 ? "Delete" : "Delete \(ids.count) \(classifier.pluralName)", systemImage: "trash")
             }
         }
     }
@@ -333,15 +333,24 @@ struct LibraryClassifiersEditView: View {
                 ContentUnavailableView.search(text: viewModel.searchText)
             } else {
                 ContentUnavailableView {
-                    Label("No \(classifier.pluralLabel)", systemImage: classifier.systemImage)
+                    Label("No \(classifier.pluralName)", systemImage: emptyStateSymbol)
                 } description: {
                     Text(emptyStateDescription)
                 } actions: {
-                    Button("New \(classifier.singularLabel)", systemImage: "plus") {
+                    Button("New \(classifier.singularName)", systemImage: "plus") {
                         Task { await viewModel.beginCreating() }
                     }
                 }
             }
+        }
+    }
+
+    /// The sidebar's icon for these rows.
+    private var emptyStateSymbol: String {
+        switch classifier {
+        case .category: "rectangle.stack"
+        case .course: "fork.knife"
+        case .tag: "tag"
         }
     }
 
@@ -395,10 +404,10 @@ struct LibraryClassifiersEditView: View {
             .disabled(!viewModel.canMerge)
             .help("Merge")
 
-            Button("New \(classifier.singularLabel)", systemImage: "plus") {
+            Button("New \(classifier.singularName)", systemImage: "plus") {
                 Task { await viewModel.beginCreating() }
             }
-            .help("New \(classifier.singularLabel)")
+            .help("New \(classifier.singularName)")
         }
         #else
         // The bar belongs to whichever mode is active, the way iOS hands a whole bar to a sub-mode
@@ -514,7 +523,7 @@ private struct LibraryClassifierRowView: View {
             Text(item.recipeCount, format: .number)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-                .accessibilityLabel(item.recipeCount == 1 ? "1 recipe" : "\(item.recipeCount) recipes")
+                .accessibilityLabel(Text("^[\(item.recipeCount) recipe](inflect: true)"))
         }
         .contentShape(.rect)
     }
@@ -577,7 +586,7 @@ private struct ClassifierNameFieldView: View {
             guard !focused else { return }
             endEditing()
         }
-        .accessibilityLabel("\(classifier.singularLabel) name")
+        .accessibilityLabel("\(classifier.singularName) name")
     }
 }
 

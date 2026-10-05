@@ -16,12 +16,16 @@ import Flow
 
 struct RecipeDetailEditDesktopView: View {
     @Environment(\.dismiss) var dismiss
-    @Bindable var viewModel: RecipeDetailEditViewModel
+    /// Owned with `@State` so SwiftUI keeps this one instance for the life of the editor. A plain
+    /// stored property is rebuilt whenever the host re-evaluates the sheet's content -- which happens
+    /// mid-edit, since the hosts build the editor from an observed row -- and every unsaved edit went
+    /// with it.
+    @State private var viewModel: RecipeDetailEditViewModel
     @State private var showingAddTagAlert = false
     @State private var newTagName = ""
-    
+
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
-        self.viewModel = RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved)
+        _viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
     }
     
     var body: some View {
@@ -94,6 +98,7 @@ struct RecipeDetailEditDesktopView: View {
         .sheet(isPresented: $viewModel.showingScanTextSheet) {
             ScanTextForRecipeView(viewModel: viewModel, initialTarget: viewModel.scanTextTarget)
         }
+        .task { await viewModel.loadClassification() }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -113,7 +118,7 @@ struct RecipeDetailEditDesktopView: View {
             return 
         }
         newTagName = ""
-        Task { await viewModel.addTag(trimmedTag) }
+        viewModel.addTag(trimmedTag)
     }
     
     
@@ -154,7 +159,7 @@ struct RecipeDetailEditDesktopView: View {
                             viewModel.showingEditCategoriesSheet.toggle()
                         }
                         .popover(isPresented: $viewModel.showingEditCategoriesSheet) {
-                            CategoryEditView(recipe: $viewModel.recipe, selectedCategoryIDs: $viewModel.selectedCategoryIDs)
+                            CategoryEditView(selectedCategoryIDs: $viewModel.classification.categoryIDs)
                         }
                     }
                 }
@@ -362,7 +367,7 @@ struct RecipeDetailEditDesktopView: View {
                 HFlow(itemSpacing: 8, rowSpacing: 4) {
                     ForEach(viewModel.sortedTags, id: \.self) { tag in
                         Button(action: {
-                            Task { await viewModel.removeTag(tag) }
+                            viewModel.removeTag(tag)
                         }) {
                             Label(tag, systemImage: "minus.circle")
                                 .padding(.horizontal, 8)

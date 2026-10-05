@@ -1,22 +1,16 @@
- //
-//  ImportView.swift
+//
+//  OpenDBView.swift
 //  Salty
 //
 //  Created by Robert on 7/9/23.
 //
 
 import SwiftUI
-import OSLog
 
 struct OpenDBView: View {
-    private let logger = Logger(subsystem: "Salty", category: "FileAccess")
     @Environment(\.dismiss) private var dismiss
     @State private var showingFolderPicker = false
-    @State private var isOpening = false
-    @State private var currentLocation = FileManager.saltyLibraryDirectory
-    @State private var showingSuccessAlert = false
-    @State private var showingErrorAlert = false
-    @State private var errorMessage = ""
+    @State private var viewModel = DatabaseLocationViewModel()
     
     var body: some View {
         VStack {
@@ -29,17 +23,16 @@ struct OpenDBView: View {
                     showingFolderPicker.toggle() 
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isOpening)
                 .fileImporter(
                     isPresented: $showingFolderPicker,
                     allowedContentTypes: [.folder]
                 ) { result in
                     switch result {
                     case .success(let url):
-                        openDatabase(at: url)
+                        Task { await viewModel.openDatabase(at: url) }
                     case .failure(let error):
-                        logger.error("\(error.localizedDescription)")
-                        errorMessage = "Failed to select folder: \(error.localizedDescription)"
-                        showingErrorAlert = true
+                        viewModel.folderSelectionFailed(error)
                     }
                 }
                 .padding()
@@ -53,7 +46,7 @@ struct OpenDBView: View {
             
             Spacer()
             
-            if isOpening {
+            if viewModel.isOpening {
                 VStack(spacing: 12) {
                     ProgressView()
                         .scaleEffect(1.2)
@@ -68,9 +61,14 @@ struct OpenDBView: View {
             }
             
             VStack(spacing: 8) {
-                Text("Current location: \(currentLocation.relativePath)")
+                Text("Current location: \(viewModel.currentLocation.relativePath)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let pending = viewModel.pendingLocation {
+                    Text("After restarting: \(pending.relativePath)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 
                 VStack(spacing: 8) {
                     Text("To clear any custom location and use the default:")
@@ -78,9 +76,9 @@ struct OpenDBView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     Button("Revert to Default Location") {
-                        UserDefaults.standard.removeObject(forKey: FileManager.userDefaultsDatabaseParentLocationKey)
-                        showingSuccessAlert = true
+                        viewModel.revertToDefaultLocation()
                     }
+                    .disabled(viewModel.isOpening)
                     #if os(macOS)
                     .buttonStyle(.link)
                     #endif
@@ -100,59 +98,30 @@ struct OpenDBView: View {
         }
         .padding()
         .frame(idealWidth: 350, maxWidth: 400, idealHeight: 300)
-        .alert("Database Location Updated", isPresented: $showingSuccessAlert) {
-            Button("OK") {
-                dismiss()
+        .alert("Database Location Updated", isPresented: $viewModel.showingSuccessAlert) {
+            if AppRelauncher.isAvailable {
+                Button("Relaunch Now") {
+                    Task { await AppRelauncher.relaunch() }
+                }
+                Button("Later", role: .cancel) {
+                    dismiss()
+                }
+            } else {
+                Button("OK") {
+                    dismiss()
+                }
             }
         } message: {
-            Text("The database location has been successfully updated. Please restart Salty to use the new location.")
+            if AppRelauncher.isAvailable {
+                Text("Salty will use the new location after it relaunches.")
+            } else {
+                Text("The database location has been updated. Close Salty from the app switcher and open it again to use the new location.")
+            }
         }
-        .alert("Error", isPresented: $showingErrorAlert) {
+        .alert("Error", isPresented: $viewModel.showingErrorAlert) {
             Button("OK") { }
         } message: {
-            Text(errorMessage)
-        }
-    }
-    
-    private func openDatabase(at url: URL) {
-        isOpening = true
-        logger.debug("Starting database open...")
-
-        // Remember the prior bookmark so a failed switch can be rolled back instead of leaving
-        // the app pointed at a folder it can't use on next launch.
-        let previousBookmark = UserDefaults.standard.data(forKey: FileManager.userDefaultsDatabaseParentLocationKey)
-
-        do {
-            guard url.startAccessingSecurityScopedResource() else {
-                logger.error("Unable to startAccessingSecurityScopedResource for \(url)")
-                errorMessage = "Unable to access the selected folder. Please try again."
-                showingErrorAlert = true
-                isOpening = false
-                return
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-
-            try FileManager.saveCustomLocationBookmarks(parentDirectory: url)
-
-            // Initialize the location now rather than at next launch: creates the library bundle
-            // and schema in an empty folder (matching SaltyKMP), or opens and migrates a moved
-            // library — so an unusable folder fails here in the dialog. The returned connection
-            // is discarded; the app keeps using its current database until relaunch.
-            _ = try appDatabase()
-
-            isOpening = false
-            showingSuccessAlert = true
-        } catch {
-            logger.error("Unable to switch database location: \(error.localizedDescription)")
-            if let previousBookmark {
-                UserDefaults.standard.set(previousBookmark, forKey: FileManager.userDefaultsDatabaseParentLocationKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: FileManager.userDefaultsDatabaseParentLocationKey)
-            }
-            FileManager.refreshCustomDatabaseBookmark()
-            errorMessage = "Failed to open a library in the selected folder: \(error.localizedDescription)"
-            showingErrorAlert = true
-            isOpening = false
+            Text(viewModel.errorMessage)
         }
     }
 }

@@ -35,10 +35,10 @@ extension Recipe {
                 try Course.where { $0.id.eq(cid) }.fetchOne(db)?.name
             }
             let categoryIds = try RecipeCategory.where { $0.recipeId.eq(recipeId) }.fetchAll(db).map(\.categoryId)
-            let categories = try Category.where { categoryIds.contains($0.id) }.fetchAll(db)
+            let categories = try Category.where { $0.id.in(categoryIds) }.fetchAll(db)
                 .map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             let tagIds = try RecipeTag.where { $0.recipeId.eq(recipeId) }.fetchAll(db).map(\.tagId)
-            let tags = try Tag.where { tagIds.contains($0.id) }.fetchAll(db)
+            let tags = try Tag.where { $0.id.in(tagIds) }.fetchAll(db)
                 .map(\.name).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             return RecipeLibraryNames(course: course, categories: categories, tags: tags)
         }) ?? .empty

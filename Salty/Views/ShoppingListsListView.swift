@@ -58,9 +58,10 @@ struct ShoppingListsListView: View {
                             #endif
                     }
                     #if !os(macOS)
+                    // Confirmed like every other delete path: there is no trash to recover from.
                     .onDelete { offsets in
                         let ids = Set(offsets.map { viewModel.shoppingLists[$0].id })
-                        Task { await viewModel.deleteShoppingLists(ids: ids) }
+                        confirmDelete(ids: ids)
                     }
                     #endif
                     #if !os(macOS)
@@ -146,7 +147,7 @@ struct ShoppingListsListView: View {
             }
         } message: {
             // No name preview: a multi-selection has no single list to name.
-            Text("Are you sure you want to delete \(deleteCandidateIds.count) shopping list\(deleteCandidateIds.count == 1 ? "" : "s")? This action cannot be undone.")
+            Text("Are you sure you want to delete ^[\(deleteCandidateIds.count) shopping list](inflect: true)? This action cannot be undone.")
         }
     }
 

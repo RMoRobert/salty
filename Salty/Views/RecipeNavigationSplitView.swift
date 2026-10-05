@@ -105,61 +105,26 @@ struct RecipeNavigationSplitView: View {
     // sidebar column to drop its toggle makes the split view briefly report `.all` (iPadOS 26/27),
     // which would otherwise read as "the user brought the columns back" and cancel the mode.
     @State private var isEnteringDetailOnly = false
-    @State private var showingEditLibCategoriesSheet = false
-    @State private var showingEditLibTagsSheet = false
-    @State private var showingEditLibCoursesSheet = false
-    @State private var showingImportFromFileSheet = false
-    @State private var showingCreateFromImageSheet = false
-    @State private var showingCreateFromWebSheet = false
-    @State private var showingSettingsSheet = false
-    @State private var showingDuplicateRecipesSheet = false
-    @State private var showingConsolidateDuplicatesSheet = false
+    /// The sheet this window is showing from its root, if any. See `MainSheet`.
+    @State private var activeSheet: MainSheet?
     @State private var showingFirstLaunchAlert = false
 
     private var isAnySheetShown: Bool {
-        showingEditLibCategoriesSheet ||
-        showingEditLibTagsSheet ||
-        showingEditLibCoursesSheet ||
-        showingImportFromFileSheet ||
-        showingCreateFromImageSheet ||
-        showingCreateFromWebSheet ||
-        showingSettingsSheet ||
-        showingDuplicateRecipesSheet ||
-        showingConsolidateDuplicatesSheet
+        activeSheet != nil
     }
 
-    private func notifySheetStateChanged() {
-        NotificationCenter.default.post(
-            name: .sheetStateChanged,
-            object: nil,
-            userInfo: ["isShown": isAnySheetShown]
-        )
-    }
-
-    /// Everything the menu bar derives from the selection, in one Equatable value.
-    ///
-    /// One `onChange` rather than two: the menus need re-posting both when the selection moves (count,
-    /// enablement) and when the Last Prepared value changes under a stable selection (mark a recipe made
-    /// and the heading should follow). Keyed on this short string rather than on `viewModel.recipes` so
-    /// the comparison doesn't walk every row's thumbnail blob — and so a selection swap that changes
-    /// neither count nor date skips a post that would carry identical contents.
-    private var recipeSelectionMenuState: String {
-        "\(viewModel.selectedRecipeIDs.count)|\(viewModel.lastPreparedSummaryForSelection)"
-    }
-
-    private func postRecipeSelectionChanged() {
-        let count = viewModel.selectedRecipeIDs.count
-        NotificationCenter.default.post(
-            name: .recipeSelectionChanged,
-            object: nil,
-            userInfo: [
-                "hasSelected": count > 0,
-                "count": count,
-                // The menu bar's Last Prepared heading. Sent with the selection because that's the only
-                // channel Commands can see, and re-sent on the value change below so marking a recipe
-                // made refreshes the heading without the selection moving.
-                "lastPreparedSummary": viewModel.lastPreparedSummaryForSelection,
-            ]
+    /// What the menu bar may ask this window to do; see `MainWindowCommands`. Published as a
+    /// scene-scoped focused value, so a command reaches the frontmost main window and no other.
+    private var mainWindowCommands: MainWindowCommands {
+        MainWindowCommands(
+            isAnySheetShown: isAnySheetShown,
+            newRecipe: { viewModel.addNewRecipe() },
+            importFromFile: { activeSheet = .importFromFile },
+            createFromWeb: { activeSheet = .createFromWeb },
+            exportRecipeFile: { viewModel.exportSelectedRecipes() },
+            exportHTML: { viewModel.showHTMLExportSettings() },
+            exportJSONLD: { viewModel.exportSelectedRecipesAsJSONLD() },
+            printSelection: { viewModel.printSelectedRecipes() }
         )
     }
 
@@ -223,13 +188,13 @@ struct RecipeNavigationSplitView: View {
             if removeSidebarToggle {
                 SidebarColumnView(
                     viewModel: viewModel,
-                    showingSettingsSheet: $showingSettingsSheet
+                    activeSheet: $activeSheet
                 )
                 .toolbar(removing: .sidebarToggle) // reduntant with arrows toolbar icon, so removing (only) if detail view expanded to full
             } else {
                 SidebarColumnView(
                     viewModel: viewModel,
-                    showingSettingsSheet: $showingSettingsSheet
+                    activeSheet: $activeSheet
                 )
             }
         } content: {
@@ -238,16 +203,7 @@ struct RecipeNavigationSplitView: View {
             } else {
                 RecipeListColumnView(
                     viewModel: viewModel,
-                    isAnySheetShown: isAnySheetShown,
-                    showingImportFromFileSheet: $showingImportFromFileSheet,
-                    showingCreateFromImageSheet: $showingCreateFromImageSheet,
-                    showingCreateFromWebSheet: $showingCreateFromWebSheet,
-                    showingSettingsSheet: $showingSettingsSheet,
-                    showingEditLibCategoriesSheet: $showingEditLibCategoriesSheet,
-                    showingEditLibTagsSheet: $showingEditLibTagsSheet,
-                    showingEditLibCoursesSheet: $showingEditLibCoursesSheet,
-                    showingDuplicateRecipesSheet: $showingDuplicateRecipesSheet,
-                    showingConsolidateDuplicatesSheet: $showingConsolidateDuplicatesSheet
+                    activeSheet: $activeSheet
                 )
             }
         } detail: {
@@ -259,54 +215,14 @@ struct RecipeNavigationSplitView: View {
         .navigationTitle("Recipes")
         .modifier(RootPresentationsModifier(
             viewModel: viewModel,
-            showingImportFromFileSheet: $showingImportFromFileSheet,
-            showingCreateFromImageSheet: $showingCreateFromImageSheet,
-            showingCreateFromWebSheet: $showingCreateFromWebSheet,
-            showingEditLibCategoriesSheet: $showingEditLibCategoriesSheet,
-            showingEditLibTagsSheet: $showingEditLibTagsSheet,
-            showingEditLibCoursesSheet: $showingEditLibCoursesSheet,
-            showingSettingsSheet: $showingSettingsSheet,
-            showingDuplicateRecipesSheet: $showingDuplicateRecipesSheet,
-            showingConsolidateDuplicatesSheet: $showingConsolidateDuplicatesSheet,
+            activeSheet: $activeSheet,
             showingFirstLaunchAlert: $showingFirstLaunchAlert
         ))
-        .onReceive(NotificationCenter.default.publisher(for: .createNewRecipe)) { _ in
-            viewModel.addNewRecipe()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showDuplicateRecipes)) { _ in
-            showingDuplicateRecipesSheet = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showConsolidateDuplicates)) { _ in
-            showingConsolidateDuplicatesSheet = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipes)) { _ in
-            viewModel.exportSelectedRecipes()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipesAsHTML)) { _ in
-            viewModel.showHTMLExportSettings()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .exportSelectedRecipesAsJSONLD)) { _ in
-            viewModel.exportSelectedRecipesAsJSONLD()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .printSelectedRecipes)) { _ in
-            viewModel.printSelectedRecipes()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showImportFromFileSheet)) { _ in
-            showingImportFromFileSheet = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showCreateFromWebSheet)) { _ in
-            showingCreateFromWebSheet = true
-        }
+        .focusedSceneValue(\.mainWindowCommands, mainWindowCommands)
         .onReceive(NotificationCenter.default.publisher(for: .recipeImportedFromWeb)) { notification in
             if let recipeId = notification.userInfo?["recipeId"] as? String {
                 viewModel.handleNewRecipeSaved(recipeId: recipeId)
             }
-        }
-        .onChange(of: recipeSelectionMenuState) { _, _ in
-            postRecipeSelectionChanged()
-        }
-        .onChange(of: isAnySheetShown) { _, _ in
-            notifySheetStateChanged()
         }
         .onChange(of: showRecipeDetailOnly) { _, detailOnly in
             applyDetailOnlyMode(detailOnly)
@@ -330,9 +246,6 @@ struct RecipeNavigationSplitView: View {
 
             // Set to true after successful view load
             offeredSampleImport = true
-
-            // Notify menu about initial selection state
-            postRecipeSelectionChanged()
         }
     }
 }
@@ -341,7 +254,7 @@ struct RecipeNavigationSplitView: View {
 
 private struct SidebarColumnView: View {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
-    @Binding var showingSettingsSheet: Bool
+    @Binding var activeSheet: MainSheet?
 
     @AppStorage("sidebarShowFavorites") private var showFavorites = true
     @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
@@ -461,7 +374,7 @@ private struct SidebarColumnView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
-                    showingSettingsSheet = true
+                    activeSheet = .settings
                 } label: {
                     Label("Settings", systemImage: "gear")
                 }
@@ -507,28 +420,24 @@ private struct SidebarColumnView: View {
 
 private struct RecipeListColumnView: View {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
-    let isAnySheetShown: Bool
-    @Binding var showingImportFromFileSheet: Bool
-    @Binding var showingCreateFromImageSheet: Bool
-    @Binding var showingCreateFromWebSheet: Bool
-    @Binding var showingSettingsSheet: Bool
-    @Binding var showingEditLibCategoriesSheet: Bool
-    @Binding var showingEditLibTagsSheet: Bool
-    @Binding var showingEditLibCoursesSheet: Bool
-    @Binding var showingDuplicateRecipesSheet: Bool
-    @Binding var showingConsolidateDuplicatesSheet: Bool
+    @Binding var activeSheet: MainSheet?
 
     @Environment(\.openWindow) private var openWindow
-    @State private var searchOptionsTracker = SearchOptionsTracker()
     @FocusState private var isSearchFieldFocused: Bool
     @State private var isEditMode = false
     @State private var showingDeleteConfirmation = false
+    /// The recipes the delete confirmation is about: the selection, or the row swiped on iOS.
+    @State private var deleteCandidateIDs = Set<String>()
     @State private var recipeIDForInspector: String? = nil
     /// Recipes awaiting a custom "last made" date, and the date being picked. Non-nil `lastMadePickerDate`
     /// drives the sheet, so the two are set together when "Set Date…" is chosen.
     @State private var lastMadeTargetIDs: [String] = []
     @State private var lastMadePickerDate: Date? = nil
     private let logger = Logger(subsystem: "Salty", category: "UI")
+
+    private var isAnySheetShown: Bool {
+        activeSheet != nil
+    }
 
     #if os(macOS)
     /// Exists only to bump once after recipe list appears to force rebuild the toolbar's New Recipe split button.
@@ -563,39 +472,37 @@ private struct RecipeListColumnView: View {
     private var libraryMenu: some View {
         Menu("Library", systemImage: "books.vertical") {
             Button("Category Editor") {
-                showingEditLibCategoriesSheet = true
+                activeSheet = .libraryEditor(.category)
             }
             Button("Tag Editor") {
-                showingEditLibTagsSheet = true
+                activeSheet = .libraryEditor(.tag)
             }
             Button("Course Editor") {
-                showingEditLibCoursesSheet = true
+                activeSheet = .libraryEditor(.course)
             }
             Divider()
             Button("Show Duplicate Recipes…") {
-                showingDuplicateRecipesSheet = true
+                activeSheet = .duplicateRecipes
             }
             Button("Consolidate Duplicate Categories, Courses, and Tags…") {
-                showingConsolidateDuplicatesSheet = true
+                activeSheet = .consolidateDuplicates
             }
         }
     }
 
-    /// Scrolls the list to a newly added recipe once its row actually exists.
+    /// Scrolls the list to a recipe whose row has just arrived (see `reconcileSelection()`).
     ///
-    /// The row can't be scrolled to right away; the database write has to propagate through
-    /// `@FetchAll`, and when the sidebar selection also changed (as it does after an import) the
-    /// list query is re-issued and reloaded asynchronously. Wait for the row to appear (replaces old
-    /// awkward, fixed-delay workaround).
-    private func scrollToNewRecipe(id: String, proxy: ScrollViewProxy) async {
-        guard await waitForSettledRecipeRow(id: id) else {
-            logger.warning("Recipe \(id) did not appear in the list; skipped scrolling to this recipe.")
-            return
-        }
+    /// Multiple scroll tries since seems to not make it all the way to item if at bottom of large
+    /// list, possibly as view stil builds row. Make animation short (but present) for first try,
+    /// instant for later "catch-ups" if needed.
+    /// Every delete goes through the one confirmation, whichever control asked for it.
+    private func confirmDelete(ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        deleteCandidateIDs = ids
+        showingDeleteConfirmation = true
+    }
 
-        // Multiple scroll tries since seems to not make it all the way to item if at bottom of large
-        // list, possibly as view stil builds row. Make animation short (but present) for first try,
-        // instant for later "catch-ups" if needed.
+    private func scrollToNewRecipe(id: String, proxy: ScrollViewProxy) async {
         withAnimation(.easeOut(duration: 0.2)) {
             proxy.scrollTo(id, anchor: .center)
         }
@@ -603,40 +510,6 @@ private struct RecipeListColumnView: View {
             try? await Task.sleep(for: .milliseconds(250))
             proxy.scrollTo(id, anchor: .center)
         }
-    }
-
-    /// Waits for the new recipe's row to appear *and* for the list contents to stop changing, so the
-    /// scroll isn't issued against a list that is still swapping in the results of a reloaded query.
-    /// Returns false if the row never showed up.
-    private func waitForSettledRecipeRow(id: String) async -> Bool {
-        let pollInterval = Duration.milliseconds(50)
-        let maxAttempts = 100 // ~5 seconds
-        let requiredStablePolls = 3
-        var stablePolls = 0
-        var lastCount = -1
-
-        for _ in 0..<maxAttempts {
-            let currentRecipes = viewModel.recipes
-            let containsRow = currentRecipes.contains { $0.id == id }
-            stablePolls = (containsRow && currentRecipes.count == lastCount) ? stablePolls + 1 : 0
-            lastCount = currentRecipes.count
-
-            if stablePolls >= requiredStablePolls {
-                return true
-            }
-            try? await Task.sleep(for: pollInterval)
-        }
-
-        return false
-    }
-
-    private var recipeQueryId: String {
-        // Include search options in the query ID so changes trigger refresh
-        // Use the tracker's changeId to force update when search options change
-        let searchOptionsKey = RecipeListSearchOptions.allCases
-            .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
-            .joined(separator: "")
-        return "\(viewModel.searchString)||\(viewModel.selectedSidebarItem?.queryKey ?? "")||\(viewModel.isFavoritesFilterActive)||\(viewModel.recipeListSortOrder.rawValue)||\(viewModel.recipeListSortDirection.rawValue)||\(searchOptionsKey)||\(searchOptionsTracker.changeId.uuidString)"
     }
 
     var body: some View {
@@ -666,23 +539,21 @@ private struct RecipeListColumnView: View {
                         #endif
                 }
                 #if !os(macOS)
+                // Confirmed like every other delete path: there is no trash to recover from.
                 .onDelete { indexSet in
-                    withAnimation {
-                        let recipesToDelete = indexSet.compactMap { index in
-                            viewModel.recipes.indices.contains(index) ? viewModel.recipes[index] : nil
-                        }
-                        for recipe in recipesToDelete {
-                            Task { await viewModel.deleteRecipe(id: recipe.id) }
-                        }
-                    }
+                    let ids = Set(indexSet.compactMap { index in
+                        viewModel.recipes.indices.contains(index) ? viewModel.recipes[index].id : nil
+                    })
+                    confirmDelete(ids: ids)
                 }
                 #endif
             }
-            .onChange(of: viewModel.shouldScrollToNewRecipe) { _, shouldScroll in
-                guard shouldScroll, let newId = viewModel.selectedRecipeIDs.first else { return }
-                // Reset the flag so a later addition can trigger another scroll
-                viewModel.shouldScrollToNewRecipe = false
-                Task { await scrollToNewRecipe(id: newId, proxy: proxy) }
+            // The rows changed: drop selected recipes that are no longer shown, and scroll to a
+            // just-saved one once its row is here. Replaces a 50 ms poll that waited for the row.
+            .onChange(of: viewModel.recipes) { _, _ in
+                if let arrived = viewModel.reconcileSelection() {
+                    Task { await scrollToNewRecipe(id: arrived, proxy: proxy) }
+                }
             }
         }
         .overlay {
@@ -732,17 +603,7 @@ private struct RecipeListColumnView: View {
                 }
             )
         }
-        // This sheet lives in the list column, not the outer view that owns `isAnySheetShown`, so it
-        // reports its own state — otherwise the menu bar would still offer commands that open a second
-        // sheet while the picker is up.
-        .onChange(of: lastMadePickerDate) { _, date in
-            NotificationCenter.default.post(
-                name: .sheetStateChanged,
-                object: nil,
-                userInfo: ["isShown": date != nil]
-            )
-        }
-        .task(id: recipeQueryId) {
+        .task(id: viewModel.recipeQueryKey) {
             await viewModel.updateRecipesQuery()
         }
         #if !os(macOS)
@@ -767,7 +628,7 @@ private struct RecipeListColumnView: View {
                     .disabled(viewModel.selectedRecipeIDs.isEmpty)
 
                     Button(role: .destructive, action: {
-                        showingDeleteConfirmation = true
+                        confirmDelete(ids: viewModel.selectedRecipeIDs)
                     }) {
                         Label("Delete", systemImage: "trash")
                     }
@@ -782,13 +643,13 @@ private struct RecipeListColumnView: View {
                     }
                     Divider()
                     Button("Create from Image…") {
-                        showingCreateFromImageSheet = true
+                        activeSheet = .createFromImage
                     }
                     Button("Import from File…") {
-                        showingImportFromFileSheet = true
+                        activeSheet = .importFromFile
                     }
                     Button("Create from Web…") {
-                        showingCreateFromWebSheet = true
+                        activeSheet = .createFromWeb
                     }
                 } label: {
                     Label("New Recipe", systemImage: "plus")
@@ -840,7 +701,7 @@ private struct RecipeListColumnView: View {
                     #if !os(macOS)
                     Divider()
                     Button("Settings…", systemImage: "gear") {
-                        showingSettingsSheet = true
+                        activeSheet = .settings
                     }
                     #endif
                 }, label: {
@@ -901,7 +762,7 @@ private struct RecipeListColumnView: View {
                 }
 
                 Button(role: .destructive, action: {
-                    showingDeleteConfirmation = true
+                    confirmDelete(ids: viewModel.selectedRecipeIDs)
                 }) {
                     Label("Delete Recipe", systemImage: "trash")
                 }
@@ -922,7 +783,7 @@ private struct RecipeListColumnView: View {
                         openWindow(id: "create-recipe-from-image-window")
                     }
                     Button("Import from File…") {
-                        showingImportFromFileSheet = true
+                        activeSheet = .importFromFile
                     }
                     .disabled(isAnySheetShown)
                 } label: {
@@ -936,10 +797,11 @@ private struct RecipeListColumnView: View {
             }
             #endif
         }
-        .alert("Delete Recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
+        .alert("Delete Recipe\(deleteCandidateIDs.count == 1 ? "" : "s")?", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                Task { await viewModel.deleteSelectedRecipes() }
+                let ids = deleteCandidateIDs
+                Task { await viewModel.deleteRecipes(ids: ids) }
                 #if !os(macOS)
                 // Delay exiting edit mode to let deletion animation complete
                 Task {
@@ -949,7 +811,7 @@ private struct RecipeListColumnView: View {
                 #endif
             }
         } message: {
-            Text("Are you sure you want to delete \(viewModel.selectedRecipeIDs.count) recipe\(viewModel.selectedRecipeIDs.count == 1 ? "" : "s")? This action cannot be undone.")
+            Text("Are you sure you want to delete ^[\(viewModel.selectedRecipeIDs.count) recipe](inflect: true)? This action cannot be undone.")
         }
         .fileExporter(
             isPresented: $viewModel.showingExportSheet,
@@ -973,9 +835,7 @@ private struct RecipeListColumnView: View {
         }
         #if os(macOS)
         .onDeleteCommand {
-            if !viewModel.selectedRecipeIDs.isEmpty {
-                showingDeleteConfirmation = true
-            }
+            confirmDelete(ids: viewModel.selectedRecipeIDs)
         }
         .task {
             newRecipeMenuRefreshID += 1  // workaround for SwiftUI oddity; see comment above
@@ -989,46 +849,55 @@ private struct RecipeListColumnView: View {
         #if !os(macOS)
         .refreshable { await ManualSyncRunner.shared.sync() }
         #endif
-        .onReceive(NotificationCenter.default.publisher(for: .showRecipeInfoInspector)) { _ in
-            if let recipeId = viewModel.selectedRecipeIDs.first {
-                recipeIDForInspector = recipeId
-            }
-        }
-        // "Last Made" from the menu bar, applied to the whole selection like the other selection commands.
-        // The menu items are already disabled without a selection; the guards keep a stray post harmless.
-        .onReceive(NotificationCenter.default.publisher(for: .markSelectedRecipesMadeToday)) { _ in
-            let ids = Array(viewModel.selectedRecipeIDs)
-            guard !ids.isEmpty else { return }
-            Task { await viewModel.setLastMade(Date(), forRecipeIds: ids) }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .setSelectedRecipesLastMadeDate)) { _ in
-            let ids = Array(viewModel.selectedRecipeIDs)
-            guard !ids.isEmpty else { return }
-            lastMadeTargetIDs = ids
-            lastMadePickerDate = Date()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .clearSelectedRecipesLastMade)) { _ in
-            let ids = Array(viewModel.selectedRecipeIDs)
-            guard !ids.isEmpty else { return }
-            Task { await viewModel.setLastMade(nil, forRecipeIds: ids) }
-        }
-        #if os(macOS)
-        .onReceive(NotificationCenter.default.publisher(for: .openSelectedRecipesInNewWindows)) { _ in
-            openSelectedRecipesInNewWindows()
-        }
-        #endif
+        // The selection-bound menu commands (Last Made, Get Info, Open in New Window), scene-scoped
+        // like Find above so they act on this window's selection and no other's.
+        .focusedSceneValue(\.recipeSelectionCommands, recipeSelectionCommands)
     }
 
-    // Helper to create a binding for a search option with validation
-    // Shared implementation with Menus.swift
+    /// See `RecipeSelectionCommands`. The menu items are already disabled without a selection; the
+    /// guards keep a stray call harmless.
+    private var recipeSelectionCommands: RecipeSelectionCommands {
+        #if os(macOS)
+        let openInNewWindows: (@MainActor () -> Void)? = { openSelectedRecipesInNewWindows() }
+        #else
+        let openInNewWindows: (@MainActor () -> Void)? = nil
+        #endif
+        return RecipeSelectionCommands(
+            selectedRecipeCount: viewModel.selectedRecipeIDs.count,
+            lastPreparedSummary: viewModel.lastPreparedSummaryForSelection,
+            // The date-picker sheet lives in this column, not the root that owns the other sheets, so
+            // it reports here; otherwise the menu bar would offer commands that open a second sheet.
+            isSheetShown: lastMadePickerDate != nil,
+            markMadeToday: {
+                let ids = Array(viewModel.selectedRecipeIDs)
+                guard !ids.isEmpty else { return }
+                Task { await viewModel.setLastMade(Date(), forRecipeIds: ids) }
+            },
+            setLastMadeDate: {
+                let ids = Array(viewModel.selectedRecipeIDs)
+                guard !ids.isEmpty else { return }
+                lastMadeTargetIDs = ids
+                lastMadePickerDate = Date()
+            },
+            clearLastMade: {
+                let ids = Array(viewModel.selectedRecipeIDs)
+                guard !ids.isEmpty else { return }
+                Task { await viewModel.setLastMade(nil, forRecipeIds: ids) }
+            },
+            showInfo: {
+                if let recipeId = viewModel.selectedRecipeIDs.first {
+                    recipeIDForInspector = recipeId
+                }
+            },
+            openInNewWindows: openInNewWindows
+        )
+    }
+
+    /// A search field's toggle; the settings refuse to turn off the last one.
     private func binding(for option: RecipeListSearchOptions) -> Binding<Bool> {
         Binding(
-            get: {
-                searchOptionsTracker.isSelected(option)
-            },
-            set: { newValue in
-                searchOptionsTracker.setSelected(option, newValue)
-            }
+            get: { viewModel.settings.isSearching(option) },
+            set: { viewModel.settings.setSearching(option, $0) }
         )
     }
 
@@ -1059,7 +928,7 @@ private struct RecipeListColumnView: View {
         }
         lastMadeMenu(for: Array(viewModel.selectedRecipeIDs))
         Button(role: .destructive, action: {
-            showingDeleteConfirmation = true
+            confirmDelete(ids: viewModel.selectedRecipeIDs)
         }) {
             Label("Delete", systemImage: "trash")
         }
@@ -1201,6 +1070,13 @@ private struct RecipeDetailColumnView: View {
             } else {
                 ContentUnavailableView("No List Selected", systemImage: "checklist")
             }
+        } else if viewModel.selectedRecipeIDs.count > 1 {
+            // A set has no "first" worth showing; the toolbar and menus act on all of them.
+            ContentUnavailableView(
+                "\(viewModel.selectedRecipeIDs.count) Recipes Selected",
+                systemImage: "list.bullet.rectangle",
+                description: Text("Export, print, or delete them from the toolbar or the File menu.")
+            )
         } else if let recipeId = viewModel.selectedRecipeIDs.first,
             let recipe = viewModel.fullRecipe(id: recipeId) {
             Group {
@@ -1252,16 +1128,32 @@ private struct RecipeDetailColumnView: View {
 /// a `View` struct because a bare modifier chain has no view of its own to wrap.
 private struct RootPresentationsModifier: ViewModifier {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
-    @Binding var showingImportFromFileSheet: Bool
-    @Binding var showingCreateFromImageSheet: Bool
-    @Binding var showingCreateFromWebSheet: Bool
-    @Binding var showingEditLibCategoriesSheet: Bool
-    @Binding var showingEditLibTagsSheet: Bool
-    @Binding var showingEditLibCoursesSheet: Bool
-    @Binding var showingSettingsSheet: Bool
-    @Binding var showingDuplicateRecipesSheet: Bool
-    @Binding var showingConsolidateDuplicatesSheet: Bool
+    @Binding var activeSheet: MainSheet?
     @Binding var showingFirstLaunchAlert: Bool
+
+    /// The sheet to present with `.sheet(item:)`. On iOS the web importer is a full-screen cover
+    /// instead, so it is kept out of this binding and given its own below.
+    private var sheetItem: Binding<MainSheet?> {
+        Binding(
+            get: {
+                #if os(macOS)
+                activeSheet
+                #else
+                activeSheet == .createFromWeb ? nil : activeSheet
+                #endif
+            },
+            set: { activeSheet = $0 }
+        )
+    }
+
+    #if !os(macOS)
+    private var isShowingWebImporter: Binding<Bool> {
+        Binding(
+            get: { activeSheet == .createFromWeb },
+            set: { if !$0, activeSheet == .createFromWeb { activeSheet = nil } }
+        )
+    }
+    #endif
 
     @AppStorage("offeredSampleImport") private var offeredSampleImport = false
     @State private var manualSync = ManualSyncRunner.shared
@@ -1298,76 +1190,21 @@ private struct RootPresentationsModifier: ViewModifier {
                 }
             }
         }
-        .sheet(isPresented: $showingImportFromFileSheet) {
-            ImportRecipesFromFileView()
-                #if os(macOS)
-                .frame(minWidth: 500, minHeight: 400)
-                #endif
-        }
         .onChange(of: viewModel.showingEditSheet) { _, isPresented in
             if !isPresented {
                 viewModel.clearDraftRecipe()
                 viewModel.recipeToEditID = nil
             }
         }
-        .sheet(isPresented: $showingCreateFromImageSheet) {
-            CreateRecipeFromImageView()
-            #if os(macOS)
-                .frame(minWidth: 800, minHeight: 700)
-            #endif
+        .sheet(item: sheetItem) { sheet in
+            MainSheetContent(sheet: sheet)
         }
         #if !os(macOS)
         // Show full screen cover on iOS; macOS will use window instead
-        .fullScreenCover(isPresented: $showingCreateFromWebSheet) {
+        .fullScreenCover(isPresented: isShowingWebImporter) {
             CreateRecipeFromWebView()
         }
         #endif
-        .sheet(isPresented: $showingEditLibCategoriesSheet) {
-            #if os(iOS)
-            NavigationStack {
-                LibraryClassifiersEditView(classifier: .category)
-            }
-            #else
-            LibraryClassifiersEditView(classifier: .category)
-                .frame(minWidth: 500, minHeight: 400)
-            #endif
-        }
-        .sheet(isPresented: $showingEditLibTagsSheet) {
-            #if os(iOS)
-            NavigationStack {
-                LibraryClassifiersEditView(classifier: .tag)
-            }
-            #else
-            LibraryClassifiersEditView(classifier: .tag)
-                .frame(minWidth: 500, minHeight: 400)
-            #endif
-        }
-        .sheet(isPresented: $showingEditLibCoursesSheet) {
-            #if os(iOS)
-            NavigationStack {
-                LibraryClassifiersEditView(classifier: .course)
-            }
-            #else
-            LibraryClassifiersEditView(classifier: .course)
-                .frame(minWidth: 500, minHeight: 400)
-            #endif
-        }
-        .sheet(isPresented: $showingSettingsSheet) {
-            NavigationStack {
-                SettingsView()
-            }
-        }
-        // Library maintenance (File ▸ Library on macOS, where both open in their own windows instead).
-        .sheet(isPresented: $showingDuplicateRecipesSheet) {
-            NavigationStack {
-                DuplicateRecipesView()
-            }
-        }
-        .sheet(isPresented: $showingConsolidateDuplicatesSheet) {
-            NavigationStack {
-                ConsolidateDuplicatesView()
-            }
-        }
         .sheet(isPresented: $viewModel.showingHTMLExportSettings) {
             HTMLExportSettingsView(options: $viewModel.htmlExportOptions) {
                 viewModel.performHTMLExport()
@@ -1394,6 +1231,52 @@ private struct RootPresentationsModifier: ViewModifier {
             }
         } message: {
             Text("Would you like to import some sample recipes to get started? (Skip to start with empty recipe library.)")
+        }
+    }
+}
+
+/// What each `MainSheet` shows. Sizes are the sheets' own; iOS wraps the library editors and the
+/// maintenance views in a `NavigationStack` for their bars.
+private struct MainSheetContent: View {
+    let sheet: MainSheet
+
+    var body: some View {
+        switch sheet {
+        case .importFromFile:
+            ImportRecipesFromFileView()
+                #if os(macOS)
+                .frame(minWidth: 500, minHeight: 400)
+                #endif
+        case .createFromImage:
+            CreateRecipeFromImageView()
+                #if os(macOS)
+                .frame(minWidth: 800, minHeight: 700)
+                #endif
+        case .createFromWeb:
+            // Presented as a full-screen cover on iOS and a window on macOS; never reaches here.
+            CreateRecipeFromWebView()
+        case .settings:
+            NavigationStack {
+                SettingsView()
+            }
+        case .libraryEditor(let classifier):
+            #if os(macOS)
+            LibraryClassifiersEditView(classifier: classifier)
+                .frame(minWidth: 500, minHeight: 400)
+            #else
+            NavigationStack {
+                LibraryClassifiersEditView(classifier: classifier)
+            }
+            #endif
+        // Library maintenance (File ▸ Library on macOS, where both open in their own windows instead).
+        case .duplicateRecipes:
+            NavigationStack {
+                DuplicateRecipesView()
+            }
+        case .consolidateDuplicates:
+            NavigationStack {
+                ConsolidateDuplicatesView()
+            }
         }
     }
 }

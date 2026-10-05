@@ -96,12 +96,12 @@ struct ImportRecipesFromFileView: View {
     /// Reports both counts, because they diverge in both directions: one .mgourmet file can hold a
     /// whole library, while a Crouton export is one recipe per file.
     nonisolated static func summaryMessage(recipeCount: Int, fileCount: Int, failedFileNames: [String]) -> String {
-        let recipes = recipeCount == 1 ? "1 recipe" : "\(recipeCount) recipes"
-        let files = fileCount == 1 ? "1 file" : "\(fileCount) files"
+        let recipes = String(inflected: "^[\(recipeCount) recipe](inflect: true)")
+        let files = String(inflected: "^[\(fileCount) file](inflect: true)")
         var message = "Imported \(recipes) from \(files)."
 
         if !failedFileNames.isEmpty {
-            let skipped = failedFileNames.count == 1 ? "1 file" : "\(failedFileNames.count) files"
+            let skipped = String(inflected: "^[\(failedFileNames.count) file](inflect: true)")
             message += "\n\nCould not read \(skipped): \(failedFileNames.prefix(5).joined(separator: ", "))"
             if failedFileNames.count > 5 {
                 message += ", and \(failedFileNames.count - 5) more"
@@ -261,7 +261,7 @@ private struct ImportSelectionSummaryView: View {
             }
 
             if unsupportedCount > 0 {
-                Text("\(unsupportedCount) unsupported \(unsupportedCount == 1 ? "file" : "files") will be skipped")
+                Text("^[\(unsupportedCount) unsupported file](inflect: true) will be skipped")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }

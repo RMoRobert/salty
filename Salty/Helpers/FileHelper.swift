@@ -115,6 +115,21 @@ extension FileManager {
     nonisolated(unsafe) private static var cachedCustomParent: URL?
     nonisolated(unsafe) private static var hasResolvedCustomParent = false
     nonisolated(unsafe) private static var isHoldingAccess = false
+    nonisolated(unsafe) private static var locationChangedThisSession = false
+
+    /// True once the library location has been changed or reset since launch. The running app keeps
+    /// using the library it opened; the new choice is read at the next launch.
+    static var hasPendingLocationChange: Bool {
+        accessLock.lock()
+        defer { accessLock.unlock() }
+        return locationChangedThisSession
+    }
+
+    private static func notePendingLocationChange() {
+        accessLock.lock()
+        defer { accessLock.unlock() }
+        locationChangedThisSession = true
+    }
 
     /// Resolves (once) the user's custom database parent folder, beginning and holding
     /// security-scoped access. Returns nil when no custom location is configured or it
@@ -196,11 +211,26 @@ extension FileManager {
     /// The active library bundle directory (custom if configured, otherwise default).
     static var saltyLibraryDirectory: URL {
         if let custom = customSaltyLibraryDirectory {
-            return custom
-                .appendingPathComponent(folderName, isDirectory: true)
-                .appendingPathExtension(folderBundleExt)
+            return libraryDirectory(inParent: custom)
         }
         return defaultSaltyLibraryDirectory
+    }
+
+    /// The library bundle Salty keeps inside a user-chosen parent folder.
+    static func libraryDirectory(inParent parent: URL) -> URL {
+        parent
+            .appendingPathComponent(folderName, isDirectory: true)
+            .appendingPathExtension(folderBundleExt)
+    }
+
+    /// The database file inside the library bundle in `parent`, creating the bundle folder if needed.
+    /// For checking a newly chosen folder; the caller must hold its security scope.
+    static func libraryDatabaseFile(inParent parent: URL) throws -> URL {
+        let directory = libraryDirectory(inParent: parent)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+            .appendingPathComponent(dbFileName, isDirectory: false)
+            .appendingPathExtension(dbFileExt)
     }
 
     /// The active database file path, ensuring its containing directory exists.
@@ -240,26 +270,33 @@ extension FileManager {
             relativeTo: nil
         )
         UserDefaults.standard.set(bookmark, forKey: userDefaultsDatabaseParentLocationKey)
-        // Drop any cached/held access so the new location is picked up on next resolution.
-        resetCustomLocationCache()
-        fileLogger.info("Saved security-scoped bookmark for custom database location: \(parentDirectory.path)")
+        // The cache, and the folder access it holds, are deliberately left alone: the open database
+        // and every image path still belong to the library this session opened. Releasing them here
+        // used to cut the running app off from its own files and send new images to the new folder
+        // before the database followed at the next launch.
+        notePendingLocationChange()
+        fileLogger.info("Saved security-scoped bookmark for custom database location (used from next launch): \(parentDirectory.path)")
     }
 
     /// Clears the custom location, reverting to the default (in-container) location.
     static func clearCustomLocationBookmarks() {
         UserDefaults.standard.removeObject(forKey: userDefaultsDatabaseParentLocationKey)
-        resetCustomLocationCache()
-        fileLogger.info("Cleared custom database location; reverting to default")
+        // As in `saveCustomLocationBookmarks`, the running session keeps its library until relaunch.
+        notePendingLocationChange()
+        fileLogger.info("Cleared custom database location; the default is used from next launch")
     }
 
     /// Begins (and holds) access to the active database location. Safe to call repeatedly.
     /// For the default in-container location no security scope is needed.
     @discardableResult
     static func beginAccessingDatabaseLocation() -> Bool {
+        // Resolved even for the default location, so "no custom folder" is fixed for the session too:
+        // a folder chosen later is read at the next launch, not by the next path lookup.
+        let custom = resolveCustomParentLocation()
         guard UserDefaults.standard.data(forKey: userDefaultsDatabaseParentLocationKey) != nil else {
             return true // default container location is always accessible
         }
-        return resolveCustomParentLocation() != nil
+        return custom != nil
     }
 
     /// Resolves the location (refreshing a stale bookmark if needed). Retained for the
@@ -302,6 +339,7 @@ extension FileManager {
 
         let hasCustomBookmark = UserDefaults.standard.data(forKey: userDefaultsDatabaseParentLocationKey) != nil
         d["isCustomLocation"] = hasCustomBookmark
+        d["pendingLocationChange"] = hasPendingLocationChange
 
         if hasCustomBookmark {
             if let parent = resolveCustomParentLocation() {

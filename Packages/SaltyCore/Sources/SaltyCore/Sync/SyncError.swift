@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import GRDB
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -34,6 +35,8 @@ public enum SyncError: LocalizedError, Sendable {
     case enrolmentRequired
     /// The server authenticated the user but issued no device token, meaning it predates the scheme.
     case enrolmentUnsupported
+    /// The credential store refused to keep this device's sync id, so it cannot register as one device.
+    case deviceIdUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -49,6 +52,8 @@ public enum SyncError: LocalizedError, Sendable {
             return "This device needs to be connected to the server again. Enter your username and password to reconnect it."
         case .enrolmentUnsupported:
             return "This server is too old to connect devices for sync. Please update Salty Server, then try again."
+        case .deviceIdUnavailable:
+            return "This device's sync identity couldn't be saved. Check that the keychain is available, then try again."
         case .authenticationFailed(let message):
             return "Authentication failed: \(message)"
         case .networkError(let message):
@@ -124,9 +129,21 @@ extension SyncError {
         guard !data.isEmpty, data.count < 4096,
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         for key in ["message", "error", "detail"] {
-            if let text = object[key] as? String, !text.isEmpty { return text }
+            if let text = object[key] as? String, !text.isEmpty { return capped(text) }
         }
         return nil
+    }
+
+    /// The longest server-supplied message shown as-is. The server is trusted to be ours, but anything
+    /// reachable at its address can answer, and a status line is no place for a stack trace.
+    public static let maxServerMessageLength = 300
+
+    /// `text` trimmed, collapsed to one line, and cut to `maxServerMessageLength` characters.
+    static func capped(_ text: String) -> String {
+        let oneLine = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        guard oneLine.count > maxServerMessageLength else { return oneLine }
+        return String(oneLine.prefix(maxServerMessageLength)) + "…"
     }
 }
 
@@ -153,7 +170,14 @@ public func friendlySyncMessage(_ error: Error) -> String {
         return "The server returned a response the app couldn't read. Check that the address points to your Salty server."
     case let syncError as SyncError:
         return syncError.errorDescription ?? "Sync failed."
+    case let databaseError as DatabaseError:
+        // GRDB's description carries the SQL statement and its arguments, which are no use to a reader.
+        return "Sync couldn't update the recipe library on this device (database error \(databaseError.resultCode.rawValue)). Try again; if it keeps happening, restart Salty."
+    case is ResponseTooLargeError:
+        return "The server sent more data than a sync accepts. Check that the address points to your Salty server."
     default:
-        return error.localizedDescription
+        // Anything else is local (a file error, say) and its text can carry paths, so it is shown
+        // only as far as the cap allows.
+        return SyncError.capped(error.localizedDescription)
     }
 }

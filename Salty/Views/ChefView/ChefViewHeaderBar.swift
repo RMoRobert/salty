@@ -56,7 +56,7 @@ struct ChefViewHeaderBar: View {
                     displayStyle = displayStyle.toggled
                 }
             } label: {
-                Label(displayStyle.toggled.displayName, systemImage: displayStyle.toggled.symbolName)
+                Label(displayStyle.toggled.displayName, systemImage: symbol(for: displayStyle.toggled))
                     .chefHeaderIcon()
             }
             .buttonStyle(.bordered)
@@ -98,11 +98,18 @@ struct ChefViewHeaderBar: View {
         }
     }
 
+    private func symbol(for style: ChefViewDisplayStyle) -> String {
+        switch style {
+        case .continuous: "list.bullet"
+        case .focus: "rectangle.on.rectangle"
+        }
+    }
+
     private var moreMenu: some View {
         Menu {
             Picker("Display", selection: $displayStyle) {
                 ForEach(ChefViewDisplayStyle.allCases) { style in
-                    Label(style.displayName, systemImage: style.symbolName).tag(style)
+                    Label(style.displayName, systemImage: symbol(for: style)).tag(style)
                 }
             }
             .pickerStyle(.inline)

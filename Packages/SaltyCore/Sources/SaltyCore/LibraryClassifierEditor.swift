@@ -73,17 +73,21 @@ public enum LibraryClassifierEditor {
     ///
     /// Ids are UUIDv7 so a new row sorts by creation time like every other row the app writes -- which
     /// is what the merge's oldest-wins tie-break relies on.
+    ///
+    /// `now` is the row's `lastModifiedDate`, rounded to whole milliseconds (DATE-009) like every stamp
+    /// the writers produce; sync compares it.
     @discardableResult
     public static func create(
         classifier: LibraryClassifier,
         name: String,
-        in db: Database
+        in db: Database,
+        now rawNow: Date = Date()
     ) throws -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = UUIDV7().uuidString
         try db.execute(
             sql: #"INSERT INTO "\#(classifier.tableName)" ("id", "name", "lastModifiedDate") VALUES (?, ?, ?)"#,
-            arguments: [id, trimmed, Date()]
+            arguments: [id, trimmed, rawNow.roundedToWireMillis]
         )
         return id
     }
@@ -96,12 +100,13 @@ public enum LibraryClassifierEditor {
         classifier: LibraryClassifier,
         id: String,
         to name: String,
-        in db: Database
+        in db: Database,
+        now rawNow: Date = Date()
     ) throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try db.execute(
             sql: #"UPDATE "\#(classifier.tableName)" SET "name" = ?, "lastModifiedDate" = ? WHERE "id" = ?"#,
-            arguments: [trimmed, Date(), id]
+            arguments: [trimmed, rawNow.roundedToWireMillis, id]
         )
     }
 

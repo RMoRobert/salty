@@ -44,6 +44,7 @@ struct CreateRecipeFromImageView: View {
     @State private var showingRecipeEditor = false
     @State private var showingTextParsingTips = false
     @State private var isParsing = false
+    @State private var saveErrorMessage: String?
     @AppStorage(RecipeImportParser.smartParseSettingKey) private var smartParseEnabled = true
     
     var body: some View {
@@ -257,17 +258,8 @@ struct CreateRecipeFromImageView: View {
         .sheet(isPresented: $showingCamera) {
             CameraView(selectedImage: $selectedImage)
         }
-        .sheet(isPresented: $showingRecipeEditor) {
-            if let recipe = parsedRecipe {
-                NavigationStack {
-                    RecipeDetailEditMobileView(recipe: recipe, isNewRecipe: true, onNewRecipeSaved: { _ in
-                        // Close the sheet after saving
-                        showingRecipeEditor = false
-                    })
-                    // .frame(minWidth: 600, minHeight: 500)
-                }
-            }
-        }
+        // The recipe editor sheet is declared once, below, for both platforms. A second `.sheet` on
+        // the same binding here left SwiftUI presenting one and ignoring the other.
         .alert(
             "Tips for Best Results",
             isPresented: $showingTextParsingTips,
@@ -296,6 +288,7 @@ struct CreateRecipeFromImageView: View {
                 .frame(minWidth: 500, minHeight: 520)
                 #endif
         }
+        .errorAlert($saveErrorMessage, title: "Couldn't Save Recipes")
         .sheet(isPresented: $showingRecipeEditor) {
             if let recipe = parsedRecipe {
                 NavigationStack {
@@ -316,7 +309,7 @@ struct CreateRecipeFromImageView: View {
         }
 #if os(macOS)
         .sheet(isPresented: $showingCamera) {
-            MacCameraView(selectedImage: $selectedImage)
+            MacCameraCaptureView(capturedImage: $selectedImage)
                 .frame(minWidth: 600, minHeight: 500)
         }
 #endif
@@ -394,14 +387,18 @@ struct CreateRecipeFromImageView: View {
             do {
                 try await database.write { db in
                     for recipe in recipes {
-                        try Recipe.insert { recipe }.execute(db)
+                        // The writer owns the sync stamps and the course check; a bare `Recipe.insert`
+                        // stored the parser's unrounded `Date()` and skipped both.
+                        try RecipeWriter.insertImported(recipe, in: db)
                     }
                 }
                 logger.info("Created \(recipes.count) recipes from multi-recipe PDF")
+                dismiss()
             } catch {
                 logger.error("Failed to create recipes from PDF: \(error.localizedDescription)")
+                // Stay open: closing here looked exactly like success.
+                saveErrorMessage = "The recipes couldn't be saved to the library. \(error.localizedDescription)"
             }
-            dismiss()
         }
     }
     
@@ -573,234 +570,6 @@ struct CameraView: UIViewControllerRepresentable {
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
-        }
-    }
-}
-#endif
-
-#if os(macOS)
-// MARK: - macOS Camera View
-struct MacCameraView: NSViewControllerRepresentable {
-    @Binding var selectedImage: CGImage?
-    @Environment(\.dismiss) private var dismiss
-    
-    func makeNSViewController(context: Context) -> NSViewController {
-        let cameraView = MacCameraViewController()
-        cameraView.delegate = context.coordinator
-        return cameraView
-    }
-    
-    func updateNSViewController(_ nsViewController: NSViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, MacCameraViewControllerDelegate {
-        let parent: MacCameraView
-        
-        init(_ parent: MacCameraView) {
-            self.parent = parent
-        }
-        
-        func cameraViewController(_ controller: MacCameraViewController, didCaptureImage image: CGImage) {
-            parent.selectedImage = image
-            parent.dismiss()
-        }
-        
-        func cameraViewControllerDidCancel(_ controller: MacCameraViewController) {
-            parent.dismiss()
-        }
-    }
-}
-
-// MARK: - macOS Camera View Controller
-@MainActor protocol MacCameraViewControllerDelegate: AnyObject {
-    func cameraViewController(_ controller: MacCameraViewController, didCaptureImage image: CGImage)
-    func cameraViewControllerDidCancel(_ controller: MacCameraViewController)
-}
-
-class MacCameraViewController: NSViewController {
-    private let logger = Logger(subsystem: "Salty", category: "Import")
-    weak var delegate: MacCameraViewControllerDelegate?
-    private var captureSession: AVCaptureSession?
-    private var videoPreviewLayer: AVCaptureVideoPreviewLayer?
-    private var photoOutput: AVCapturePhotoOutput?
-    
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        setupCamera()
-        setupUI()
-    }
-    
-    override func viewWillAppear() {
-        super.viewWillAppear()
-        startSession()
-    }
-    
-    override func viewWillDisappear() {
-        super.viewWillDisappear()
-        stopSession()
-    }
-    
-    private func setupCamera() {
-        captureSession = AVCaptureSession()
-        guard let captureSession = captureSession else { return }
-        
-        captureSession.sessionPreset = .photo
-        
-        // Get the default camera
-        guard let camera = AVCaptureDevice.default(for: .video) else {
-            logger.debug("No camera available")
-            return
-        }
-
-        do {
-            let input = try AVCaptureDeviceInput(device: camera)
-            if captureSession.canAddInput(input) {
-                captureSession.addInput(input)
-            }
-
-            photoOutput = AVCapturePhotoOutput()
-            if let photoOutput = photoOutput, captureSession.canAddOutput(photoOutput) {
-                captureSession.addOutput(photoOutput)
-            }
-        } catch {
-            logger.error("Error setting up camera: \(error)")
-        }
-    }
-    
-    private func setupUI() {
-        view.wantsLayer = true
-        
-        // Set a minimum size for the view
-        view.frame = NSRect(x: 0, y: 0, width: 600, height: 500)
-        
-        // Create preview layer
-        guard let captureSession = captureSession else { return }
-        videoPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        videoPreviewLayer?.videoGravity = .resizeAspectFill
-        
-        if let previewLayer = videoPreviewLayer {
-            view.layer?.addSublayer(previewLayer)
-        }
-        
-        // Create a semi-transparent background for buttons
-        let buttonBackground = NSView()
-        buttonBackground.wantsLayer = true
-        buttonBackground.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.6).cgColor
-        buttonBackground.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(buttonBackground)
-        
-        // Create capture button
-        let captureButton = NSButton(title: "Capture", target: self, action: #selector(capturePhoto))
-        captureButton.bezelStyle = .push
-//        captureButton.isBordered = true
-        captureButton.translatesAutoresizingMaskIntoConstraints = false
-        captureButton.layer?.backgroundColor = NSColor.secondarySystemFill.cgColor.copy(alpha: 0.2)
-//        captureButton.wantsLayer = true
-//        captureButton.layer?.backgroundColor = NSColor.systemBlue.cgColor
-//        captureButton.layer?.cornerRadius = 8
-//        captureButton.layer?.borderWidth = 1
-//        captureButton.layer?.borderColor = NSColor.white.cgColor
-//        captureButton.attributedTitle = NSAttributedString(
-//            string: "Capture",
-//            attributes: [.foregroundColor: NSColor.white, .font: NSFont.boldSystemFont(ofSize: 14)]
-//        )
-        view.addSubview(captureButton)
-        
-        // Create cancel button
-        let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelCapture))
-        cancelButton.bezelStyle = .push
-//        cancelButton.isBordered = true
-        cancelButton.translatesAutoresizingMaskIntoConstraints = false
-        cancelButton.layer?.backgroundColor = NSColor.secondarySystemFill.cgColor.copy(alpha: 0.2)
-//        cancelButton.wantsLayer = true
-//        cancelButton.layer?.cornerRadius = 8
-//        cancelButton.layer?.borderWidth = 1
-//        cancelButton.layer?.borderColor = NSColor.white.cgColor
-//        cancelButton.attributedTitle = NSAttributedString(
-//            string: "Cancel",
-//            attributes: [.foregroundColor: NSColor.white, .font: NSFont.boldSystemFont(ofSize: 14)]
-//        )
-        view.addSubview(cancelButton)
-        
-        // Layout constraints
-        NSLayoutConstraint.activate([
-            // Button background
-            buttonBackground.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            buttonBackground.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            buttonBackground.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            buttonBackground.heightAnchor.constraint(equalToConstant: 80),
-            
-            // Capture button
-            captureButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            captureButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
-            captureButton.widthAnchor.constraint(equalToConstant: 120),
-            captureButton.heightAnchor.constraint(equalToConstant: 32),
-            
-            // Cancel button
-            cancelButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            cancelButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
-            cancelButton.widthAnchor.constraint(equalToConstant: 100),
-            cancelButton.heightAnchor.constraint(equalToConstant: 32)
-        ])
-    }
-    
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        videoPreviewLayer?.frame = view.bounds
-    }
-    
-    private func startSession() {
-        // AVCaptureSession start/stop must run off the main thread. The session is created on the main
-        // actor; `nonisolated(unsafe)` hands the (thread-safe) session to a background queue without
-        // tripping Sendable checks.
-        nonisolated(unsafe) let session = captureSession
-        DispatchQueue.global(qos: .userInitiated).async {
-            session?.startRunning()
-        }
-    }
-
-    private func stopSession() {
-        nonisolated(unsafe) let session = captureSession
-        DispatchQueue.global(qos: .userInitiated).async {
-            session?.stopRunning()
-        }
-    }
-    
-    @objc private func capturePhoto() {
-        guard let photoOutput = photoOutput else { return }
-        
-        let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings, delegate: self)
-    }
-    
-    @objc private func cancelCapture() {
-        delegate?.cameraViewControllerDidCancel(self)
-    }
-}
-
-// MARK: - AVCapturePhotoCaptureDelegate
-extension MacCameraViewController: AVCapturePhotoCaptureDelegate {
-    // AVFoundation invokes this on a background queue, so it must be nonisolated; we decode the photo
-    // here and hop to the main actor to notify the (MainActor) delegate.
-    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            logger.error("Error capturing photo: \(error)")
-            return
-        }
-
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = NSImage(data: imageData),
-              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            logger.error("Failed to create CGImage from photo")
-            return
-        }
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            delegate?.cameraViewController(self, didCaptureImage: cgImage)
         }
     }
 }

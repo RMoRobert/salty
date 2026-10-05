@@ -161,8 +161,10 @@ public struct SchemaOrgRecipeJSONLDExporter {
     }
 
     /// Formats a measurement, dropping a trailing ".0" so whole numbers read cleanly ("9" not "9.0").
+    /// Shares the reader's helper, which also guards the `Int` conversion against a stored value past
+    /// 2^63 -- `NutritionAmount` accepts any digit run, so a web import can put one in the database.
     private func number(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(value)
+        JSONLDValue.decimalText(value)
     }
 
     /// Converts a human-readable duration ("15 min", "1 hr 30 min") to an ISO 8601 duration ("PT15M",

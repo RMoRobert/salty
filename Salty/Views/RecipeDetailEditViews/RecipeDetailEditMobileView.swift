@@ -13,13 +13,17 @@ import SaltyCore
 
 struct RecipeDetailEditMobileView: View {
     @Environment(\.dismiss) var dismiss
-    @Bindable var viewModel: RecipeDetailEditViewModel
-    
+    /// Owned with `@State` so SwiftUI keeps this one instance for the life of the editor. A plain
+    /// stored property is rebuilt whenever the host re-evaluates the sheet's content -- which happens
+    /// mid-edit, since the hosts build the editor from an observed row -- and every unsaved edit went
+    /// with it.
+    @State private var viewModel: RecipeDetailEditViewModel
+
     @State private var showingAddTagAlert = false
     @State private var newTagName = ""
-    
+
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
-        self.viewModel = RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved)
+        _viewModel = State(initialValue: RecipeDetailEditViewModel(recipe: recipe, isNewRecipe: isNewRecipe, onNewRecipeSaved: onNewRecipeSaved))
     }
     
     var body: some View {
@@ -86,7 +90,7 @@ struct RecipeDetailEditMobileView: View {
                 let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     newTagName = ""
-                    Task { await viewModel.addTag(trimmed) }
+                    viewModel.addTag(trimmed)
                 }
             }
         } message: {
@@ -101,7 +105,7 @@ struct RecipeDetailEditMobileView: View {
         }
         .sheet(isPresented: $viewModel.showingEditCategoriesSheet) {
             NavigationStack {
-                CategoryEditView(recipe: $viewModel.recipe, selectedCategoryIDs: $viewModel.selectedCategoryIDs)
+                CategoryEditView(selectedCategoryIDs: $viewModel.classification.categoryIDs)
                     .navigationTitle("Select Categories")
 #if !os(macOS)
                     .navigationBarTitleDisplayMode(.inline)
@@ -115,6 +119,7 @@ struct RecipeDetailEditMobileView: View {
         .sheet(isPresented: $viewModel.showingScanTextSheet) {
             ScanTextForRecipeView(viewModel: viewModel, initialTarget: viewModel.scanTextTarget)
         }
+        .task { await viewModel.loadClassification() }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .onKeyPress(.escape) {
             if viewModel.hasUnsavedChanges {
@@ -133,7 +138,7 @@ struct RecipeDetailEditMobileView: View {
         /// "Servings" until one is set, then a correctly singular or plural count.
         private var servingsLabel: String {
             guard let servings = viewModel.recipe.servings else { return "Servings" }
-            return servings == 1 ? "1 serving" : "\(servings) servings"
+            return String(inflected: "^[\(servings) serving](inflect: true)")
         }
         
         var body: some View {
@@ -471,7 +476,7 @@ struct RecipeDetailEditMobileView: View {
                     HFlow(itemSpacing: 8, rowSpacing: 4) {
                         ForEach(viewModel.sortedTags, id: \.self) { tag in
                             Button(tag, systemImage: "minus.circle") {
-                                Task { await viewModel.removeTag(tag) }
+                                viewModel.removeTag(tag)
                             }
                             .buttonStyle(.bordered)
                             .foregroundStyle(.primary)

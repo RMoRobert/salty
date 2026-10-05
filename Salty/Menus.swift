@@ -8,164 +8,20 @@
 import SwiftUI
 import SaltyCore
 
-// Want to disable some menu items on macOS (and iPadOS 26+?) when
-// sheets are open since can't open more than one; this should help
-@MainActor
-@Observable
-class SheetStateTracker {
-    var isAnySheetShown = false
-
-    init() {
-        NotificationCenter.default.addObserver(
-            forName: .sheetStateChanged,
-            object: nil,
-            queue: .main
-        ) { notification in
-            // Extract the Sendable value before hopping; Notification itself isn't Sendable.
-            let isShown = notification.userInfo?["isShown"] as? Bool
-            // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
-            MainActor.assumeIsolated {
-                if let isShown { self.isAnySheetShown = isShown }
-            }
-        }
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-}
-
-// Track recipe selection state for enabling/disabling menu items
-@MainActor
-@Observable
-class SelectionStateTracker {
-    var hasRecipeSelected = false
-    var selectedRecipeCount = 0
-    /// Heading for the menu bar's "Last Prepared Date" menu. Computed by the view (which holds the
-    /// recipe list) and pushed here, since Commands can't reach the view model. Re-posted when the
-    /// value changes as well as when the selection does, so marking a recipe made updates the menu.
-    var lastPreparedSummary = "Last Prepared"
-
-    init() {
-        NotificationCenter.default.addObserver(
-            forName: .recipeSelectionChanged,
-            object: nil,
-            queue: .main
-        ) { notification in
-            // Extract the Sendable values before hopping; Notification itself isn't Sendable.
-            let hasSelected = notification.userInfo?["hasSelected"] as? Bool
-            let count = notification.userInfo?["count"] as? Int
-            let summary = notification.userInfo?["lastPreparedSummary"] as? String
-            // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
-            MainActor.assumeIsolated {
-                if let hasSelected { self.hasRecipeSelected = hasSelected }
-                if let count { self.selectedRecipeCount = count }
-                if let summary { self.lastPreparedSummary = summary }
-            }
-        }
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-}
-
-// Track search options state to make menu reactive to UserDefaults changes
-// Also tracks changes via changeId to trigger query updates
-@MainActor
-@Observable
-class SearchOptionsTracker {
-    // Private cache of the UserDefaults values; `changeId` is bumped whenever the selected options
-    // change so dependents (e.g. the recipe query id) refresh.
-    private var optionStates: [RecipeListSearchOptions: Bool] = [:]
-    var changeId = UUID()
-    private var lastSearchOptionsKey: String = ""
-
-    init() {
-        // Initialize from UserDefaults
-        loadFromUserDefaults()
-        lastSearchOptionsKey = currentSearchOptionsKey()
-
-        // Observe UserDefaults changes
-        NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // Delivered on .main, so assume main-actor isolation to touch this @Observable safely.
-            MainActor.assumeIsolated {
-                self?.loadFromUserDefaults()
-                self?.checkForChanges()
-            }
-        }
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    
-    private func loadFromUserDefaults() {
-        for option in RecipeListSearchOptions.allCases {
-            if UserDefaults.standard.object(forKey: option.userDefaultsKey) is Bool {
-                optionStates[option] = UserDefaults.standard.bool(forKey: option.userDefaultsKey)
-            } else {
-                let defaultValue: Bool
-                switch option {
-                case .name:
-                    defaultValue = true
-                default:
-                    defaultValue = false
-                }
-                UserDefaults.standard.set(defaultValue, forKey: option.userDefaultsKey)
-                optionStates[option] = defaultValue
-            }
-        }
-    }
-    
-    private func currentSearchOptionsKey() -> String {
-        RecipeListSearchOptions.allCases
-            .map { UserDefaults.standard.bool(forKey: $0.userDefaultsKey) ? "1" : "0" }
-            .joined(separator: "")
-    }
-    
-    private func checkForChanges() {
-        let currentKey = currentSearchOptionsKey()
-        // Only update if search options actually changed
-        if currentKey != lastSearchOptionsKey {
-            lastSearchOptionsKey = currentKey
-            changeId = UUID()
-        }
-    }
-    
-    func isSelected(_ option: RecipeListSearchOptions) -> Bool {
-        return optionStates[option] ?? (option == .name)
-    }
-    
-    func setSelected(_ option: RecipeListSearchOptions, _ value: Bool) {
-        if !value {
-            // Check if this is the last selected option
-            let otherOptions = RecipeListSearchOptions.allCases.filter { $0 != option }
-            let anyOtherSelected = otherOptions.contains { isSelected($0) }
-            if !anyOtherSelected {
-                // Prevent unchecking if it's the last selected option
-                return
-            }
-        }
-        UserDefaults.standard.set(value, forKey: option.userDefaultsKey)
-        optionStates[option] = value
-        checkForChanges()
-    }
-}
-
 struct Menus: Commands {
     @Environment(\.openWindow) private var openWindow
-    @State private var sheetTracker = SheetStateTracker()
-    @State private var selectionTracker = SelectionStateTracker()
-    @State private var searchOptionsTracker = SearchOptionsTracker()
+    /// Sort order and search fields, shared with every main window's view model; see `RecipeListSettings`.
+    @State private var listSettings = RecipeListSettings.shared
     @State private var syncService = SaltySyncService.shared
     /// The lists behind File ▸ Open Shopping List in New Window. Commands can't reach a scene's view
     /// model, so the menu does its own (tiny) fetch; see `ShoppingListsMenuModel`.
     @State private var shoppingListsMenu = ShoppingListsMenuModel()
+    /// Non-nil only while a main window is frontmost; see `MainWindowCommands`. Every command that
+    /// acts on a window goes through this, so it reaches that window and no other -- these used to be
+    /// `NotificationCenter` broadcasts that every open main window answered at once.
+    @FocusedValue(\.mainWindowCommands) private var mainWindow
+    /// Non-nil only while the frontmost window is showing a recipe list; carries the selection.
+    @FocusedValue(\.recipeSelectionCommands) private var selection
     /// Non-nil only while a window showing the recipe list is frontmost; see `SearchFieldFocusAction`.
     @FocusedValue(\.searchFieldFocusAction) private var focusSearchField
     /// Non-nil only while a window showing a recipe is frontmost; see `ChefViewOpenAction`.
@@ -173,27 +29,30 @@ struct Menus: Commands {
     /// Non-nil only while the web importer is frontmost; see `AddressFieldFocusAction`.
     @FocusedValue(\.addressFieldFocusAction) private var focusAddressField
     @AppStorage("serverUse") private var serverUse = false
-    
-    @AppStorage("recipeListSortOrder") private var recipeListSortOrder: RecipeListSortOrderSetting = .byName
-    @AppStorage("recipeListSortDirection") private var recipeListSortDirection: RecipeListSortDirection = .ascending
 
     // Sidebar Items menu: the two fixed Library rows, plus the order the reorderable sections are listed in.
     @AppStorage("sidebarShowFavorites") private var showFavorites = true
     @AppStorage("sidebarShowWantToMake") private var showWantToMake = true
     @AppStorage(SidebarSectionOrder.storageKey) private var sidebarSectionOrderRaw = ""
-    
-    // Helper to create a binding for a search option with validation
+
+    /// Only one sheet can be up at a time, so commands that would open another are disabled while the
+    /// frontmost window has one (the root's sheets, or the list's own date picker).
+    private var isAnySheetShown: Bool {
+        mainWindow?.isAnySheetShown == true || selection?.isSheetShown == true
+    }
+
+    private var hasRecipeSelected: Bool {
+        selection?.hasSelection == true
+    }
+
+    /// A search field's toggle; the settings refuse to turn off the last one.
     private func binding(for option: RecipeListSearchOptions) -> Binding<Bool> {
         Binding(
-            get: {
-                searchOptionsTracker.isSelected(option)
-            },
-            set: { newValue in
-                searchOptionsTracker.setSelected(option, newValue)
-            }
+            get: { listSettings.isSearching(option) },
+            set: { listSettings.setSearching(option, $0) }
         )
     }
-    
+
     var body: some Commands {
        ToolbarCommands()
        SidebarCommands()
@@ -201,18 +60,22 @@ struct Menus: Commands {
        // New Window is re-added below on ⇧⌘N.
        CommandGroup(replacing: .newItem) {
            Button("New Recipe") {
-               NotificationCenter.default.post(name: .createNewRecipe, object: nil)
+               mainWindow?.newRecipe()
            }
-           .disabled(sheetTracker.isAnySheetShown)
+           .disabled(mainWindow == nil || isAnySheetShown)
            .keyboardShortcut("n", modifiers: [.command])
            Button("New Recipe from Web…") {
                #if os(iOS)
-               NotificationCenter.default.post(name: .showCreateFromWebSheet, object: nil)
+               mainWindow?.createFromWeb()
                #else
                openWindow(id: "create-recipe-from-web-window")
                #endif
            }
-           .disabled(sheetTracker.isAnySheetShown)
+           #if os(iOS)
+           .disabled(mainWindow == nil || isAnySheetShown)
+           #else
+           .disabled(isAnySheetShown)
+           #endif
            .keyboardShortcut("n", modifiers: [.command, .option])
            Button("New Recipe from Image…") {
                openWindow(id: "create-recipe-from-image-window")
@@ -235,13 +98,13 @@ struct Menus: Commands {
                focusAddressField?()
            }
            .keyboardShortcut("l", modifiers: .command)
-           .disabled(focusAddressField == nil || sheetTracker.isAnySheetShown)
+           .disabled(focusAddressField == nil || isAnySheetShown)
            #endif
            Divider()
-           Button(selectionTracker.selectedRecipeCount <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
-               NotificationCenter.default.post(name: .openSelectedRecipesInNewWindows, object: nil)
+           Button((selection?.selectedRecipeCount ?? 0) <= 1 ? "Open Recipe in New Window" : "Open Recipes in New Windows") {
+               selection?.openInNewWindows?()
            }
-           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .disabled(selection?.openInNewWindows == nil || !hasRecipeSelected || isAnySheetShown)
            .keyboardShortcut(.return)
            // Opens any list in its own window without going near the sidebar — the point being to
            // read a recipe and work on its shopping list side by side, which selecting Shopping Lists
@@ -263,68 +126,56 @@ struct Menus: Commands {
            // shouldn't be the only route to a command; unlike right-clicking a row, this one follows
            // the whole selection. Disabled (not hidden) without one, per HIG.
            Menu("Last Prepared Date") {
-               Section(selectionTracker.lastPreparedSummary) {
+               Section(selection?.lastPreparedSummary ?? "Last Prepared") {
                    Button("Set to Today") {
-                       NotificationCenter.default.post(name: .markSelectedRecipesMadeToday, object: nil)
+                       selection?.markMadeToday()
                    }
                    Button("Set as Date…") {
-                       NotificationCenter.default.post(name: .setSelectedRecipesLastMadeDate, object: nil)
+                       selection?.setLastMadeDate()
                    }
                    Divider()
                    Button("Clear") {
-                       NotificationCenter.default.post(name: .clearSelectedRecipesLastMade, object: nil)
+                       selection?.clearLastMade()
                    }
                }
            }
-           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .disabled(!hasRecipeSelected || isAnySheetShown)
            Button("Get Info") {
-               NotificationCenter.default.post(name: .showRecipeInfoInspector, object: nil)
+               selection?.showInfo()
            }
-           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .disabled(!hasRecipeSelected || isAnySheetShown)
            .keyboardShortcut("i", modifiers: [.command])
            Divider()
            Button("Import from File…") {
-               NotificationCenter.default.post(name: .showImportFromFileSheet, object: nil)
+               mainWindow?.importFromFile()
            }
-           .disabled(sheetTracker.isAnySheetShown)
+           .disabled(mainWindow == nil || isAnySheetShown)
            Menu("Export…") {
                recipeExportFormatItems(
-                   recipeFile: { NotificationCenter.default.post(name: .exportSelectedRecipes, object: nil) },
-                   html: { NotificationCenter.default.post(name: .exportSelectedRecipesAsHTML, object: nil) },
-                   jsonLD: { NotificationCenter.default.post(name: .exportSelectedRecipesAsJSONLD, object: nil) }
+                   recipeFile: { mainWindow?.exportRecipeFile() },
+                   html: { mainWindow?.exportHTML() },
+                   jsonLD: { mainWindow?.exportJSONLD() }
                )
            }
-           .disabled(sheetTracker.isAnySheetShown)
+           .disabled(mainWindow == nil || isAnySheetShown)
            Button("Print…") {
-               NotificationCenter.default.post(name: .printSelectedRecipes, object: nil)
+               mainWindow?.printSelection()
            }
-           .disabled(!selectionTracker.hasRecipeSelected || sheetTracker.isAnySheetShown)
+           .disabled(!hasRecipeSelected || isAnySheetShown)
            #if os(macOS)
            .keyboardShortcut("p", modifiers: [.command])
            #endif
            #if os(macOS)
            Divider()
+           // Both are `Window` scenes (SaltyApp.swift); iOS reaches them from the sidebar's Library
+           // menu instead, so there is no sheet to open from here.
            Menu("Library") {
                Button("Show Duplicate Recipes…") {
-                   #if os(macOS)
                    openWindow(id: "duplicate-recipes-window")
-                   #else
-                   NotificationCenter.default.post(name: .showDuplicateRecipes, object: nil)
-                   #endif
                }
-               #if !os(macOS)
-               .disabled(sheetTracker.isAnySheetShown)
-               #endif
                Button("Consolidate Duplicate Categories, Courses, and Tags…") {
-                   #if os(macOS)
                    openWindow(id: "consolidate-duplicates-window")
-                   #else
-                   NotificationCenter.default.post(name: .showConsolidateDuplicates, object: nil)
-                   #endif
                }
-               #if !os(macOS)
-               .disabled(sheetTracker.isAnySheetShown)
-               #endif
            }
            #endif
            Divider()
@@ -346,7 +197,7 @@ struct Menus: Commands {
                focusSearchField?()
            }
            .keyboardShortcut("f", modifiers: .command)
-           .disabled(focusSearchField == nil || sheetTracker.isAnySheetShown)
+           .disabled(focusSearchField == nil || isAnySheetShown)
        }
         CommandGroup(before: .sidebar) {
             // Disabled (not hidden) when no recipe is on screen, per HIG. On macOS this opens a
@@ -355,16 +206,16 @@ struct Menus: Commands {
                 openChefView?()
             }
             .keyboardShortcut("c", modifiers: [.command, .shift])
-            .disabled(openChefView == nil || sheetTracker.isAnySheetShown)
+            .disabled(openChefView == nil || isAnySheetShown)
             Divider()
             Menu("Sort By") {
-                Picker("Sort Options", selection: $recipeListSortOrder) {
+                Picker("Sort Options", selection: $listSettings.sortOrder) {
                     ForEach(RecipeListSortOrderSetting.allCases, id: \.self) { option in
                         Text(option.displayName).tag(option)
                     }
                 }
                 .pickerStyle(.inline)
-                Picker("Sort Direction", selection: $recipeListSortDirection) {
+                Picker("Sort Direction", selection: $listSettings.sortDirection) {
                     ForEach(RecipeListSortDirection.allCases, id: \.self) { direction in
                         Text(direction.displayName).tag(direction)
                     }
@@ -390,7 +241,6 @@ struct Menus: Commands {
                     SidebarSectionVisibilityToggle(section: section)
                 }
             }
-            //Divider()
         }
        // The classifier editors are single-instance `Window` scenes (SaltyApp.swift), and a Window
        // scene adds its own item to the Window menu -- hand-rolled copies here would double them up.

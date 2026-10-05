@@ -59,6 +59,21 @@ struct ShoppingListWriterTests {
         try row(id, from: queue)["lastModifiedDate"]
     }
 
+    /// The table's primary key is `ON CONFLICT REPLACE`, so a bare insert would quietly replace the
+    /// existing list; the writer refuses instead.
+    @Test func insertRefusesAnIdTheLibraryAlreadyHolds() throws {
+        let queue = try library()
+        let list = try storedList(in: queue, at: nil)
+        var replacement = list
+        replacement.name = "Replacement"
+
+        #expect(throws: ShoppingListWriterError.idAlreadyInUse(list.id)) {
+            try queue.write { db in try ShoppingListWriter.insert(replacement, in: db) }
+        }
+        let name: String = try row(list.id, from: queue)["name"]
+        #expect(name == "Groceries")
+    }
+
     private let past = Date(timeIntervalSince1970: 1_000_000)
     private let now = Date(timeIntervalSince1970: 2_000_000)
 
@@ -73,7 +88,7 @@ struct ShoppingListWriterTests {
         let queue = try library()
         let list = try storedList(in: queue, at: past)
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: now) { $0.name = "Hardware" }
         }
 
@@ -89,7 +104,7 @@ struct ShoppingListWriterTests {
         let items = [item("milk"), item("bread")]
         let list = try storedList(in: queue, at: past, items: items)
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: now) { $0.contentsForList = items }
         }
 
@@ -101,7 +116,7 @@ struct ShoppingListWriterTests {
         let queue = try library()
         let list = try storedList(in: queue, at: past)
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: now) {
                 $0.lastModifiedDate = Date(timeIntervalSince1970: 5_000_000)
             }
@@ -115,7 +130,7 @@ struct ShoppingListWriterTests {
         let queue = try library()
         let list = try storedList(in: queue, at: nil)
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: now) { $0.name = "Renamed" }
         }
 
@@ -128,7 +143,7 @@ struct ShoppingListWriterTests {
         let future = Date(timeIntervalSince1970: 9_000_000)
         let list = try storedList(in: queue, at: future)
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: now) { $0.name = "Renamed" }
         }
 
@@ -145,13 +160,13 @@ struct ShoppingListWriterTests {
         let list = try storedList(in: queue, at: past, items: [item("milk")])
 
         // Another window adds an item after `list` was captured.
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: past) {
                 $0.contentsForList.append(self.item("eggs"))
             }
         }
 
-        try queue.write { db in
+        _ = try queue.write { db in
             try ShoppingListWriter.update(id: list.id, in: db, now: now) {
                 $0.contentsForList.append(self.item("flour"))
             }
@@ -188,6 +203,88 @@ struct ShoppingListWriterTests {
         #expect(remaining == 0)
     }
 
+    // MARK: - Guarded updates
+
+    /// The checklist and freeform editors save their whole copy of the list back. Naming the stamp
+    /// they loaded lets the writer tell "still the row I edited" from "someone wrote in between".
+    @Test("a guarded update goes through while the row is as the caller loaded it")
+    func guardedUpdateMatchingStampWrites() throws {
+        let queue = try library()
+        let list = try storedList(in: queue, at: past)
+
+        _ = try queue.write { db in
+            try ShoppingListWriter.update(id: list.id, in: db, now: now, expecting: ShoppingListStamp(of: list)) {
+                $0.name = "Hardware"
+            }
+        }
+
+        #expect(try row(list.id, from: queue)["name"] == "Hardware")
+        #expect(try modified(list.id, in: queue) == now)
+    }
+
+    @Test("a guarded update is refused, and the row left alone, once something else wrote the list")
+    func guardedUpdateRefusesAMovedOnRow() throws {
+        let queue = try library()
+        let list = try storedList(in: queue, at: past, items: [item("milk")])
+        let loaded = ShoppingListStamp(of: list)
+
+        // A sync download (or another window) lands after `list` was loaded.
+        let between = Date(timeIntervalSince1970: 1_500_000)
+        _ = try queue.write { db in
+            try ShoppingListWriter.update(id: list.id, in: db, now: between) {
+                $0.contentsForList.append(self.item("eggs"))
+            }
+        }
+
+        #expect(throws: ShoppingListWriterError.modifiedElsewhere(list.id)) {
+            try queue.write { db in
+                try ShoppingListWriter.update(id: list.id, in: db, now: now, expecting: loaded) {
+                    $0.contentsForList = [self.item("milk"), self.item("butter")]
+                }
+            }
+        }
+
+        let json: String = try row(list.id, from: queue)["contentsForList"]
+        let texts = try JSONDecoder().decode([ShoppingListListContents].self, from: Data(json.utf8)).map(\.text)
+        #expect(texts == ["milk", "eggs"])
+        #expect(try modified(list.id, in: queue) == between)
+    }
+
+    /// A list predating SHARED-V0002 carries no stamp. That is a state an editor can load and must be
+    /// able to expect: a nil expectation matches a nil row, not any row.
+    @Test("a never-stamped row can be expected, and is told from a stamped one")
+    func guardedUpdateHonoursANullStamp() throws {
+        let queue = try library()
+        let list = try storedList(in: queue, at: nil)
+        let loaded = ShoppingListStamp(of: list)
+        #expect(loaded.lastModifiedDate == nil)
+
+        _ = try queue.write { db in
+            try ShoppingListWriter.update(id: list.id, in: db, now: now, expecting: loaded) { $0.name = "Renamed" }
+        }
+        #expect(try row(list.id, from: queue)["name"] == "Renamed")
+
+        // The row is stamped now; the old nil expectation no longer matches it.
+        #expect(throws: ShoppingListWriterError.modifiedElsewhere(list.id)) {
+            try queue.write { db in
+                try ShoppingListWriter.update(id: list.id, in: db, now: now, expecting: loaded) { $0.name = "Again" }
+            }
+        }
+        #expect(try row(list.id, from: queue)["name"] == "Renamed")
+    }
+
+    @Test("an unguarded update still writes over anything")
+    func unguardedUpdateIgnoresTheStamp() throws {
+        let queue = try library()
+        let list = try storedList(in: queue, at: Date(timeIntervalSince1970: 1_500_000))
+
+        _ = try queue.write { db in
+            try ShoppingListWriter.update(id: list.id, in: db, now: now) { $0.name = "Renamed" }
+        }
+
+        #expect(try row(list.id, from: queue)["name"] == "Renamed")
+    }
+
     // MARK: - Insert
 
     @Test("a new list is stamped on insert so sync has something to compare")
@@ -195,8 +292,16 @@ struct ShoppingListWriterTests {
         let queue = try library()
         let list = ShoppingList(id: SaltyId.new(), name: "New List", isFreeform: false)
 
-        try queue.write { db in try ShoppingListWriter.insert(list, in: db, now: now) }
+        _ = try queue.write { db in try ShoppingListWriter.insert(list, in: db, now: now) }
 
         #expect(try modified(list.id, in: queue) == now)
+    }
+
+    @Test func aStampThatOnlyDiffersBelowAMillisecondStillMatches() {
+        let stored = Date(timeIntervalSince1970: 1_780_000_000.123)
+        let roundTripped = stored.addingTimeInterval(0.000_000_1)
+        #expect(ShoppingListStamp(lastModifiedDate: stored) == ShoppingListStamp(lastModifiedDate: roundTripped))
+        #expect(ShoppingListStamp(lastModifiedDate: stored) != ShoppingListStamp(lastModifiedDate: stored.addingTimeInterval(0.002)))
+        #expect(ShoppingListStamp(lastModifiedDate: nil) != ShoppingListStamp(lastModifiedDate: stored))
     }
 }

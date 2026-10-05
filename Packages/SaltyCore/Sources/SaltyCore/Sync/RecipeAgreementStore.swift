@@ -59,12 +59,15 @@ public enum RecipeAgreementStore {
     /// the same thing afterwards. Call it only for recipes that actually made it: stamping one that
     /// never reached the server would tell the next sync the server has a copy it does not, and that row
     /// would be deleted locally instead of retried.
+    ///
+    /// Rows already stamped at their current `lastModifiedDate` are left alone, so a sync in which
+    /// nothing changed writes nothing, and database observers (auto-sync's among them) see no change.
     public static func markAgreed(_ ids: [String], in db: Database) throws {
         guard !ids.isEmpty, try isAvailable(in: db) else { return }
 
         for id in ids {
             try db.execute(
-                sql: #"UPDATE "recipe" SET "syncedModifiedDate" = "lastModifiedDate" WHERE "id" = ?"#,
+                sql: #"UPDATE "recipe" SET "syncedModifiedDate" = "lastModifiedDate" WHERE "id" = ? AND "syncedModifiedDate" IS NOT "lastModifiedDate""#,
                 arguments: [id]
             )
         }
@@ -76,6 +79,6 @@ public enum RecipeAgreementStore {
     public static func markAllAgreed(in db: Database) throws {
         guard try isAvailable(in: db) else { return }
 
-        try db.execute(sql: #"UPDATE "recipe" SET "syncedModifiedDate" = "lastModifiedDate""#)
+        try db.execute(sql: #"UPDATE "recipe" SET "syncedModifiedDate" = "lastModifiedDate" WHERE "syncedModifiedDate" IS NOT "lastModifiedDate""#)
     }
 }

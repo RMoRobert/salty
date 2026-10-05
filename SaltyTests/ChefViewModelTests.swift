@@ -241,6 +241,29 @@ struct ChefViewModelTests {
         #expect(second.hasProgress)
     }
 
+    /// Progress is positions in the directions and ingredients. Once the recipe has been edited it
+    /// would point at the wrong rows, so a model built over an edited recipe starts fresh.
+    @Test func progressIsDroppedOnceTheRecipeHasBeenEdited() {
+        let store = ChefViewSessionStore()
+        var recipe = makeRecipe()
+        recipe.lastModifiedDate = Date(timeIntervalSince1970: 1_000_000)
+
+        let first = ChefViewModel(recipe: recipe, sessionStore: store)
+        first.goToNextStep()
+        first.toggleIngredientChecked(at: 1)
+        #expect(store.hasProgress(for: recipe.id))
+
+        var edited = recipe
+        edited.directions.insert(Direction(id: "d-new", text: "Preheat the oven."), at: 1)
+        edited.lastModifiedDate = Date(timeIntervalSince1970: 2_000_000)
+        let second = ChefViewModel(recipe: edited, sessionStore: store)
+
+        #expect(!second.hasProgress)
+        #expect(second.currentStep?.text == "Preheat the oven.")
+        #expect(!second.isIngredientChecked(at: 1))
+        #expect(!store.hasProgress(for: recipe.id))
+    }
+
     @Test func progressIsKeptPerRecipe() {
         let store = ChefViewSessionStore()
         let loaf = makeViewModel(store: store)

@@ -40,6 +40,16 @@ final class AutoSyncCoordinator {
     /// Consecutive auto-sync failures before the user-facing banner appears.
     private let failureThreshold = 3
 
+    /// How long automatic attempts wait after `failures` failures in a row: one minute after the first,
+    /// doubling to a ceiling of half an hour, so an unreachable server (away from the home network,
+    /// say) isn't asked again on every edit and every return to the app. Manual sync and the banner's
+    /// Retry ignore it.
+    nonisolated static func backoff(afterFailures failures: Int) -> Duration {
+        guard failures > 0 else { return .zero }
+        let minutes = 1 << min(failures - 1, 5)   // 1, 2, 4, 8, 16, 32
+        return .seconds(min(minutes, 30) * 60)
+    }
+
     /// Bound by `MainView`. Shown after repeated auto-sync failures; user-dismissable.
     var showFailureBanner = false
 
@@ -62,6 +72,8 @@ final class AutoSyncCoordinator {
     @ObservationIgnored private var hasPendingLocalChanges = false
     @ObservationIgnored private var consecutiveFailures = 0
     @ObservationIgnored private var lastAttempt: Date?
+    /// Set after a failure: automatic attempts before this are skipped. See `backoff(afterFailures:)`.
+    @ObservationIgnored private var backoffUntil: Date?
 
     private var isEnabled: Bool { UserDefaults.standard.bool(forKey: "autoSyncEnabled") }
     private static let pausedUntilKey = "autoSyncPausedUntil"
@@ -76,6 +88,7 @@ final class AutoSyncCoordinator {
     func start() {
         guard !started else { return }
         started = true
+        let activity = syncService.activity
         let observation = DatabaseRegionObservation(tracking: .fullDatabase)
         observationCancellable = observation.start(
             in: database,
@@ -83,7 +96,11 @@ final class AutoSyncCoordinator {
                 self?.logger.error("Database observation error: \(error)")
             },
             onChange: { [weak self] _ in
-                // Fires on the writer queue after each commit; hop to the main actor to react.
+                // Fires on the writer queue after each commit. Whether the write was sync's own is
+                // decided here, at commit time: by the time a hop to the main actor lands the sync may
+                // have finished, and its writes would then read as edits, schedule another sync that
+                // writes again, and so on.
+                guard !activity.isSyncing else { return }
                 Task { @MainActor in self?.localDataDidChange() }
             }
         )
@@ -128,6 +145,7 @@ final class AutoSyncCoordinator {
         debounceTask?.cancel()
         debounceTask = nil
         consecutiveFailures = 0
+        backoffUntil = nil
         showFailureBanner = false
         logger.info("Auto-sync paused for 1 day")
     }
@@ -151,17 +169,18 @@ final class AutoSyncCoordinator {
 
     private func localDataDidChange() {
         guard isEnabled, !isPaused else { return }
-        // Ignore the writes sync itself makes while applying server changes -- otherwise it could loop.
-        guard !syncService.isSyncing else { return }
         hasPendingLocalChanges = true
         scheduleDebouncedSync()
     }
 
     private func scheduleDebouncedSync() {
         debounceTask?.cancel()
+        // While backing off, the upload waits for the backoff to end rather than the usual quiet period.
+        let backoffRemaining = backoffUntil.map { Duration.seconds(max(0, $0.timeIntervalSinceNow)) } ?? .zero
+        let delay = max(quietPeriod, backoffRemaining)
         debounceTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            try? await Task.sleep(for: self.quietPeriod)
+            try? await Task.sleep(for: delay)
             if Task.isCancelled { return }
             self.debounceTask = nil
             await self.performAutoSync(reason: "edit")
@@ -170,11 +189,19 @@ final class AutoSyncCoordinator {
 
     private func performAutoSync(reason: String) async {
         guard isEnabled, !isPaused, !syncService.isSyncing else { return }
+        // A second's slack: a sleep timed to the end of the backoff can wake a hair early.
+        if reason != "manual-retry", let backoffUntil, backoffUntil > Date().addingTimeInterval(1) {
+            logger.info("Auto-sync skipped (\(reason)): backing off until \(backoffUntil)")
+            // Backgrounding cancels the scheduled retry before landing here, so put it back.
+            if hasPendingLocalChanges, debounceTask == nil { scheduleDebouncedSync() }
+            return
+        }
         lastAttempt = Date()
         logger.info("Auto-sync starting (\(reason))")
         do {
             try await syncService.syncNow()
             consecutiveFailures = 0
+            backoffUntil = nil
             hasPendingLocalChanges = false
             showFailureBanner = false
             logger.info("Auto-sync succeeded (\(reason))")
@@ -200,6 +227,10 @@ final class AutoSyncCoordinator {
             consecutiveFailures += 1
             logger.warning("Auto-sync failed (\(reason)) [\(self.consecutiveFailures)x]: \(error)")
             if consecutiveFailures >= failureThreshold { showFailureBanner = true }
+            let wait = Self.backoff(afterFailures: consecutiveFailures)
+            backoffUntil = Date().addingTimeInterval(TimeInterval(wait.components.seconds))
+            // Unsent edits are retried once the backoff ends, rather than waiting for the next edit.
+            if hasPendingLocalChanges { scheduleDebouncedSync() }
         }
     }
 }

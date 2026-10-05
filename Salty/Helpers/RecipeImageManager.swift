@@ -7,6 +7,7 @@
 
 import OSLog
 import Foundation
+import ImageIO
 import SQLiteData
 import GRDB
 import SaltyCore
@@ -122,8 +123,10 @@ final class RecipeImageManager: @unchecked Sendable {
             return nil
         }
 
-        // Determine file extension from image data
-        let fileExtension = determineImageFormat(from: imageData) ?? "jpg"
+        // The file name is the cross-client contract for the photo's format, so it comes from the core's
+        // signature sniffer (16 bytes; the old 8-byte check here could never see the HEIC brand and
+        // stored iPhone photos as "<id>.jpg" with HEIF bytes inside).
+        let fileExtension = ImageDataFormat.detect(imageData)?.fileExtension ?? "jpg"
         let filename = "\(recipeId).\(fileExtension)"
         let fileURL = imagesDirectory.appending(component: filename)
 
@@ -212,66 +215,56 @@ final class RecipeImageManager: @unchecked Sendable {
         }
     }
     
+    /// A square, centre-cropped JPEG thumbnail of `imageData`, `size` points on a side at 3x (900 px for the list's
+    /// 300-point request), deliberately oversampled so a larger display size later needs no regeneration.
+    ///
+    /// Decodes through ImageIO's thumbnail path, which reads only as many pixels as the result needs.
+    /// Decoding the whole image first (as `UIImage(data:)` / `NSImage(data:)` drawing did) holds every
+    /// pixel of a downloaded photo in memory at once, and a large or hostile PNG from a sync could get
+    /// the iOS app killed for it. Also honours EXIF orientation, as the old path did.
     func generateThumbnail(from imageData: Data, size: CGSize) -> Data? {
-        #if os(iOS)
-        guard let image = UIImage(data: imageData) else { return nil }
+        let pixelWidth = Int(size.width * 3)
+        let pixelHeight = Int(size.height * 3)
+        guard pixelWidth > 0, pixelHeight > 0,
+              let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let sourceWidth = sourceProperties[kCGImagePropertyPixelWidth] as? Int,
+              let sourceHeight = sourceProperties[kCGImagePropertyPixelHeight] as? Int,
+              sourceWidth > 0, sourceHeight > 0 else { return nil }
 
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let thumbnail = renderer.image { context in
-            // Aspect-fill (center crop) so non-square photos aren't squashed. Scale the image up so it
-            // covers the target box, center it, and let the context clip the overflow. Mirrors the macOS
-            // branch below. (Drawing to `size` directly would stretch to fit and distort the image.)
-            let imageSize = image.size
-            guard imageSize.width > 0, imageSize.height > 0 else {
-                image.draw(in: CGRect(origin: .zero, size: size))
-                return
-            }
-            let scale = max(size.width / imageSize.width, size.height / imageSize.height)
-            let scaledSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-            let origin = CGPoint(x: (size.width - scaledSize.width) / 2,
-                                 y: (size.height - scaledSize.height) / 2)
-            image.draw(in: CGRect(origin: origin, size: scaledSize))
-        }
+        // Aspect fill: the shorter side must cover the box, so the longer side is scaled to match.
+        let fillScale = max(Double(pixelWidth) / Double(sourceWidth), Double(pixelHeight) / Double(sourceHeight))
+        let maxPixelSize = Int((Double(max(sourceWidth, sourceHeight)) * min(fillScale, 1)).rounded(.up))
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(maxPixelSize, 1),
+        ]
+        guard let scaled = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
+              let context = CGContext(
+                data: nil, width: pixelWidth, height: pixelHeight, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+              ) else { return nil }
 
-        return thumbnail.jpegData(compressionQuality: 0.8)
-        
-        #elseif os(macOS)
-        guard let image = NSImage(data: imageData) else { return nil }
-        
-        let thumbnail = NSImage(size: size)
-        thumbnail.lockFocus()
-        
-        // Calculate center crop to fill the entire thumbnail
-        let imageSize = image.size
-        let targetSize = size
-        
-        let imageAspect = imageSize.width / imageSize.height
-        let targetAspect = targetSize.width / targetSize.height
-        
-        var sourceRect: NSRect
-        let destRect = NSRect(origin: .zero, size: targetSize)
-        
-        if imageAspect > targetAspect {
-            // Image is wider than target - crop width from center
-            let cropWidth = imageSize.height * targetAspect
-            let cropX = (imageSize.width - cropWidth) / 2
-            sourceRect = NSRect(x: cropX, y: 0, width: cropWidth, height: imageSize.height)
-        } else {
-            // Image is taller than target - crop height from center
-            let cropHeight = imageSize.width / targetAspect
-            let cropY = (imageSize.height - cropHeight) / 2
-            sourceRect = NSRect(x: 0, y: cropY, width: imageSize.width, height: cropHeight)
-        }
-        
-        // Draw the cropped portion of the image to fill the entire thumbnail
-        image.draw(in: destRect, from: sourceRect, operation: .copy, fraction: 1.0)
-        
-        thumbnail.unlockFocus()
-        
-        guard let cgImage = thumbnail.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
-        return bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
-        #endif
+        // Centre the scaled image over the box and let the context clip the overflow.
+        let scale = max(Double(pixelWidth) / Double(scaled.width), Double(pixelHeight) / Double(scaled.height))
+        let drawWidth = Double(scaled.width) * scale
+        let drawHeight = Double(scaled.height) * scale
+        context.interpolationQuality = .high
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))   // under any transparency
+        context.fill(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+        context.draw(scaled, in: CGRect(x: (Double(pixelWidth) - drawWidth) / 2,
+                                        y: (Double(pixelHeight) - drawHeight) / 2,
+                                        width: drawWidth, height: drawHeight))
+        guard let thumbnail = context.makeImage() else { return nil }
+
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, thumbnail, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
     
     func createBlankThumbnail(size: CGSize) -> Data {
@@ -300,28 +293,6 @@ final class RecipeImageManager: @unchecked Sendable {
         #endif
     }
     
-    private func determineImageFormat(from data: Data) -> String? {
-        guard data.count >= 8 else { return nil }
-        
-        let bytes = [UInt8](data.prefix(8))
-        
-        // Check for PNG signature
-        if bytes.count >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
-            return "png"
-        }
-        
-        // Check for JPEG signature
-        if bytes.count >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 {
-            return "jpg"
-        }
-        
-        // Check for HEIC signature (simplified)
-        if bytes.count >= 12 && String(bytes: bytes[4...11], encoding: .ascii)?.contains("ftyp") == true {
-            return "heic"
-        }
-        
-        return nil
-    }
 }
 
 /// The image files SaltyCore's `ServerSyncEngine` reads and writes during sync.

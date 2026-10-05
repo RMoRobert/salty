@@ -38,7 +38,8 @@ enum RecipeDuplicator {
         tagIds: [String],
         options: Options = Options()
     ) async throws -> String {
-        let now = Date()
+        // DATE-009: whole milliseconds, like every stamp the writers produce.
+        let now = Date().roundedToWireMillis
         let newId = UUIDV7().uuidString
         let scaleFactor = options.ingredientScaleFactor
         let isScaling = scaleFactor.map { abs($0 - 1.0) > 0.000_001 } ?? false
@@ -55,7 +56,7 @@ enum RecipeDuplicator {
             let scaleNote = Note(
                 id: UUIDV7().uuidString,
                 title: "Scaled Recipe",
-                content: "Ingredients scaled to \(label)% from original recipe, “\(sourceName)”. Directions and other textmay refer to original quantities; please review after scaling."
+                content: "Ingredients scaled to \(label)% from original recipe, “\(sourceName)”. Directions and other text may refer to original quantities; please review after scaling."
             )
             notes.insert(scaleNote, at: 0)
         }
@@ -101,25 +102,10 @@ enum RecipeDuplicator {
         // Capture into a constant for the @Sendable write closure (runs off the calling actor).
         let finalCopy = copy
         try await database.write { db in
-            try Recipe.insert { finalCopy }.execute(db)
-
-            for categoryId in categoryIds {
-                let recipeCategory = RecipeCategory(
-                    id: UUIDV7().uuidString,
-                    recipeId: finalCopy.id,
-                    categoryId: categoryId
-                )
-                try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
-            }
-
-            for tagId in tagIds {
-                let recipeTag = RecipeTag(
-                    id: UUIDV7().uuidString,
-                    recipeId: finalCopy.id,
-                    tagId: tagId
-                )
-                try RecipeTag.insertIfAbsent(recipeTag, in: db)
-            }
+            // The writers own the sync stamps and the junction rows: `save` inserts a recipe it does not
+            // find, and the classification writer links categories and tags the way every client does.
+            let stored = try RecipeWriter.save(finalCopy, in: db).recipe
+            try RecipeClassificationWriter.set(categoryIds: categoryIds, tagIds: tagIds, forRecipe: stored.id, in: db)
         }
 
         return finalCopy.id

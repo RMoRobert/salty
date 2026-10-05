@@ -46,7 +46,9 @@ extension Recipe {
             if let result = RecipeImageManager.shared.saveImage(imageData, for: id) {
                 self.imageFilename = result.filename
                 self.imageThumbnailData = result.thumbnailData
-                self.lastModifiedImageDate = Date() // Image-only change: bump the image date, NOT lastModifiedDate
+                // Image-only change: bump the image date, NOT lastModifiedDate. Whole milliseconds
+                // (DATE-009), like every stamp the writers produce.
+                self.lastModifiedImageDate = Date().roundedToWireMillis
             }
         } else {
             removeImage()
@@ -58,7 +60,7 @@ extension Recipe {
     mutating func removeImage() {
         self.imageFilename = nil
         self.imageThumbnailData = nil
-        self.lastModifiedImageDate = Date() // Image-only change (removal): bump the image date only
+        self.lastModifiedImageDate = Date().roundedToWireMillis // Image-only change (removal): bump the image date only
     }
 
     /// Deletes every image file stored for this recipe other than the one it currently references.

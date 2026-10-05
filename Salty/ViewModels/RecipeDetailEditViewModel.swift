@@ -8,113 +8,93 @@
 import Foundation
 import OSLog
 import SQLiteData
-import UUIDV7
 import SaltyCore
 
 @Observable
 @MainActor
 class RecipeDetailEditViewModel {
     private let logger = Logger(subsystem: "Salty", category: "Database")
-    
+
     @ObservationIgnored
     @Dependency(\.defaultDatabase) private var database
-    
+
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Course.columns) FROM \(Course.self) ORDER BY \(Course.name) COLLATE NOCASE"))
     var allCourses: [Course]
-    
+
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Category.columns) FROM \(Category.self) ORDER BY \(Category.name) COLLATE NOCASE"))
     var allCategories: [Category]
-    
-    @ObservationIgnored
-    @FetchAll(#sql("SELECT \(RecipeCategory.columns) FROM \(RecipeCategory.self)"))
-    var allRecipeCategories: [RecipeCategory]
-    
+
     @ObservationIgnored
     @FetchAll(#sql("SELECT \(Tag.columns) FROM \(Tag.self) ORDER BY \(Tag.name) COLLATE NOCASE"))
     var allTags: [Tag]
-    
-    @ObservationIgnored
-    @FetchAll(#sql("SELECT \(RecipeTag.columns) FROM \(RecipeTag.self)"))
-    var allRecipeTags: [RecipeTag]
-    
-    // MARK: - State  
+
+    // MARK: - State
     var recipe: Recipe
     var originalRecipe: Recipe
     var isNewRecipe: Bool
     var onNewRecipeSaved: ((String) -> Void)?
-    
-    // MARK: - Category State
-    var selectedCategoryIDs: Set<String> = []
+
+    // MARK: - Classification State
+    /// The categories and tags this editor will save, held until Save like every other edit. Loaded
+    /// from the database by `loadClassification()` once the editor is on screen; a new recipe starts
+    /// with none. See `RecipeClassificationDraft`.
+    var classification = RecipeClassificationDraft()
+    private var originalClassification = RecipeClassificationDraft()
 
     // MARK: - Image State
     /// The image change the editor is holding until Save. Nothing touches the image file on disk
     /// before then, which is what lets Cancel actually cancel. See `PendingRecipeImage`.
     var pendingImage: PendingRecipeImage = .unchanged
 
-    // Caches for tags and categories
-    private var recipeTags: [Tag] = []
-    private var recipeCategories: [Category] = []
-   
     // MARK: - Sheet States
     // May want to name more generically in future, or somehow accomodate mobile if do navigation instead of popovers/sheets?
     var showingEditCategoriesSheet = false
-    var showingEditIngredientsSheet = false
     var showingBulkEditIngredientsSheet = false
-    var showingEditDirectionsSheet = false
     var showingBulkEditDirectionsSheet = false
-    var showingEditPreparationTimes = false
-    var showingEditNotesSheet = false
-    var showingEditVariationsSheet = false
     var showingNutritionEditSheet = false
     var showingScanTextSheet = false
     var scanTextTarget: ScanTextTarget = .ingredients
     var showingCancelAlert = false
     var showingSaveErrorAlert = false
     var saveErrorMessage: String?
-    
+
     enum ScanTextTarget: String, CaseIterable {
         case introduction = "Introduction"
         case ingredients = "Ingredients"
         case directions = "Directions"
     }
-    
+
     // MARK: - Computed Properties
     var hasUnsavedChanges: Bool {
-        if pendingImage.isChange { return true }
-        if isNewRecipe {
-            // New recipes are considered to have unsaved changes if they have meaningful content
-            return !recipe.name.isEmpty || !recipe.source.isEmpty || !recipe.introduction.isEmpty ||
-                   !recipe.ingredients.isEmpty || !recipe.directions.isEmpty || !recipe.notes.isEmpty || !recipe.variations.isEmpty
-        } else {
-            // Existing recipes have unsaved changes if they differ from the original
-            return recipe != originalRecipe
+        if pendingImage.isChange || classification != originalClassification || recipe != originalRecipe {
+            return true
         }
+        // Cancelling a new recipe throws the whole recipe away, not just the edits made since it
+        // opened -- so one that arrived with content (from an import) is worth asking about too.
+        return isNewRecipe && (
+            !recipe.name.isEmpty || !recipe.source.isEmpty || !recipe.introduction.isEmpty ||
+            !recipe.ingredients.isEmpty || !recipe.directions.isEmpty || !recipe.notes.isEmpty || !recipe.variations.isEmpty
+        )
     }
-    
+
     var sortedTags: [String] {
-        let recipeTagIds = allRecipeTags.filter { $0.recipeId == recipe.id }.map { $0.tagId }
-        return allTags.filter { recipeTagIds.contains($0.id) }
-            .map { $0.name }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        classification.tagNames(in: allTags)
     }
-    
+
     var hasTags: Bool {
         !sortedTags.isEmpty
     }
-        
+
     var sortedCategories: [String] {
-        let recipeCategoryIds = allRecipeCategories.filter { $0.recipeId == recipe.id }.map { $0.categoryId }
-        return allCategories.filter { recipeCategoryIds.contains($0.id) }
-            .map { $0.name }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        classification.categoryNames(in: allCategories)
     }
-    
+
     var hasCategories: Bool {
         !sortedCategories.isEmpty
     }
-    
+
     // MARK: - Initialization
     init(recipe: Recipe, isNewRecipe: Bool = false, onNewRecipeSaved: ((String) -> Void)? = nil) {
         self.recipe = recipe
@@ -122,7 +102,29 @@ class RecipeDetailEditViewModel {
         self.isNewRecipe = isNewRecipe
         self.onNewRecipeSaved = onNewRecipeSaved
     }
-    
+
+    // MARK: - Loading
+
+    /// Reads the recipe's stored categories and tags into the draft. Called from the editor's `.task`;
+    /// a draft the user has already touched by then is left alone, only its baseline is set.
+    func loadClassification() async {
+        let recipeId = recipe.id
+        do {
+            let stored = try await database.read { db -> RecipeClassificationDraft in
+                let categoryIds = try RecipeCategory.where { $0.recipeId.eq(recipeId) }.fetchAll(db).map(\.categoryId)
+                let tagIds = try RecipeTag.where { $0.recipeId.eq(recipeId) }.fetchAll(db).map(\.tagId)
+                return RecipeClassificationDraft(categoryIDs: Set(categoryIds), tagIDs: Set(tagIds))
+            }
+            let untouched = classification == originalClassification
+            originalClassification = stored
+            if untouched {
+                classification = stored
+            }
+        } catch {
+            logger.error("Error loading the recipe's categories and tags: \(error)")
+        }
+    }
+
     // MARK: - Public Methods
     /// Saves the recipe and its category relationships. Returns `true` on success;
     /// on failure, sets `showingSaveErrorAlert` so the view can inform the user.
@@ -132,7 +134,9 @@ class RecipeDetailEditViewModel {
         // off the main actor, so it must not touch `self`. Sync timestamps are left to `RecipeWriter.save`.
         var recipeDraft = recipe
         let isNew = isNewRecipe
-        let categoryIDs = selectedCategoryIDs
+        let classificationDraft = classification
+        let imagePolicy: RecipeWriter.BodySaveImage = pendingImage.isChange ? .useEdited : .keepStored
+        let now = Date()
 
         // Apply the held image change now, on the copy that is about to be written: the new file goes
         // to disk first, the row pointing at it second, and the old file is removed last (below), so no
@@ -146,28 +150,38 @@ class RecipeDetailEditViewModel {
         let recipeDraftToSave = recipeDraft
         do {
             // `save` returns the row as written, timestamps included.
-            let recipeToSave = try await database.write { db -> Recipe in
-                let recipeToSave = try RecipeWriter.save(recipeDraftToSave, in: db).recipe
+            let (recipeToSave, savedTagIds) = try await database.write { db -> (Recipe, Set<String>) in
+                // A body save keeps whatever photo and "last made" are stored now, so an editor opened
+                // before a sync or another window changed them can't write the old values back; the
+                // photo columns come from the draft only when this editor changed the photo itself. A
+                // new recipe has no stored row to keep, so it is inserted. A recipe deleted elsewhere
+                // while this editor was open surfaces as `recipeNotFound` rather than coming back.
+                var recipeToSave = isNew
+                    ? try RecipeWriter.save(recipeDraftToSave, in: db, now: now).recipe
+                    : try RecipeWriter.saveBody(recipeDraftToSave, image: imagePolicy, in: db, now: now).recipe
 
-                // Handle category relationships
-                if !categoryIDs.isEmpty {
-                    // Remove existing category relationships
-                    try RecipeCategory
-                        .where { $0.recipeId.eq(recipeToSave.id) }
-                        .delete()
-                        .execute(db)
-
-                    // Add new category relationships
-                    for categoryId in categoryIDs {
-                        let recipeCategory = RecipeCategory(
-                            id: UUIDV7().uuidString,
-                            recipeId: recipeToSave.id,
-                            categoryId: categoryId
-                        )
-                        try RecipeCategory.insertIfAbsent(recipeCategory, in: db)
+                // Tags typed into this editor get their library rows now, found by the library's own
+                // duplicate rule or created, so one that another device synced in meanwhile is reused.
+                var tagIds = classificationDraft.tagIDs
+                for name in classificationDraft.newTagNames {
+                    if let tagId = try LibraryClassifierResolver.resolveId(kind: .tag, name: name, in: db, now: now) {
+                        tagIds.insert(tagId)
                     }
                 }
-                return recipeToSave
+
+                // Membership travels on the recipe when it syncs, so the writer bumps the recipe's
+                // clock when it changed anything; the row is read back so the editor holds that stamp.
+                let changed = try RecipeClassificationWriter.set(
+                    categoryIds: Array(classificationDraft.categoryIDs),
+                    tagIds: Array(tagIds),
+                    forRecipe: recipeToSave.id,
+                    in: db,
+                    now: now
+                )
+                if changed, let stamped = try Recipe.where({ $0.id.eq(recipeToSave.id) }).fetchOne(db) {
+                    recipeToSave = stamped
+                }
+                return (recipeToSave, tagIds)
             }
 
             // The row is durable; now the file it stopped referencing (if any) can go.
@@ -185,6 +199,9 @@ class RecipeDetailEditViewModel {
             recipe = recipeToSave
             originalRecipe = recipeToSave
             pendingImage = .unchanged
+            let saved = RecipeClassificationDraft(categoryIDs: classificationDraft.categoryIDs, tagIDs: savedTagIds)
+            classification = saved
+            originalClassification = saved
             return true
 
         } catch {
@@ -194,104 +211,25 @@ class RecipeDetailEditViewModel {
             return false
         }
     }
-    
+
     // MARK: - Tag Management
-    
-    func addTag(_ tagName: String) async {
-        let trimmedName = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
 
-        let recipeId = recipe.id
-        do {
-            // Check if tag already exists
-            let existingTag = try await database.read { db in
-                try Tag
-                    .where { $0.name.collate(.nocase).eq(trimmedName.collate(.nocase)) }
-                    .fetchOne(db)
-            }
-
-            let tagToUse: Tag
-            if let existing = existingTag {
-                tagToUse = existing
-            } else {
-                // Create new tag
-                let newTag = Tag(id: UUIDV7().uuidString, name: trimmedName, lastModifiedDate: Date())
-                try await database.write { db in
-                    try Tag.insert { newTag }.execute(db)
-                }
-                tagToUse = newTag
-            }
-
-            // Add tag to recipe unless it already carries it
-            let recipeTag = RecipeTag(id: UUIDV7().uuidString, recipeId: recipeId, tagId: tagToUse.id)
-            let stamped = try await database.write { db -> Date? in
-                guard try RecipeTag.insertIfAbsent(recipeTag, in: db) else { return nil }
-                return try Recipe.touchLastModified(recipeId: recipeId, in: db)
-            }
-            if let stamped {
-                recipe.lastModifiedDate = stamped
-            }
-        } catch {
-            logger.error("Error adding tag: \(error)")
-        }
+    /// Adds a tag to the draft; nothing reaches the database until Save.
+    func addTag(_ tagName: String) {
+        classification.addTag(named: tagName, library: allTags)
     }
 
-    func removeTag(_ tagName: String) async {
-        let recipeId = recipe.id
-        do {
-            // Find the tag
-            let tag = try await database.read { db in
-                try Tag
-                    .where { $0.name.collate(.nocase).eq(tagName.collate(.nocase)) }
-                    .fetchOne(db)
-            }
-
-            guard let tag = tag else {
-                logger.warning("Tag '\(tagName)' not found")
-                return
-            }
-
-            // Remove the recipe-tag association
-            recipe.lastModifiedDate = try await database.write { db -> Date in
-                try RecipeTag
-                    .where { $0.recipeId.eq(recipeId) && $0.tagId.eq(tag.id) }
-                    .delete()
-                    .execute(db)
-                return try Recipe.touchLastModified(recipeId: recipeId, in: db)
-            }
-
-            logger.info("Tag '\(tagName)' removed from recipe")
-        } catch {
-            logger.error("Error removing tag: \(error)")
-        }
+    /// Removes a tag from the draft; nothing reaches the database until Save.
+    func removeTag(_ tagName: String) {
+        classification.removeTag(named: tagName, library: allTags)
     }
-    
+
     func discardChanges() {
         recipe = originalRecipe
         pendingImage = .unchanged
+        classification = originalClassification
     }
-    
-    private func refreshRecipeFromDatabase() {
-        do {
-            if let refreshedRecipe = try database.read({ db in
-                try Recipe
-                    .where { $0.id.eq(recipe.id) }
-                    .fetchOne(db)
-            }) {
-                recipe = refreshedRecipe
-                originalRecipe = refreshedRecipe
-            }
-        } catch {
-            logger.error("Error refreshing recipe from database: \(error)")
-        }
-    }
-    
 
-    
-
-    
-
-   
     var nutritionSummary: String? {
         guard let nutrition = recipe.nutrition else { return nil }
 
@@ -335,4 +273,3 @@ class RecipeDetailEditViewModel {
     }
 
 }
-

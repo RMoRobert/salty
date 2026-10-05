@@ -21,31 +21,6 @@ public enum LibraryClassifier: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
-    public var singularLabel: String {
-        switch self {
-        case .category: return "Category"
-        case .course: return "Course"
-        case .tag: return "Tag"
-        }
-    }
-
-    public var pluralLabel: String {
-        switch self {
-        case .category: return "Categories"
-        case .course: return "Courses"
-        case .tag: return "Tags"
-        }
-    }
-
-    /// Matches the icons the sidebar uses for these rows.
-    public var systemImage: String {
-        switch self {
-        case .category: return "rectangle.stack"
-        case .course: return "fork.knife"
-        case .tag: return "tag"
-        }
-    }
-
     /// The table the rows live in.
     public var tableName: String {
         switch self {

@@ -5,9 +5,8 @@
 //  Covers the client behaviors that make server-originated edits (another device, or the server's
 //  web UI) safe:
 //
-//  - Sync fires `ShoppingListChangeNotifier` for every list it writes or deletes locally, so an
-//    open checklist/freeform editor reloads instead of saving its stale in-memory copy back over
-//    the downloaded change.
+//  - A server edit to a shopping list lands in the local row (and a server delete removes it),
+//    without a forced-overwrite marker. Open editors pick the change up by observing the row.
 //  - A course/category/tag is deleted on the server only when a tombstone records that it was
 //    deleted here; any other server-only row is downloaded, however old (ClassifierTombstoneWriter).
 //  - Those deletes carry `If-Match` with the timestamp the delete decision was based on, and a 409
@@ -152,9 +151,9 @@ struct SaltySyncServiceServerEditTests {
         }
     }
 
-    // MARK: - Sync notifies open shopping-list editors
+    // MARK: - Server edits to shopping lists
 
-    @Test func syncNotifiesForDownloadedAndLocallyDeletedListsOnly() async throws {
+    @Test func syncWritesServerEditsAndLocalDeletesOfShoppingLists() async throws {
         let database = try makeTestDatabase()
         let changed = "list-changed-\(UUID().uuidString)"
         let unchanged = "list-unchanged-\(UUID().uuidString)"
@@ -175,7 +174,6 @@ struct SaltySyncServiceServerEditTests {
             """))
         SyncRouteStubURLProtocol.reset(routes: routes)
 
-        let notifier = ShoppingListChangeNotifier.shared
         try await withDependencies {
             $0.defaultDatabase = database
         } operation: {
@@ -183,19 +181,16 @@ struct SaltySyncServiceServerEditTests {
             try await service.syncNow(force: true)
         }
 
-        // Exactly the lists whose local rows sync rewrote or removed were announced.
-        #expect(notifier.changeCount(for: changed) == 1)
-        #expect(notifier.changeCount(for: unchanged) == 0)
-        #expect(notifier.changeCount(for: deleted) == 1)
-
-        // And the writes themselves happened: the web edit landed, the deleted list is gone.
-        let (newName, newRevision, deletedCount) = try await database.read { db in
+        // The web edit landed, the agreed list was left alone, the deleted list is gone.
+        let (newName, newRevision, unchangedName, deletedCount) = try await database.read { db in
             (try String.fetchOne(db, sql: #"SELECT "name" FROM "shoppingList" WHERE "id" = ?"#, arguments: [changed]),
              try Int64.fetchOne(db, sql: #"SELECT "syncedRevision" FROM "shoppingList" WHERE "id" = ?"#, arguments: [changed]),
+             try String.fetchOne(db, sql: #"SELECT "name" FROM "shoppingList" WHERE "id" = ?"#, arguments: [unchanged]),
              try Int.fetchOne(db, sql: #"SELECT COUNT(*) FROM "shoppingList" WHERE "id" = ?"#, arguments: [deleted]) ?? -1)
         }
         #expect(newName == "Groceries (web)")
         #expect(newRevision == 2)
+        #expect(unchangedName == "Hardware")
         #expect(deletedCount == 0)
 
         // Regular sync must never mark its writes as forced overwrites.
@@ -577,89 +572,5 @@ struct SaltySyncServiceServerEditTests {
         }
         #expect(recipeTombstones.isEmpty)
         #expect(tagTombstones.isEmpty)
-    }
-}
-
-// MARK: - Notifier unit behavior
-
-@MainActor
-struct ShoppingListChangeNotifierTests {
-
-    /// Counters are per list: several lists changed in one sync pass must each read their own
-    /// change, not just the last one announced (SwiftUI coalesces `onChange` deliveries).
-    @Test func countsArePerList() {
-        let notifier = ShoppingListChangeNotifier.shared
-        let a = "notifier-a-\(UUID().uuidString)"
-        let b = "notifier-b-\(UUID().uuidString)"
-
-        notifier.noteExternalChange(listId: a)
-        notifier.noteExternalChange(listId: b)
-        notifier.noteExternalChange(listId: a)
-
-        #expect(notifier.changeCount(for: a) == 2)
-        #expect(notifier.changeCount(for: b) == 1)
-    }
-
-    @Test func unknownListReadsZero() {
-        #expect(ShoppingListChangeNotifier.shared.changeCount(for: "never-touched-\(UUID().uuidString)") == 0)
-    }
-
-    /// A save announces itself so the *other* windows editing that list reload — the editor that made
-    /// it must be able to tell its own announcement apart, or it would reload mid-keystroke.
-    @Test func editorChangeIsOwnedOnlyByTheEditorThatMadeIt() {
-        let notifier = ShoppingListChangeNotifier.shared
-        let list = "notifier-owner-\(UUID().uuidString)"
-        let mine = UUID()
-        let theirs = UUID()
-
-        notifier.noteEditorChange(listId: list, source: mine)
-
-        #expect(notifier.changeCount(for: list) == 1)
-        #expect(notifier.isOwnChange(listId: list, source: mine))
-        #expect(!notifier.isOwnChange(listId: list, source: theirs))
-    }
-
-    /// Two windows on one list: whoever wrote last owns the change, and everyone else reloads.
-    @Test func latestEditorChangeTakesOverOwnership() {
-        let notifier = ShoppingListChangeNotifier.shared
-        let list = "notifier-handover-\(UUID().uuidString)"
-        let first = UUID()
-        let second = UUID()
-
-        notifier.noteEditorChange(listId: list, source: first)
-        notifier.noteEditorChange(listId: list, source: second)
-
-        #expect(notifier.changeCount(for: list) == 2)
-        #expect(notifier.isOwnChange(listId: list, source: second))
-        #expect(!notifier.isOwnChange(listId: list, source: first))
-    }
-
-    /// Sync and the "Add to Shopping List" sheet belong to no editor, so every open editor reloads —
-    /// including one that happened to write the list a moment earlier.
-    @Test func externalChangeBelongsToNoEditor() {
-        let notifier = ShoppingListChangeNotifier.shared
-        let list = "notifier-external-\(UUID().uuidString)"
-        let editor = UUID()
-
-        notifier.noteEditorChange(listId: list, source: editor)
-        notifier.noteExternalChange(listId: list)
-
-        #expect(notifier.changeCount(for: list) == 2)
-        #expect(!notifier.isOwnChange(listId: list, source: editor))
-    }
-
-    /// Ownership is per list for the same reason the counters are: one editor's save must not make
-    /// another list's pending change look like it was already handled.
-    @Test func ownershipIsPerList() {
-        let notifier = ShoppingListChangeNotifier.shared
-        let a = "notifier-own-a-\(UUID().uuidString)"
-        let b = "notifier-own-b-\(UUID().uuidString)"
-        let editor = UUID()
-
-        notifier.noteEditorChange(listId: a, source: editor)
-        notifier.noteExternalChange(listId: b)
-
-        #expect(notifier.isOwnChange(listId: a, source: editor))
-        #expect(!notifier.isOwnChange(listId: b, source: editor))
     }
 }

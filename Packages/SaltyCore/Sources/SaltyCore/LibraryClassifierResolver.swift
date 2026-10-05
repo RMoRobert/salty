@@ -30,7 +30,7 @@ public enum LibraryClassifierResolver {
     /// A newly created row stores the *trimmed* name (its capitalization is kept as given) and gets a
     /// UUIDv7 id, so it sorts by creation time like every other row the app writes -- which is what
     /// the merge's oldest-wins tie-break relies on.
-    public static func resolveId(kind: LibraryClassifier, name: String, in db: Database) throws -> String? {
+    public static func resolveId(kind: LibraryClassifier, name: String, in db: Database, now rawNow: Date = Date()) throws -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -52,7 +52,8 @@ public enum LibraryClassifierResolver {
         let newId = UUIDV7().uuidString
         try db.execute(
             sql: #"INSERT INTO "\#(table)" ("id", "name", "lastModifiedDate") VALUES (?, ?, ?)"#,
-            arguments: [newId, trimmed, Date()]
+            // DATE-009: whole milliseconds, like every stamp the writers produce; sync compares it.
+            arguments: [newId, trimmed, rawNow.roundedToWireMillis]
         )
         return newId
     }
