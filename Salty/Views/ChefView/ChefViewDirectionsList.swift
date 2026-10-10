@@ -73,7 +73,7 @@ struct ChefViewDirectionsList: View {
 // MARK: - Row
 
 private struct ChefViewStepRow: View {
-    let step: ChefStep
+    let step: DirectionStep
     let isCurrent: Bool
     let isCompleted: Bool
     let onSelect: () -> Void

@@ -90,7 +90,7 @@ struct RecipeExporterTests {
     }
 }
 
-/// Every read-only rendering numbers steps through `ChefStep`: headings and blank rows take no number.
+/// Every read-only rendering numbers steps through `DirectionStep`: headings and blank rows take no number.
 struct DirectionNumberingAcrossOutputsTests {
     private let directions = [
         Direction(id: "1", text: "Mix"),
@@ -116,7 +116,7 @@ struct DirectionNumberingAcrossOutputsTests {
     }
 
     @Test func everyOutputAgreesWithChefView() {
-        let numbers = ChefStep.steps(from: directions).compactMap(\.number)
+        let numbers = DirectionStep.steps(from: directions).compactMap(\.number)
         #expect(numbers == [1, 2])
     }
 }

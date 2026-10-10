@@ -10,7 +10,7 @@
 import Foundation
 
 struct ChefSessionState: Equatable {
-    /// `ChefStep.id` (index into the recipe's directions) of the step being worked on.
+    /// `DirectionStep.id` (index into the recipe's directions) of the step being worked on.
     var currentStepId: Int?
     var completedStepIds: Set<Int> = []
     /// Indices into the recipe's `ingredients` array.

@@ -149,9 +149,18 @@ struct SaltyApp: App {
 
         // "Import from Web" window
         WindowGroup(id: "create-recipe-from-web-window") {
-            CreateRecipeFromWebView()
-                .frame(idealWidth: 1200)
-                .navigationTitle("Web Import")
+            Group {
+                if #available(iOS 26.0, macOS 26.0, *) {
+                    CreateRecipeFromWebView()
+                } else {
+                    // Nothing opens this window before OS 26; this covers one that state restoration
+                    // reopens after an update.
+                    ContentUnavailableView("Web Import Unavailable", systemImage: "globe",
+                                           description: Text("Web Import requires macOS 26 or iOS 26 or later."))
+                }
+            }
+            .frame(idealWidth: 1200)
+            .navigationTitle("Web Import")
         }
         #if os(macOS)
         .defaultSize(width: 1200, height: 800)

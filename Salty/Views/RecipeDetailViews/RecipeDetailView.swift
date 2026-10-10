@@ -637,7 +637,7 @@ private struct DirectionsSection: View {
             Text("Directions")
                 .modifier(TitleStyle())
             // Numbered as Chef View and the printout number them: headings and blank rows don't count.
-            ForEach(ChefStep.steps(from: recipe.directions)) { step in
+            ForEach(DirectionStep.steps(from: recipe.directions)) { step in
                 if let stepNumber = step.number {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(stepNumber).")

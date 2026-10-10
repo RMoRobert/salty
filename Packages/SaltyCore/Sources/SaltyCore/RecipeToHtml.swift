@@ -192,8 +192,8 @@ public extension Recipe {
                 Section {
                     H2("Directions").id("recipe-directions-heading")
                     Ul {
-                        // Numbered as Chef View and the detail view number them (see ChefStep).
-                        for step in ChefStep.steps(from: directions) {
+                        // Numbered as Chef View and the detail view number them (see DirectionStep).
+                        for step in DirectionStep.steps(from: directions) {
                             if let number = step.number {
                                 Li {
                                     Span("\(number).")

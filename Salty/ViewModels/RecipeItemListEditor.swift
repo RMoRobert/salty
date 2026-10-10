@@ -144,12 +144,13 @@ enum RecipeItemListEditor {
 
     // MARK: - Display
 
-    /// The step number shown beside a direction, or nil for a heading. Headings don't take a number,
-    /// so the count only walks the real steps ahead of this one.
+    /// The step number shown beside a direction, or nil for a heading. Numbered by `DirectionStep`, as
+    /// every other view of the recipe is, except that blank rows take a number here: the editor shows
+    /// them, so skipping one would leave a gap in the numbers on screen.
     static func stepNumber(forDirectionWith id: String, in directions: [Direction]) -> Int? {
-        guard let index = directions.firstIndex(where: { $0.id == id }),
-              !directions[index].isHeadingRow else { return nil }
-        return directions.prefix(index).count { !$0.isHeadingRow } + 1
+        guard let index = directions.firstIndex(where: { $0.id == id }) else { return nil }
+        return DirectionStep.steps(from: directions, includingBlankRows: true)
+            .first { $0.id == index }?.number
     }
 
     /// Whether a row gets the tinted background of the striped-list effect. Short lists stay plain,

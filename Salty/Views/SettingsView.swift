@@ -622,21 +622,24 @@ struct ThemeSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
-                    .fixedSize(horizontal: false, vertical: true)
-                if useWebRecipeDetailView {
-                    Picker("Theme", selection: $recipeHtmlTheme) {
-                        ForEach(RecipeHtmlTheme.allCases) { theme in
-                            Text(theme.displayName).tag(theme)
+            // The web-based detail view needs OS 26 (SwiftUI's WebView).
+            if #available(iOS 26.0, macOS 26.0, *) {
+                Section {
+                    Toggle("Use web-based recipe detail view (instead of native UI-based view; experimental)", isOn: $useWebRecipeDetailView)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if useWebRecipeDetailView {
+                        Picker("Theme", selection: $recipeHtmlTheme) {
+                            ForEach(RecipeHtmlTheme.allCases) { theme in
+                                Text(theme.displayName).tag(theme)
+                            }
                         }
                     }
+                } header: {
+                    Text("Recipe Display")
+                        #if os(macOS)
+                        .padding(.top)
+                        #endif
                 }
-            } header: {
-                Text("Recipe Display")
-                    #if os(macOS)
-                    .padding(.top)
-                    #endif
             }
             Section {
                 Toggle("Use monospaced font in bulk recipe ingredient and direction edit forms", isOn: $monospacedBulkEditFont)

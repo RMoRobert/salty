@@ -321,6 +321,18 @@ private func names(_ items: [Ingredient]) -> [String] {
         #expect(RecipeItemListEditor.stepNumber(forDirectionWith: "s1", in: directions) == 1)
     }
 
+    /// Unlike the detail view and Chef View, which drop blank rows: the editor shows them.
+    @Test func blankDirectionRowsTakeAStepNumber() {
+        let directions = [
+            Direction(id: "s1", isHeading: false, text: "Chop"),
+            Direction(id: "blank", isHeading: false, text: ""),
+            Direction(id: "s2", isHeading: false, text: "Stir"),
+        ]
+
+        #expect(RecipeItemListEditor.stepNumber(forDirectionWith: "blank", in: directions) == 2)
+        #expect(RecipeItemListEditor.stepNumber(forDirectionWith: "s2", in: directions) == 3)
+    }
+
     @Test func aDirectionThatIsNoLongerInTheListHasNoStepNumber() {
         let directions = [Direction(id: "s1", isHeading: false, text: "Chop")]
 

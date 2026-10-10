@@ -64,19 +64,22 @@ struct Menus: Commands {
            }
            .disabled(mainWindow == nil || isAnySheetShown)
            .keyboardShortcut("n", modifiers: [.command])
-           Button("New Recipe from Web…") {
+           // Web Import needs OS 26 (SwiftUI's WebView).
+           if #available(iOS 26.0, macOS 26.0, *) {
+               Button("New Recipe from Web…") {
+                   #if os(iOS)
+                   mainWindow?.createFromWeb()
+                   #else
+                   openWindow(id: "create-recipe-from-web-window")
+                   #endif
+               }
                #if os(iOS)
-               mainWindow?.createFromWeb()
+               .disabled(mainWindow == nil || isAnySheetShown)
                #else
-               openWindow(id: "create-recipe-from-web-window")
+               .disabled(isAnySheetShown)
                #endif
+               .keyboardShortcut("n", modifiers: [.command, .option])
            }
-           #if os(iOS)
-           .disabled(mainWindow == nil || isAnySheetShown)
-           #else
-           .disabled(isAnySheetShown)
-           #endif
-           .keyboardShortcut("n", modifiers: [.command, .option])
            Button("New Recipe from Image…") {
                openWindow(id: "create-recipe-from-image-window")
            }

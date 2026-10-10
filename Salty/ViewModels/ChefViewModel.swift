@@ -36,11 +36,11 @@ final class ChefViewModel {
 
     /// Direction rows as Chef View shows them, headings included. Derived once per recipe snapshot
     /// rather than parsed on every access: the list asks per row whether a step is current.
-    private(set) var steps: [ChefStep] = []
+    private(set) var steps: [DirectionStep] = []
 
     /// Just the numbered steps — headings orient the cook but are never "current" and can't be
     /// stepped onto.
-    private(set) var cookableSteps: [ChefStep] = []
+    private(set) var cookableSteps: [DirectionStep] = []
 
     private let sessionStore: ChefViewSessionStore
 
@@ -89,7 +89,7 @@ final class ChefViewModel {
     /// the recipe: that progress is positions in the directions and ingredients, and after an edit
     /// it would highlight the wrong step and check the wrong ingredient.
     private func recipeDidChange() {
-        steps = ChefStep.steps(from: recipe?.directions ?? [])
+        steps = DirectionStep.steps(from: recipe?.directions ?? [])
         cookableSteps = steps.filter { !$0.isHeading }
         guard let recipe else { return }
         let session = sessionStore.state(for: recipeId)
@@ -106,7 +106,7 @@ final class ChefViewModel {
 
     /// The step in focus. Falls back to the first cookable step so Chef View always opens on
     /// something, without having to write that choice into the session up front.
-    var currentStep: ChefStep? {
+    var currentStep: DirectionStep? {
         let cookable = cookableSteps
         if let id = session.currentStepId, let match = cookable.first(where: { $0.id == id }) {
             return match
@@ -127,17 +127,17 @@ final class ChefViewModel {
         return steps.last(where: { $0.isHeading && $0.id < current.id })?.text
     }
 
-    func isCurrent(_ step: ChefStep) -> Bool {
+    func isCurrent(_ step: DirectionStep) -> Bool {
         !step.isHeading && step.id == currentStep?.id
     }
 
-    func isCompleted(_ step: ChefStep) -> Bool {
+    func isCompleted(_ step: DirectionStep) -> Bool {
         session.completedStepIds.contains(step.id)
     }
 
     /// Makes a step current. Headings are ignored so tapping one doesn't strand the cook on a row
     /// with no next/previous meaning.
-    func select(_ step: ChefStep) {
+    func select(_ step: DirectionStep) {
         guard !step.isHeading else { return }
         update { $0.currentStepId = step.id }
     }
@@ -191,7 +191,7 @@ final class ChefViewModel {
         }
     }
 
-    func toggleCompleted(_ step: ChefStep) {
+    func toggleCompleted(_ step: DirectionStep) {
         guard !step.isHeading else { return }
         update {
             if $0.completedStepIds.contains(step.id) {

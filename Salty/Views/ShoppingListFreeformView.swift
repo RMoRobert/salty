@@ -25,12 +25,12 @@ struct ShoppingListFreeformView: View {
 
     var body: some View {
         Group {
-            if showsPreview {
-                // Wait for the load before building the web view. Rendering it immediately would
-                // create a WKWebView loading an EMPTY document, then throw it away a moment later
-                // when `load()` lands and the content id changes — and a web view that's asked to
-                // load and is then discarded mid-layout intermittently paints nothing, which is why
-                // the preview sometimes stayed blank until the Edit/Preview picker was toggled.
+            // The preview needs OS 26 (SwiftUI's WebView); before that the picker is hidden and a
+            // preference saved on a newer system falls back to the editor.
+            if showsPreview, #available(iOS 26.0, macOS 26.0, *) {
+                // Wait for the load before building the web view, so it doesn't render an empty
+                // document first. (With the earlier WebViewKit view, which was rebuilt whenever the
+                // content changed, that discarded first view intermittently left the preview blank.)
                 if viewModel.isLoaded {
                     MarkdownPreviewView(text: viewModel.text)
                 } else {
@@ -79,13 +79,15 @@ struct ShoppingListFreeformView: View {
             viewModel.storedRowDidChange(to: row)
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Picker("View", selection: $showsPreview) {
-                    Label("Edit", systemImage: "long.text.page.and.pencil").tag(false)
-                    Label("Preview", systemImage: "eye").tag(true)
+            if #available(iOS 26.0, macOS 26.0, *) {
+                ToolbarItem(placement: .primaryAction) {
+                    Picker("View", selection: $showsPreview) {
+                        Label("Edit", systemImage: "long.text.page.and.pencil").tag(false)
+                        Label("Preview", systemImage: "eye").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelStyle(.iconOnly)
                 }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
             }
         }
         .onChange(of: showsPreview) { _, isPreview in

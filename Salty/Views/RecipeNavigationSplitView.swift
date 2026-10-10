@@ -648,8 +648,10 @@ private struct RecipeListColumnView: View {
                     Button("Import from File…") {
                         activeSheet = .importFromFile
                     }
-                    Button("Create from Web…") {
-                        activeSheet = .createFromWeb
+                    if #available(iOS 26.0, *) {
+                        Button("Create from Web…") {
+                            activeSheet = .createFromWeb
+                        }
                     }
                 } label: {
                     Label("New Recipe", systemImage: "plus")
@@ -775,10 +777,12 @@ private struct RecipeListColumnView: View {
                         Label("New Recipe", systemImage: "plus")
                     }
                     Divider()
-                    Button("Create from Web…") {
-                        openWindow(id: "create-recipe-from-web-window")
+                    if #available(macOS 26.0, *) {
+                        Button("Create from Web…") {
+                            openWindow(id: "create-recipe-from-web-window")
+                        }
+                        .disabled(isAnySheetShown)
                     }
-                    .disabled(isAnySheetShown)
                     Button("Create from Image…") {
                         openWindow(id: "create-recipe-from-image-window")
                     }
@@ -1080,7 +1084,7 @@ private struct RecipeDetailColumnView: View {
         } else if let recipeId = viewModel.selectedRecipeIDs.first,
             let recipe = viewModel.fullRecipe(id: recipeId) {
             Group {
-                if useWebRecipeDetailView {
+                if useWebRecipeDetailView, #available(iOS 26.0, macOS 26.0, *) {
                     RecipeDetailWebView(recipe: recipe)
                         // The web preview has no Chef View button to order against, so it keeps
                         // declaring Edit itself. RecipeDetailView owns both in the other branch.
@@ -1202,7 +1206,9 @@ private struct RootPresentationsModifier: ViewModifier {
         #if !os(macOS)
         // Show full screen cover on iOS; macOS will use window instead
         .fullScreenCover(isPresented: isShowingWebImporter) {
-            CreateRecipeFromWebView()
+            if #available(iOS 26.0, *) {
+                CreateRecipeFromWebView()
+            }
         }
         #endif
         .sheet(isPresented: $viewModel.showingHTMLExportSettings) {
@@ -1254,7 +1260,9 @@ private struct MainSheetContent: View {
                 #endif
         case .createFromWeb:
             // Presented as a full-screen cover on iOS and a window on macOS; never reaches here.
-            CreateRecipeFromWebView()
+            if #available(iOS 26.0, macOS 26.0, *) {
+                CreateRecipeFromWebView()
+            }
         case .settings:
             NavigationStack {
                 SettingsView()

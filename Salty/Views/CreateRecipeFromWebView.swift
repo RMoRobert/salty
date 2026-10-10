@@ -6,12 +6,15 @@
 //
 
 import SwiftUI
+import WebKit
 import SaltyCore
 
+/// Web Import: a browser with recipe-scanning tools. OS 26+ only, as it's built on SwiftUI's
+/// `WebView`; the menu items that open it are hidden on earlier systems.
+@available(iOS 26.0, macOS 26.0, *)
 struct CreateRecipeFromWebView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = CreateRecipeFromWebViewModel()
-    @State private var webView: WebViewCoordinator?
     /// Window content width, fed to the browser pane so the address field's toolbar item can size
     /// itself to the space the row actually has. macOS only; iOS never shows that field.
     @State private var windowContentWidth: CGFloat = 0
@@ -22,7 +25,7 @@ struct CreateRecipeFromWebView: View {
             // macOS: Use HSplitView with browser and editor side by side
             HSplitView {
                 // Left side - Web Browser
-                RecipeWebBrowserView(viewModel: viewModel, webView: $webView, windowWidth: windowContentWidth, onSave: { dismiss() })
+                RecipeWebBrowserView(viewModel: viewModel, windowWidth: windowContentWidth, onSave: { dismiss() })
                     .frame(minWidth: 400, idealWidth: 600)
                 
                 // Right side - Recipe Editor
@@ -38,7 +41,6 @@ struct CreateRecipeFromWebView: View {
             // iOS/iPadOS: Use simplified layout with browser and direct editor
             RecipeWebBrowserView(
                 viewModel: viewModel,
-                webView: $webView,
                 onClose: {
                     // Closing without saving discards the import; remove any downloaded photo.
                     viewModel.cleanUpUnsavedImage()
@@ -182,38 +184,18 @@ struct CreateRecipeFromWebView: View {
         ]
         
         if let field = fieldMap[key] {
-            extractSelectedTextToField(field)
+            Task { await viewModel.extractSelectedText(to: field) }
             return .handled
         }
         return .ignored
-    }
-    
-    private func extractSelectedTextToField(_ field: RecipeField, retryCount: Int = 0) {
-        guard let webView = webView else {
-            if retryCount < 5 {
-                Task {
-                    try? await Task.sleep(for: .seconds(0.1))
-                    self.extractSelectedTextToField(field, retryCount: retryCount + 1)
-                }
-            }
-            return
-        }
-        
-        webView.getSelectedText { selectedText in
-            Task { @MainActor in
-                if let text = selectedText, !text.isEmpty {
-                    self.viewModel.extractTextToField(text, field: field)
-                }
-            }
-        }
     }
     #endif
 }
 
 // MARK: - Recipe Web Browser View
+@available(iOS 26.0, macOS 26.0, *)
 struct RecipeWebBrowserView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
-    @Binding var webView: WebViewCoordinator?
     /// See `CreateRecipeFromWebView.windowContentWidth`. Defaults to 0 (unknown) for the iOS call
     /// site, which has no address-field toolbar item to size.
     var windowWidth: CGFloat = 0
@@ -237,21 +219,8 @@ struct RecipeWebBrowserView: View {
     
     
     var body: some View {
-        // Web View
-        WebViewRepresentable(
-            content: viewModel.currentURL.isEmpty ? .htmlResource("createRecipeFromWebLandingPage") : .url(viewModel.currentURL),
-            coordinator: $webView,
-            onNavigationStateChange: { canGoBack, canGoForward, isLoading in
-                viewModel.updateNavigationState(
-                    canGoBack: canGoBack,
-                    canGoForward: canGoForward,
-                    isLoading: isLoading
-                )
-            },
-            onURLChange: { newURL in
-                viewModel.currentURL = newURL
-            }
-        )
+        WebView(viewModel.page)
+        .webViewBackForwardNavigationGestures(.enabled)
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width < 500
         } action: { isCompact in
@@ -263,6 +232,7 @@ struct RecipeWebBrowserView: View {
         // On the body rather than on the address field so it still runs at compact widths, where the
         // field is hidden but the "Enter URL..." menu item still seeds its alert from `urlText`.
         .onAppear {
+            viewModel.showStartPageIfNeeded()
             syncURLText(viewModel.currentURL)
         }
         .onChange(of: viewModel.currentURL) { _, newURL in
@@ -387,13 +357,13 @@ struct RecipeWebBrowserView: View {
 
     /// Keeps the address bar in step with the page the web view actually has loaded.
     private func syncURLText(_ url: String) {
-        urlText = (url.isEmpty || url.starts(with: "file://")) ? "about:home" : url
+        urlText = url.isEmpty ? "about:home" : url
     }
 
     #if os(macOS)
     private var backButton: some View {
         Button("Back", systemImage: "chevron.left") {
-            webView?.goBack()
+            viewModel.goBack()
         }
         .labelStyle(.iconOnly)
         .disabled(!viewModel.canGoBack)
@@ -403,7 +373,7 @@ struct RecipeWebBrowserView: View {
 
     private var forwardButton: some View {
         Button("Forward", systemImage: "chevron.right") {
-            webView?.goForward()
+            viewModel.goForward()
         }
         .labelStyle(.iconOnly)
         .disabled(!viewModel.canGoForward)
@@ -413,7 +383,7 @@ struct RecipeWebBrowserView: View {
 
     private var homeButton: some View {
         Button("Home", systemImage: "house") {
-            goHome()
+            viewModel.goHome()
         }
         .labelStyle(.iconOnly)
         .keyboardShortcut("h", modifiers: [.command, .shift])
@@ -424,7 +394,7 @@ struct RecipeWebBrowserView: View {
     private var reloadButton: some View {
         Button(viewModel.isLoading ? "Stop" : "Reload",
                systemImage: viewModel.isLoading ? "xmark" : "arrow.clockwise") {
-            reloadOrStop()
+            viewModel.reloadOrStop()
         }
         .labelStyle(.iconOnly)
         .keyboardShortcut("r", modifiers: .command)
@@ -436,8 +406,8 @@ struct RecipeWebBrowserView: View {
             text: $urlText,
             isLoading: viewModel.isLoading,
             idealWidth: addressFieldIdealWidth,
-            onSubmit: { navigateToURL() },
-            onReloadOrStop: { reloadOrStop() }
+            onSubmit: { viewModel.navigate(to: urlText) },
+            onReloadOrStop: { viewModel.reloadOrStop() }
         )
     }
 
@@ -448,25 +418,17 @@ struct RecipeWebBrowserView: View {
     private var addressFieldIdealWidth: CGFloat {
         windowWidth > 0 ? min(1000, max(450, windowWidth - 750)) : 450
     }
-
-    private func reloadOrStop() {
-        if viewModel.isLoading {
-            webView?.stopLoading()
-        } else {
-            webView?.reload()
-        }
-    }
     #else
     private var navigationButtons: some View {
         Group {
-            Button(action: { webView?.goBack() }) {
+            Button(action: { viewModel.goBack() }) {
                 Label("Back", systemImage: "chevron.left")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canGoBack)
 
-            Button(action: { webView?.goForward() }) {
+            Button(action: { viewModel.goForward() }) {
                 Label("Forward", systemImage: "chevron.right")
                     .labelStyle(.iconOnly)
             }
@@ -474,7 +436,7 @@ struct RecipeWebBrowserView: View {
             .disabled(!viewModel.canGoForward)
 
             Button(action: {
-                goHome()
+                viewModel.goHome()
             }) {
                 Label("Home", systemImage: "house")
                     .labelStyle(.iconOnly)
@@ -482,11 +444,7 @@ struct RecipeWebBrowserView: View {
             .buttonStyle(.plain)
 
             Button(action: {
-                if viewModel.isLoading {
-                    webView?.stopLoading()
-                } else {
-                    webView?.reload()
-                }
+                viewModel.reloadOrStop()
             }) {
                 if viewModel.isLoading {
                     Label("Stop", systemImage: "xmark")
@@ -509,7 +467,7 @@ struct RecipeWebBrowserView: View {
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: isCompactScreen ? 100 : 175, idealWidth: isCompactScreen ? 130 : 450, maxWidth: isCompactScreen ? 200 : 1000)
             .onSubmit {
-                navigateToURL()
+                viewModel.navigate(to: urlText)
             }
             .focused($isAddressFieldFocused)
             .truncationMode(.middle)
@@ -529,7 +487,6 @@ struct RecipeWebBrowserView: View {
     /// Scanning needs a real webpage under the browser -- not the landing page, not a file.
     private var canScanPage: Bool {
         !viewModel.isLoading && !viewModel.currentURL.isEmpty
-            && !viewModel.currentURL.starts(with: "about:") && !viewModel.currentURL.starts(with: "file://")
     }
 
     private var scanPageButton: some View {
@@ -617,86 +574,19 @@ struct RecipeWebBrowserView: View {
         }
     }
     
-    private func navigateToURL() {
-        // Handle special "about:home" URL
-        if urlText == "about:home" {
-            goHome()
-            return
-        }
-        
-        // Only navigate if URL is different and not currently loading
-        let currentDisplayURL = (viewModel.currentURL.isEmpty || viewModel.currentURL.starts(with: "file://")) ? "about:home" : viewModel.currentURL
-        if urlText != currentDisplayURL && !viewModel.isLoading {
-            viewModel.navigateToURL(urlText)
-        }
-    }
-    
     private func navigateToURLFromAlert() {
-        // Handle special "about:home" URL
-        if tempURLText == "about:home" {
-            goHome()
-            showingURLInputAlert = false
-            return
-        }
-        
-        // Navigate to the URL from the alert
-        if !tempURLText.isEmpty && !viewModel.isLoading {
-            viewModel.navigateToURL(tempURLText)
-            urlText = tempURLText
-            showingURLInputAlert = false
-        }
+        viewModel.navigate(to: tempURLText)
+        showingURLInputAlert = false
     }
-    
-    private func goHome() {
-        viewModel.currentURL = ""
-        urlText = "about:home"
-        // Reset loading state since HTML content loads immediately
-        Task {
-            try? await Task.sleep(for: .seconds(0.1))
-            viewModel.updateNavigationState(canGoBack: false, canGoForward: false, isLoading: false)
-        }
-    }
-    
+
     private func scanWebpageForRecipeData() {
-        guard let webView = webView else { return }
-        
-        webView.getPageHTML { html in
-            guard let html = html else { return }
-
-            Task { @MainActor in
-                let importer = SchemaOrgRecipeJSONLDImporter()
-                // The address goes in so a page that declares no `url` of its own still records where
-                // the recipe came from. See scanRecipes(from:pageURL:).
-                let scannedRecipes = importer.scanRecipes(from: html, pageURL: self.viewModel.currentURL)
-
-                if let firstScanned = scannedRecipes.first {
-                    // Populate the viewModel with the found recipe data
-                    self.viewModel.populateFromScannedRecipe(firstScanned.recipe)
-
-                    // Fetch recipe photo (if any) before hand-off. On macOS the side
-                    // panel is live-bound, so will appear after download; on iOS, runs
-                    // before editor is presented so copy will include photo.
-                    await self.viewModel.downloadAndAttachImage(from: firstScanned.imageURL)
-
-                    #if os(iOS)
-                    // On iOS, show the editor directly. The recipe is not saved here:
-                    // it is inserted exactly once, when the user saves in the editor.
-                    // (Saving here too would make the editor's insert fail and roll
-                    // back the user's edits.)
-                    self.viewModel.prepareRecipeForEditing()
-                    self.viewModel.showingExtractedDataSheet = true
-                    #endif
-                } else {
-                    // No recipe data found - show alert
-                    self.viewModel.showingNoRecipeDataAlert = true
-                }
-            }
-        }
+        Task { await viewModel.scanPageForRecipe() }
     }
 }
 
 #if os(macOS)
 // MARK: - Recipe Web Import Edit View (macOS only)
+@available(macOS 26.0, *)
 struct RecipeWebImportEditView: View {
     @Bindable var viewModel: CreateRecipeFromWebViewModel
     
@@ -960,5 +850,7 @@ struct RecipeWebImportEditView: View {
 #endif
 
 #Preview {
-    CreateRecipeFromWebView()
+    if #available(iOS 26.0, macOS 26.0, *) {
+        CreateRecipeFromWebView()
+    }
 }

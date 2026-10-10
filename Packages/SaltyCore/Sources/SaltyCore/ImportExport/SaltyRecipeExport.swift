@@ -342,10 +342,10 @@ public extension SaltyRecipeExport {
         // Directions
         if !directions.isEmpty {
             text += "\nDirections:\n"
-            // Numbered by ChefStep, as every other reading of a recipe is: headings and blank rows
-            // don't take a number. (Numbering by array index, as this once did, made every heading
-            // skip one: "1, 2, [Sauce], 4".)
-            for step in ChefStep.steps(from: directions.map { Direction(id: "", isHeading: $0.isHeading, text: $0.text) }) {
+            // Numbered by DirectionStep, as every other reading of a recipe is: headings and blank
+            // rows don't take a number. (Numbering by array index, as this once did, made every
+            // heading skip one: "1, 2, [Sauce], 4".)
+            for step in DirectionStep.steps(from: directions.map { Direction(id: "", isHeading: $0.isHeading, text: $0.text) }) {
                 if let number = step.number {
                     text += "\(number). \(step.text)\n"
                 } else {

@@ -8,8 +8,11 @@ import Foundation
 import OSLog
 import SQLiteData
 import UUIDV7
+import WebKit
 import SaltyCore
 
+/// OS 26+ only: the importer's browser is SwiftUI's `WebPage`. Earlier systems don't offer Web Import.
+@available(iOS 26.0, macOS 26.0, *)
 @Observable
 @MainActor
 class CreateRecipeFromWebViewModel {
@@ -50,11 +53,26 @@ class CreateRecipeFromWebViewModel {
     var pendingImage: PendingRecipeImage = .unchanged
 
     // MARK: - Web Browser State
-    var currentURL: String = ""
-    var canGoBack = false
-    var canGoForward = false
-    var isLoading = false
-    
+    /// The browser's page. `WebPage` is itself observable, so the state below is read straight off it
+    /// rather than mirrored from navigation callbacks.
+    let page = WebPage()
+
+    /// Set once the start page has been requested, so a second `onAppear` doesn't reload it.
+    @ObservationIgnored private var hasShownStartPage = false
+
+    /// The address of the page being shown, or "" while the bundled start page (a `file:` URL) is up.
+    var currentURL: String {
+        guard let url = page.url, url.scheme == "http" || url.scheme == "https" else { return "" }
+        return url.absoluteString
+    }
+
+    var isLoading: Bool { page.isLoading }
+
+    // Off on the start page: loading it from a string adds no history entry, so the list still
+    // describes the last web page shown and Back/Forward would step from there, not from here.
+    var canGoBack: Bool { !currentURL.isEmpty && !page.backForwardList.backList.isEmpty }
+    var canGoForward: Bool { !currentURL.isEmpty && !page.backForwardList.forwardList.isEmpty }
+
     // MARK: - UI State
     var showingCategoriesSheet = false
     var showingPreparationTimesSheet = false
@@ -316,35 +334,97 @@ class CreateRecipeFromWebViewModel {
         directionsText += text
     }
     
-    // MARK: - URL Navigation
-    func navigateToURL(_ url: String) {
-        var urlString = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Don't navigate if URL is empty or the same as current
-        guard !urlString.isEmpty && urlString != currentURL else { return }
-        
+    // MARK: - Browser
+    /// Opens what was typed in the address bar: "about:home" for the start page, otherwise a web
+    /// address, with https:// assumed when no scheme is given.
+    func navigate(to typed: String) {
+        var urlString = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        if urlString == "about:home" {
+            goHome()
+            return
+        }
+        guard !urlString.isEmpty else { return }
+
         // Add https:// if no protocol specified
         if !urlString.hasPrefix("http://") && !urlString.hasPrefix("https://") {
             urlString = "https://" + urlString
         }
-        
-        // Only update if the normalized URL is different
-        if urlString != currentURL {
-            currentURL = urlString
+
+        guard urlString != currentURL, let url = URL(string: urlString) else { return }
+        page.load(URLRequest(url: url))
+    }
+
+    /// Loads the start page the first time the browser appears.
+    func showStartPageIfNeeded() {
+        guard !hasShownStartPage else { return }
+        hasShownStartPage = true
+        goHome()
+    }
+
+    /// Shows the bundled start page (tips and a few recipe sites to try).
+    func goHome() {
+        guard let fileURL = Bundle.main.url(forResource: "createRecipeFromWebLandingPage", withExtension: "html"),
+              let html = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            logger.error("Web import start page missing from the bundle")
+            return
+        }
+        page.load(html: html, baseURL: Bundle.main.bundleURL)
+    }
+
+    func goBack() {
+        guard let item = page.backForwardList.backList.last else { return }
+        page.load(item)
+    }
+
+    func goForward() {
+        guard let item = page.backForwardList.forwardList.first else { return }
+        page.load(item)
+    }
+
+    func reloadOrStop() {
+        if page.isLoading {
+            page.stopLoading()
+        } else {
+            page.reload()
         }
     }
-    
-    func refreshCurrentPage() {
-        // This will be handled by the web view
+
+    /// Copies the text selected in the page into one recipe field (the macOS ⌘1–⌘8 shortcuts).
+    func extractSelectedText(to field: RecipeField) async {
+        let selection = try? await page.callJavaScript("return window.getSelection().toString()") as? String
+        guard let selection, !selection.isEmpty else { return }
+        extractTextToField(selection, field: field)
     }
-    
+
+    /// Fills the import from the page's schema.org recipe data, or reports that it has none. On iOS a
+    /// recipe that's found goes straight to the structured editor.
+    func scanPageForRecipe() async {
+        // The address goes in so a page that declares no `url` of its own still records where the
+        // recipe came from. See scanRecipes(from:pageURL:).
+        let pageURL = currentURL
+        guard let html = try? await page.callJavaScript("return document.documentElement.outerHTML") as? String else {
+            return
+        }
+        guard let scanned = SchemaOrgRecipeJSONLDImporter().scanRecipes(from: html, pageURL: pageURL).first else {
+            showingNoRecipeDataAlert = true
+            return
+        }
+        populateFromScannedRecipe(scanned.recipe)
+
+        // Fetch recipe photo (if any) before hand-off. On macOS the side panel is live-bound, so it
+        // appears after the download; on iOS this runs before the editor is presented, so its copy of
+        // the recipe includes the photo.
+        await downloadAndAttachImage(from: scanned.imageURL)
+
+        #if os(iOS)
+        // The recipe is not saved here: it is inserted exactly once, when the user saves in the
+        // editor. (Saving here too would make the editor's insert fail and roll back the user's edits.)
+        prepareRecipeForEditing()
+        showingExtractedDataSheet = true
+        #endif
+    }
+
     // MARK: - Helper Methods
-    func updateNavigationState(canGoBack: Bool, canGoForward: Bool, isLoading: Bool) {
-        self.canGoBack = canGoBack
-        self.canGoForward = canGoForward
-        self.isLoading = isLoading
-    }
-    
     func openRecipeEditorForNewRecipe() {
         // This will be called after saving the recipe to open the editor
         // The recipe editor will be opened by the parent view

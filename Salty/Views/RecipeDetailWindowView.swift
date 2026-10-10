@@ -52,7 +52,7 @@ struct RecipeDetailWindowView: View {
            let vm = viewModel,
            vm.recipeId == id,
            let recipe = vm.recipe {
-            if useWebRecipeDetailView {
+            if useWebRecipeDetailView, #available(iOS 26.0, macOS 26.0, *) {
                 RecipeDetailWebView(recipe: recipe)
                     .id(recipe.id)
                     // The web preview has no Chef View button to order against, so it keeps

@@ -12,7 +12,6 @@
 		D41A93DA30153AA8009C5643 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = D41A93D930153AA8009C5643 /* Markdown */; };
 		D45D78972DFF646A0067A88D /* SwiftHtml in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78962DFF646A0067A88D /* SwiftHtml */; };
 		D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */ = {isa = PBXBuildFile; productRef = D45D789B2DFF7B8A0067A88D /* Flow */; };
-		D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */ = {isa = PBXBuildFile; productRef = D45D78A02DFF7E950067A88D /* WebViewKit */; };
 		D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = D47AF4B62E25D3E30001E4D4 /* SwiftSoup */; };
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
 		D48AB7422F20966800184122 /* UUIDV7 in Frameworks */ = {isa = PBXBuildFile; productRef = D48AB7412F20966800184122 /* UUIDV7 */; };
@@ -90,7 +89,6 @@
 				D45D789C2DFF7B8A0067A88D /* Flow in Frameworks */,
 				D41A93DA30153AA8009C5643 /* Markdown in Frameworks */,
 				D402E0692E7F253600B020D5 /* SQLiteData in Frameworks */,
-				D45D78A12DFF7E950067A88D /* WebViewKit in Frameworks */,
 				D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -176,7 +174,6 @@
 				D4C0DE042F0000000000AA04 /* SaltyCoreApple */,
 				D45D78962DFF646A0067A88D /* SwiftHtml */,
 				D45D789B2DFF7B8A0067A88D /* Flow */,
-				D45D78A02DFF7E950067A88D /* WebViewKit */,
 				D47AF4B62E25D3E30001E4D4 /* SwiftSoup */,
 				D402E0682E7F253600B020D5 /* SQLiteData */,
 				D48AB7412F20966800184122 /* UUIDV7 */,
@@ -269,7 +266,6 @@
 				D4C0DE012F0000000000AA01 /* XCLocalSwiftPackageReference "Packages/SaltyCore" */,
 				D45D78952DFF646A0067A88D /* XCRemoteSwiftPackageReference "swift-html" */,
 				D45D789A2DFF7B8A0067A88D /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */,
-				D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */,
 				D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				D402E0672E7F253600B020D5 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 				D48AB7402F20966800184122 /* XCRemoteSwiftPackageReference "swift-uuidv7" */,
@@ -775,14 +771,6 @@
 				minimumVersion = 3.1.0;
 			};
 		};
-		D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/danielsaidi/WebViewKit";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
-			};
-		};
 		D47AF4B52E25D3E30001E4D4 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
@@ -828,11 +816,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D45D789A2DFF7B8A0067A88D /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */;
 			productName = Flow;
-		};
-		D45D78A02DFF7E950067A88D /* WebViewKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D45D789F2DFF7E950067A88D /* XCRemoteSwiftPackageReference "WebViewKit" */;
-			productName = WebViewKit;
 		};
 		D47AF4B62E25D3E30001E4D4 /* SwiftSoup */ = {
 			isa = XCSwiftPackageProductDependency;
