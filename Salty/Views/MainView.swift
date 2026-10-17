@@ -20,6 +20,9 @@ struct MainView: View {
     @State private var importConfirmNames: [String] = []
     @State private var showingImportConfirm = false
 
+    /// Why a `salty://` link couldn't be followed, shown as an alert; nil when there is nothing to say.
+    @State private var linkProblem: String?
+
     @State private var autoSync = AutoSyncCoordinator.shared
 
     // Raised when a user-initiated sync stopped because this device isn't connected to the server yet.
@@ -85,6 +88,41 @@ struct MainView: View {
             } message: {
                 Text(importConfirmMessage)
             }
+            .alert("Can't Open Link", isPresented: showingLinkProblem) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(linkProblem ?? "")
+            }
+            #if os(iOS)
+            // Pages shared to Salty from the share sheet wait in `ImportInbox` (the extension can't open
+            // the app itself). Opened one at a time: when the app comes to the front, then as each
+            // import closes.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { openNextSharedPage() }
+            }
+            .onChange(of: viewModel.isWebImporterPresented) { _, isUp in
+                if !isUp { openNextSharedPage() }
+            }
+            #endif
+    }
+
+    #if os(iOS)
+    private func openNextSharedPage() {
+        // A request already made but not yet presented counts as presented, or two triggers landing in
+        // the same update would each take a page and the first would be lost.
+        guard viewModel.webImportRequest == nil, !viewModel.isWebImporterPresented,
+              let page = ImportInbox.takeNext() else {
+            return
+        }
+        open(.importFromWeb(page))
+    }
+    #endif
+
+    private var showingLinkProblem: Binding<Bool> {
+        Binding(
+            get: { linkProblem != nil },
+            set: { if !$0 { linkProblem = nil } }
+        )
     }
 
     private var importConfirmMessage: String {
@@ -95,11 +133,32 @@ struct MainView: View {
         }
     }
 
+    /// Everything the system hands this window to open: `salty://` links (see `SaltyURL`) and
+    /// .saltyRecipe files (opened from Finder or Files, or AirDropped).
     private func handleIncomingURL(_ url: URL) {
-        guard url.pathExtension.lowercased() == "saltyrecipe" else { return }
-        importConfirmURL = url
-        importConfirmNames = RecipeFileImportHelper.peekRecipeNames(url)
-        showingImportConfirm = true
+        if let link = SaltyURL(url) {
+            open(link)
+        } else if url.pathExtension.lowercased() == "saltyrecipe" {
+            importConfirmURL = url
+            importConfirmNames = RecipeFileImportHelper.peekRecipeNames(url)
+            showingImportConfirm = true
+        }
+    }
+
+    private func open(_ link: SaltyURL) {
+        switch link {
+        case .importFromWeb(let page):
+            // Web Import is built on SwiftUI's WebView, so there is nothing to open it in before OS 26.
+            if #available(iOS 26.0, macOS 26.0, *) {
+                viewModel.webImportRequest = page
+            } else {
+                linkProblem = "Web Import requires iOS 26 or macOS 26 or later."
+            }
+        case .recipe(let id):
+            if !viewModel.showRecipe(id: id) {
+                linkProblem = "That recipe isn't in this library. If it was added on another device, it may not have synced yet."
+            }
+        }
     }
 }
 

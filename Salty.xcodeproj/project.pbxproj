@@ -15,6 +15,7 @@
 		D47AF4B72E25D3E30001E4D4 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = D47AF4B62E25D3E30001E4D4 /* SwiftSoup */; };
 		D47F900B2DF35EEA00A64304 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = D47F900A2DF35EEA00A64304 /* Credits.rtf */; };
 		D48AB7422F20966800184122 /* UUIDV7 in Frameworks */ = {isa = PBXBuildFile; productRef = D48AB7412F20966800184122 /* UUIDV7 */; };
+		D4A5E00D2F1000000000B00D /* SaltyShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D4A5E0032F1000000000B003 /* SaltyShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D4C0DE032F0000000000AA03 /* SaltyCore in Frameworks */ = {isa = PBXBuildFile; productRef = D4C0DE022F0000000000AA02 /* SaltyCore */; };
 		D4C0DE052F0000000000AA05 /* SaltyCoreApple in Frameworks */ = {isa = PBXBuildFile; productRef = D4C0DE042F0000000000AA04 /* SaltyCoreApple */; };
 		D4CF1AFF2FDF1B5000870E9D /* AGENTS.md in Resources */ = {isa = PBXBuildFile; fileRef = D4CF1AFE2FDF1B4700870E9D /* AGENTS.md */; };
@@ -35,7 +36,28 @@
 			remoteGlobalIDString = D47F8FDE2DF35EB300A64304;
 			remoteInfo = Salty;
 		};
+		D4A5E00B2F1000000000B00B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D47F8FD72DF35EB300A64304 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D4A5E0042F1000000000B004;
+			remoteInfo = SaltyShareExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D4A5E00E2F1000000000B00E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D4A5E00D2F1000000000B00D /* SaltyShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D47AAAC72E19AC2D0082A893 /* ci_pre_xcodebuild.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = ci_pre_xcodebuild.sh; sourceTree = "<group>"; };
@@ -43,10 +65,18 @@
 		D47F8FED2DF35EB400A64304 /* SaltyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaltyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D47F8FF72DF35EB400A64304 /* SaltyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaltyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D47F900A2DF35EEA00A64304 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
+		D4A5E0032F1000000000B003 /* SaltyShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SaltyShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D4CF1AFE2FDF1B4700870E9D /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D4A5E00F2F1000000000B00F /* Exceptions for "SaltyShareExtension" folder in "SaltyShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D4A5E0042F1000000000B004 /* SaltyShareExtension */;
+		};
 		D4D697D22E1B0ADF00B13B2B /* Exceptions for "Salty" folder in "Salty" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -73,6 +103,19 @@
 		D47F8FFA2DF35EB400A64304 /* SaltyUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SaltyUITests;
+			sourceTree = "<group>";
+		};
+		D4A5E0012F1000000000B001 /* SaltyShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D4A5E00F2F1000000000B00F /* Exceptions for "SaltyShareExtension" folder in "SaltyShareExtension" target */,
+			);
+			path = SaltyShareExtension;
+			sourceTree = "<group>";
+		};
+		D4A5E0022F1000000000B002 /* SaltyShareImport */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SaltyShareImport;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -108,6 +151,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4A5E0062F1000000000B006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -135,6 +185,8 @@
 				D47F8FE12DF35EB300A64304 /* Salty */,
 				D47F8FF02DF35EB400A64304 /* SaltyTests */,
 				D47F8FFA2DF35EB400A64304 /* SaltyUITests */,
+				D4A5E0012F1000000000B001 /* SaltyShareExtension */,
+				D4A5E0022F1000000000B002 /* SaltyShareImport */,
 				D445F6E22FC4CC8200F673DE /* Frameworks */,
 				D47F8FE02DF35EB300A64304 /* Products */,
 			);
@@ -146,6 +198,7 @@
 				D47F8FDF2DF35EB300A64304 /* Salty.app */,
 				D47F8FED2DF35EB400A64304 /* SaltyTests.xctest */,
 				D47F8FF72DF35EB400A64304 /* SaltyUITests.xctest */,
+				D4A5E0032F1000000000B003 /* SaltyShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -160,13 +213,16 @@
 				D47F8FDB2DF35EB300A64304 /* Sources */,
 				D47F8FDC2DF35EB300A64304 /* Frameworks */,
 				D47F8FDD2DF35EB300A64304 /* Resources */,
+				D4A5E00E2F1000000000B00E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D4A5E00C2F1000000000B00C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D47F8FE12DF35EB300A64304 /* Salty */,
+				D4A5E0022F1000000000B002 /* SaltyShareImport */,
 			);
 			name = Salty;
 			packageProductDependencies = (
@@ -230,6 +286,29 @@
 			productReference = D47F8FF72DF35EB400A64304 /* SaltyUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		D4A5E0042F1000000000B004 /* SaltyShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D4A5E0082F1000000000B008 /* Build configuration list for PBXNativeTarget "SaltyShareExtension" */;
+			buildPhases = (
+				D4A5E0052F1000000000B005 /* Sources */,
+				D4A5E0062F1000000000B006 /* Frameworks */,
+				D4A5E0072F1000000000B007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D4A5E0012F1000000000B001 /* SaltyShareExtension */,
+				D4A5E0022F1000000000B002 /* SaltyShareImport */,
+			);
+			name = SaltyShareExtension;
+			packageProductDependencies = (
+			);
+			productName = SaltyShareExtension;
+			productReference = D4A5E0032F1000000000B003 /* SaltyShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -250,6 +329,9 @@
 					D47F8FF62DF35EB400A64304 = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = D47F8FDE2DF35EB300A64304;
+					};
+					D4A5E0042F1000000000B004 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -279,6 +361,7 @@
 				D47F8FDE2DF35EB300A64304 /* Salty */,
 				D47F8FEC2DF35EB400A64304 /* SaltyTests */,
 				D47F8FF62DF35EB400A64304 /* SaltyUITests */,
+				D4A5E0042F1000000000B004 /* SaltyShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -307,6 +390,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4A5E0072F1000000000B007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -331,6 +421,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4A5E0052F1000000000B005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -343,6 +440,11 @@
 			isa = PBXTargetDependency;
 			target = D47F8FDE2DF35EB300A64304 /* Salty */;
 			targetProxy = D47F8FF82DF35EB400A64304 /* PBXContainerItemProxy */;
+		};
+		D4A5E00C2F1000000000B00C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D4A5E0042F1000000000B004 /* SaltyShareExtension */;
+			targetProxy = D4A5E00B2F1000000000B00B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -473,6 +575,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = SaltyGlassIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "Salty/Salty-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Salty/Salty-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 68;
@@ -519,6 +623,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
+				SALTY_APP_GROUP = "group.com.inuvro.salty-dev";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
@@ -536,6 +641,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = SaltyGlassIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Salty/Salty.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "Salty/Salty-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Salty/Salty-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 68;
@@ -557,7 +664,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Salty;
+				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -582,6 +689,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
+				SALTY_APP_GROUP = group.com.inuvro.salty;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
@@ -687,6 +795,94 @@
 			};
 			name = Release;
 		};
+		D4A5E0092F1000000000B009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "SaltyShareExtension/SaltyShareExtension-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "SaltyShareExtension/SaltyShareExtension-iOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 68;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 56L8942MP2;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SaltyShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 3.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.inuvro.salty-dev.shareext";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SALTY_APP_GROUP = "group.com.inuvro.salty-dev";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D4A5E00A2F1000000000B00A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "SaltyShareExtension/SaltyShareExtension-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "SaltyShareExtension/SaltyShareExtension-iOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 68;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 56L8942MP2;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SaltyShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Salty;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 3.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.inuvro.salty.shareext;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SALTY_APP_GROUP = group.com.inuvro.salty;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -722,6 +918,15 @@
 			buildConfigurations = (
 				D47F90082DF35EB400A64304 /* Debug */,
 				D47F90092DF35EB400A64304 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D4A5E0082F1000000000B008 /* Build configuration list for PBXNativeTarget "SaltyShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D4A5E0092F1000000000B009 /* Debug */,
+				D4A5E00A2F1000000000B00A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

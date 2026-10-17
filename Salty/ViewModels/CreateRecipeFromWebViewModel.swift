@@ -354,11 +354,32 @@ class CreateRecipeFromWebViewModel {
         page.load(URLRequest(url: url))
     }
 
-    /// Loads the start page the first time the browser appears.
-    func showStartPageIfNeeded() {
+    /// Loads the first page the first time the browser appears: the page handed over from outside, if
+    /// there is one (see `importPage`), otherwise the bundled start page.
+    func showFirstPageIfNeeded(startURL: URL?) {
         guard !hasShownStartPage else { return }
         hasShownStartPage = true
-        goHome()
+        if let startURL {
+            importPage(startURL)
+        } else {
+            goHome()
+        }
+    }
+
+    /// Opens a page handed over from outside (a `salty://import` link, the Shortcuts action) and, once
+    /// it has loaded, scans it for a recipe -- the whole of what sending a page to Salty means. Nothing
+    /// is saved: the scan fills the import as the Scan button would, and the user takes it from there.
+    func importPage(_ url: URL) {
+        Task {
+            do {
+                for try await event in page.load(URLRequest(url: url)) where event == .finished {
+                    await scanPageForRecipe()
+                }
+            } catch {
+                // WebKit shows its own error page; there is nothing to scan.
+                logger.info("Page handed to Web Import failed to load: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Shows the bundled start page (tips and a few recipe sites to try).

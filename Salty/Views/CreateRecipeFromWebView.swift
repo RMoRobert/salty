@@ -18,14 +18,17 @@ struct CreateRecipeFromWebView: View {
     /// Window content width, fed to the browser pane so the address field's toolbar item can size
     /// itself to the space the row actually has. macOS only; iOS never shows that field.
     @State private var windowContentWidth: CGFloat = 0
-    
+    /// A page to open and scan straight away (handed over by a `salty://import` link or the Shortcuts
+    /// action); nil shows the start page, as the New Recipe menu does.
+    var startURL: URL? = nil
+
     var body: some View {
         NavigationStack {
             #if os(macOS)
             // macOS: Use HSplitView with browser and editor side by side
             HSplitView {
                 // Left side - Web Browser
-                RecipeWebBrowserView(viewModel: viewModel, windowWidth: windowContentWidth, onSave: { dismiss() })
+                RecipeWebBrowserView(viewModel: viewModel, windowWidth: windowContentWidth, startURL: startURL, onSave: { dismiss() })
                     .frame(minWidth: 400, idealWidth: 600)
                 
                 // Right side - Recipe Editor
@@ -41,6 +44,7 @@ struct CreateRecipeFromWebView: View {
             // iOS/iPadOS: Use simplified layout with browser and direct editor
             RecipeWebBrowserView(
                 viewModel: viewModel,
+                startURL: startURL,
                 onClose: {
                     // Closing without saving discards the import; remove any downloaded photo.
                     viewModel.cleanUpUnsavedImage()
@@ -199,6 +203,8 @@ struct RecipeWebBrowserView: View {
     /// See `CreateRecipeFromWebView.windowContentWidth`. Defaults to 0 (unknown) for the iOS call
     /// site, which has no address-field toolbar item to size.
     var windowWidth: CGFloat = 0
+    /// See `CreateRecipeFromWebView.startURL`.
+    var startURL: URL? = nil
     @State private var urlText: String = ""
     @FocusState private var isAddressFieldFocused: Bool
     @State private var isCompactScreen: Bool = false
@@ -232,8 +238,12 @@ struct RecipeWebBrowserView: View {
         // On the body rather than on the address field so it still runs at compact widths, where the
         // field is hidden but the "Enter URL..." menu item still seeds its alert from `urlText`.
         .onAppear {
-            viewModel.showStartPageIfNeeded()
+            viewModel.showFirstPageIfNeeded(startURL: startURL)
             syncURLText(viewModel.currentURL)
+        }
+        // A second page handed to an importer that is already up (iOS: the cover is reused).
+        .onChange(of: startURL) { _, page in
+            if let page { viewModel.importPage(page) }
         }
         .onChange(of: viewModel.currentURL) { _, newURL in
             syncURLText(newURL)

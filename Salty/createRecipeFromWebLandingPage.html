@@ -65,6 +65,11 @@
             padding: 2px 4px;
             border-radius: 3px;
         }
+
+        code {
+            font-family: monospace;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -78,7 +83,16 @@
             <li>Enter your favorite site (or search engine) above to discover more!</li>
         </ul>
         <p>Most websites that support the schema.org/Recipe standard in JSON-LD format should work with this tool, but compatibility with any individual site is subject to change at any time due to factors outside our control.</p>
-        
+
+        <h1>Send a Page from Your Browser</h1>
+        <p>Found a recipe in Safari, Chrome, or Firefox? You can send the page here without copying its address: Salty opens this tool on the page and scans it right away.</p>
+        <ul>
+            <li><strong>iPhone and iPad:</strong> share the page and choose <strong>Salty</strong>. The next time you open Salty, this tool opens on that page. (For a version that switches to Salty immediately, make a shortcut in the Shortcuts app with Salty's <strong>Import Recipe from Web</strong> action, Web Page set to <em>Shortcut Input</em>, and <strong>Show in Share Sheet</strong> turned on.)</li>
+            <li><strong>Mac:</strong> choose <strong>Salty</strong> from Safari's Share button, or from File ▸ Share in Chrome and Firefox. Turn it on once in System Settings ▸ General ▸ Login Items &amp; Extensions ▸ Sharing. Or add a bookmark whose address is the line below and click it on any recipe page:<br>
+                <code>javascript:location.href='salty://import?url='+encodeURIComponent(location.href)</code></li>
+            <li><strong>Anywhere a link can be opened:</strong> <code>salty://import?url=</code> followed by the page's address.</li>
+        </ul>
+
         <h1>How to Use This Tool</h1>
         <p>This tool helps you import recipes from websites into your Salty recipe library. You can extract text manually (including more easily with the shorcuts below!) or load any supported webpage and select the <b>Scan Site</b> button to automatically extract text to the appropriate fields if supported.</p>
 

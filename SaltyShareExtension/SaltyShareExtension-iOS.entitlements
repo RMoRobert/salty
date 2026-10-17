@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  iOS only (the macOS build of this extension needs no entitlements beyond the sandbox that
+	  ENABLE_APP_SANDBOX adds): the App Group through which the extension hands shared pages to the
+	  app. The same group is in Salty/Salty-iOS.entitlements; the id comes from the SALTY_APP_GROUP
+	  build setting on both targets, so Debug and Release get separate groups.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(SALTY_APP_GROUP)</string>
+	</array>
+</dict>
+</plist>

@@ -117,7 +117,16 @@ class RecipeNavigationSplitViewModel {
     /// are reset so the recipe can be seen). `reconcileSelection()` clears it when the row shows up.
     private(set) var pendingRecipeID: String?
     var draftRecipe: Recipe?
-    
+    /// A page a `salty://import` link (or the Shortcuts action) asked Web Import to open. The root view
+    /// presents the importer on it -- a cover on iOS, a window on macOS -- and clears this.
+    var webImportRequest: URL?
+    #if os(iOS)
+    /// Whether the Web Import cover is up, however it was opened; kept current by the root view. The
+    /// pages the share extension leaves in `ImportInbox` are opened one at a time, so the next waits
+    /// for this to turn false.
+    var isWebImporterPresented = false
+    #endif
+
     // Export-related state
     var showingExportSheet = false
     var exportData: Data?
@@ -349,20 +358,33 @@ class RecipeNavigationSplitViewModel {
     }
     
     func handleNewRecipeSaved(recipeId: String) {
-        // Switch to "All Recipes" view so the new recipe will be visible
-        selectedSidebarItem = .allRecipes
-
-        // Clear the search text and favorites filter too: together with the scope above, these are
-        // what can otherwise hide the new recipe, leaving it selected but absent from the list.
-        searchString = ""
-        isFavoritesFilterActive = false
-
-        // Select the newly saved recipe; the list scrolls to it once its row arrives.
-        selectedRecipeIDs = [recipeId]
-        pendingRecipeID = recipeId
+        revealRecipe(id: recipeId)
 
         // Clear the draft since it's now persisted
         draftRecipe = nil
+    }
+
+    /// Follows a `salty://recipe/<id>` link. False when no such recipe is in this library (one added
+    /// on another device may not have synced yet), so the caller can say so.
+    func showRecipe(id recipeId: String) -> Bool {
+        guard fullRecipe(id: recipeId) != nil else { return false }
+        revealRecipe(id: recipeId)
+        return true
+    }
+
+    /// Selects a recipe and brings it into view, wherever the list was.
+    private func revealRecipe(id recipeId: String) {
+        // Switch to "All Recipes" view so the recipe will be visible
+        selectedSidebarItem = .allRecipes
+
+        // Clear the search text and favorites filter too: together with the scope above, these are
+        // what can otherwise hide the recipe, leaving it selected but absent from the list.
+        searchString = ""
+        isFavoritesFilterActive = false
+
+        // Select the recipe; the list scrolls to it once its row arrives.
+        selectedRecipeIDs = [recipeId]
+        pendingRecipeID = recipeId
     }
 
     /// Imports a confirmed, opened/AirDropped .saltyRecipe file, then selects and scrolls to the first

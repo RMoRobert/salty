@@ -14,6 +14,23 @@ devices trying to write at the same time.
 
 I may look into more straightforward (cloud?) sync options in the future, perhaps including iCloud sync, but wanted to focus on traditional local storage first. The `server` component in [Salty KMP](https://github.com/RMoRobert/saltykmp) (also includes an experimental Kotlin Multiplatform/Compose Multiplatform app for Android, desktop/JVM, and iOS, but the apps are not recommended for production use at the moment and are unlikely to replace the existing macOS or iOS apps) offers a way to self-host a sync server, locally or in the cloud, but is somewhat experimental (though I am using it myself).
 
+## Sending a Recipe Page to Salty
+
+Salty registers the `salty://` link scheme, so a recipe page can be sent from a browser straight into Web Import, which opens on that page and scans it for a recipe as soon as it loads. Nothing is saved until you choose to. (Web Import needs macOS 26 or iOS 26 or later.)
+
+- `salty://import?url=<web address>` opens Web Import on that page. Percent-encode the address if it contains `&` or `#`.
+- `salty://recipe/<id>` shows the recipe with that id, so a recipe can be linked to from notes or other apps.
+
+**iPhone and iPad:** Salty is in the share sheet of Safari, Chrome, Firefox and any other app that shares links. Tap it, and the next time you open Salty, Web Import opens on that page. (Apple doesn't let a share extension open its app. For a one-tap version that switches to Salty immediately, make a shortcut in the Shortcuts app containing Salty's **Import Recipe from Web** action with its Web Page set to *Shortcut Input*, and turn on **Show in Share Sheet** in the shortcut's details.)
+
+**Mac:** choose Salty from Safari's Share button, or from File ▸ Share in Chrome and Firefox, and Web Import opens on the page. Turn the extension on once in System Settings ▸ General ▸ Login Items & Extensions ▸ Sharing. A bookmarklet works in any browser too: add a bookmark whose address is the line below and click it while viewing a recipe page (the browser asks once whether to allow the page to open Salty).
+
+```
+javascript:location.href='salty://import?url='+encodeURIComponent(location.href)
+```
+
+Links can also be opened from the Terminal (`open 'salty://import?url=https://…'`) or from launchers such as Raycast or Alfred.
+
 # Technical Details 
 
 Salty is written in Swift, making primary use of SwiftUI for the interface and GRDB (via SQLiteData) for persistence, ultimately making use of SQLite. Additional regular file

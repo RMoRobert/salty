@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The iOS app's entitlements (CODE_SIGN_ENTITLEMENTS[sdk=iphone*]); Salty.entitlements is the
+	  macOS set. Two files because of the App Group below: SaltyShareExtension hands shared pages to
+	  the app through it on iOS, while on macOS the extension opens a salty:// link instead and the
+	  app needs no group -- and a `group.`-style id in a Mac app's entitlements brings its own signing
+	  requirements. The id comes from the SALTY_APP_GROUP build setting, so Debug and Release builds
+	  get separate groups; the extension's SaltyShareExtension-iOS.entitlements names the same one.
+
+	  keychain-access-groups mirrors Salty.entitlements; see the explanation there.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(SALTY_APP_GROUP)</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(CFBundleIdentifier)</string>
+	</array>
+</dict>
+</plist>

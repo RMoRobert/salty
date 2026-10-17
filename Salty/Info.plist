@@ -17,6 +17,21 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.inuvro.salty.link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>salty</string>
+			</array>
+		</dict>
+	</array>
+	<key>SaltyAppGroup</key>
+	<string>$(SALTY_APP_GROUP)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

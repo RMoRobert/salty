@@ -93,10 +93,14 @@ struct SaltyApp: App {
         // Main window; the id lets File ▸ New Window open another one (see Menus.swift)
         WindowGroup(id: "main-window") {
             MainView()
+                // Everything from outside -- salty:// links, opened .saltyRecipe files -- goes to an
+                // existing main window (`allowing`), and `MainView.onOpenURL` acts on it.
                 .handlesExternalEvents(preferring: ["salty-recipe"], allowing: ["*"])
                 .environment(chefSessionStore)
         }
-        .handlesExternalEvents(matching: ["salty-recipe"])
+        // ...and when no main window is open (only, say, a shopping list or a library editor), a new
+        // one is made for it. With a narrower set here the link was dropped on the floor in that case.
+        .handlesExternalEvents(matching: ["*"])
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .background:
@@ -147,11 +151,13 @@ struct SaltyApp: App {
                 .navigationTitle("Open Database")
         }
 
-        // "Import from Web" window
-        WindowGroup(id: "create-recipe-from-web-window") {
+        // "Import from Web" window. The value is the page a salty://import link asked for (see
+        // `SaltyURL`); the menu opens the window without one, on its start page. One window per page:
+        // a second link to the same page brings its window forward rather than opening another.
+        WindowGroup(id: "create-recipe-from-web-window", for: URL.self) { $startURL in
             Group {
                 if #available(iOS 26.0, macOS 26.0, *) {
-                    CreateRecipeFromWebView()
+                    CreateRecipeFromWebView(startURL: startURL)
                 } else {
                     // Nothing opens this window before OS 26; this covers one that state restoration
                     // reopens after an update.

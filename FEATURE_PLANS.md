@@ -720,6 +720,73 @@ this section now applies only to recipes and the vocab tables.
 
 ---
 
+## Browser hand-off — URL scheme and share extension BUILT (v1)
+
+Goal: send a recipe page from a browser into Web Import with one tap or click. Decided 2026-10-13
+after weighing the options: a web-page "Open with" handler and Universal Links are out (only the
+default browser handles http(s); Universal Links need a domain we own), and command-line arguments
+don't reach a running app — so everything funnels through one `salty://` entry point.
+
+### What shipped (2026-10-16)
+- `SaltyURL` (`Salty/Helpers`) parses and builds the links; `SaltyURLTests` pin the grammar. The host
+  is the verb: `salty://import?url=<page>` and `salty://recipe/<id>`. Imports accept http(s) only
+  (https assumed when the scheme is missing, as the address bar does); a recipe link is only ever an
+  id to look up.
+- `MainView.onOpenURL` dispatches. Import → `RecipeNavigationSplitViewModel.webImportRequest`, which
+  the root presentation modifier turns into the full-screen cover (iOS) or the
+  `create-recipe-from-web-window` (macOS; now `WindowGroup(for: URL.self)`, one window per page).
+  Recipe → `showRecipe(id:)` (All Recipes, filters cleared, selected, scrolled), with an alert when
+  the id isn't in the library. Pre-26 systems get an alert for import links.
+- `CreateRecipeFromWebViewModel.importPage` loads the page and runs the existing scan once the
+  navigation finishes. Nothing is saved automatically: the scan fills the import exactly as the Scan
+  button does, and the "no recipe data" alert still shows when there's nothing to find.
+- `ImportRecipeFromWebIntent` (`Salty/Intents`): the Shortcuts action takes a URL, validates it through
+  `SaltyURL.importLink(for:)`, and returns `OpenURLIntent` on the salty:// link, so there is exactly
+  one code path. A one-action shortcut with "Show in Share Sheet" is the iOS share-sheet route.
+- Docs: README "Sending a Recipe Page to Salty"; the Web Import start page has the bookmarklet.
+- **Share extension `SaltyShareExtension`** (added 2026-10-16, one target for both platforms; the project file
+  was edited by hand -- `D4A5E0…` object ids). Activation: one web URL. macOS: `NSWorkspace.open` on
+  the `salty://import` link and done, so Safari's Share button and Chrome's/Firefox's File ▸ Share all
+  land in Web Import. iOS: a share extension can't open its app, so the URL goes into `ImportInbox`
+  (App Group `UserDefaults`, `SaltyShareImport/`) and the sheet says "Sent to Salty"; `MainView` takes pages
+  out one at a time on `scenePhase == .active` and whenever the Web Import cover closes
+  (`RecipeNavigationSplitViewModel.isWebImporterPresented`). `SaltyShareImport/` (also `SaltyURL`) is a
+  synchronized folder in both targets. The App Group is iOS-only: `Salty/Salty-iOS.entitlements` via
+  `CODE_SIGN_ENTITLEMENTS[sdk=iphone*]`, with the id from the `SALTY_APP_GROUP` build setting on both
+  targets (`group.com.inuvro.salty-dev` / `group.com.inuvro.salty`) and surfaced to code through the
+  `SaltyAppGroup` Info.plist key. **Bump the extension's Version/Build (General tab) together with the
+  app's**: they are set per target in the pbxproj. A mismatch isn't a rejection -- App Store Connect only
+  sends an ITMS-90473 warning email after the upload -- but the convention is for an appex to carry its
+  app's version. (Project-level `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` would make it one edit, at
+  the cost of bumping in Project ▸ Build Settings instead of the General tab.)
+
+### Known limits
+- Web Import reloads the page in its own WebView: no shared cookies with the browser, so paywalled or
+  signed-in pages show their login wall. Only reading the live page (a share extension's JS
+  preprocessing, or a browser toolbar extension) avoids that.
+- Debug and Release builds both register `salty://`; LaunchServices picks one. Use
+  `open -b com.inuvro.salty-dev 'salty://…'` to target the dev build.
+- The scan runs on `.finished`; pages that inject their JSON-LD late may need a manual Scan.
+- iOS inbox pages open when the app *becomes* active. In iPad Split View next to Safari the app may
+  already be active, so the page waits until the next foreground transition; a Darwin notification
+  from the extension would close that gap.
+- The responder-chain `UIApplication.open` trick that would let the iOS extension open the app is
+  unsupported and may break or be rejected; deliberately not used.
+
+### Next
+1. "Copy Link" on recipes is deliberately *not* built (2026-10-16): a `salty://recipe/<id>` link only
+   resolves in the user's own library, so next to Share it would read as a sharing feature. Precedent
+   (Things "Copy Link", OmniFocus "Copy as Link", 1Password "Copy Private Link" vs. "Share") says: add it
+   when something consumes it (Meal Planner notes, Shortcuts), name the scope, keep it out of Share --
+   or build an `OpenRecipeIntent` with a `RecipeEntity` instead, which is the Apple-idiomatic form.
+2. Importing inside the share extension (JS preprocessing reads the live page's JSON-LD and writes a
+   `.saltyRecipe` into the inbox) gets past login walls without opening the app -- the Paprika/Mela
+   model. Needs SaltyCore in the extension and an inbox import path in the app.
+3. Universal Links only if a public domain appears. The KMP and Uno clients should register the same
+   `salty://` grammar (Android intent filter, Windows protocol registration).
+
+---
+
 ## Suggested build order
 
 **Chef View is orthogonal** — no schema, no sync, no query-engine dependency — so it can ship

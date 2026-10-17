@@ -120,7 +120,7 @@ struct RecipeNavigationSplitView: View {
             isAnySheetShown: isAnySheetShown,
             newRecipe: { viewModel.addNewRecipe() },
             importFromFile: { activeSheet = .importFromFile },
-            createFromWeb: { activeSheet = .createFromWeb },
+            createFromWeb: { activeSheet = .createFromWeb() },
             exportRecipeFile: { viewModel.exportSelectedRecipes() },
             exportHTML: { viewModel.showHTMLExportSettings() },
             exportJSONLD: { viewModel.exportSelectedRecipesAsJSONLD() },
@@ -555,6 +555,12 @@ private struct RecipeListColumnView: View {
                     Task { await scrollToNewRecipe(id: arrived, proxy: proxy) }
                 }
             }
+            // A salty://recipe link to a recipe whose row is already here changes no rows, so the
+            // scroll has to be asked for now; if the rows are about to change, the handler above wins.
+            .onChange(of: viewModel.pendingRecipeID) { _, pending in
+                guard pending != nil, let arrived = viewModel.reconcileSelection() else { return }
+                Task { await scrollToNewRecipe(id: arrived, proxy: proxy) }
+            }
         }
         .overlay {
             // As an overlay rather than a list row, so it centers in the column instead of
@@ -650,7 +656,7 @@ private struct RecipeListColumnView: View {
                     }
                     if #available(iOS 26.0, *) {
                         Button("Create from Web…") {
-                            activeSheet = .createFromWeb
+                            activeSheet = .createFromWeb()
                         }
                     }
                 } label: {
@@ -1134,6 +1140,8 @@ private struct RootPresentationsModifier: ViewModifier {
     @Bindable var viewModel: RecipeNavigationSplitViewModel
     @Binding var activeSheet: MainSheet?
     @Binding var showingFirstLaunchAlert: Bool
+    /// macOS: Web Import opens in its own window (see `webImportRequest` below).
+    @Environment(\.openWindow) private var openWindow
 
     /// The sheet to present with `.sheet(item:)`. On iOS the web importer is a full-screen cover
     /// instead, so it is kept out of this binding and given its own below.
@@ -1143,7 +1151,7 @@ private struct RootPresentationsModifier: ViewModifier {
                 #if os(macOS)
                 activeSheet
                 #else
-                activeSheet == .createFromWeb ? nil : activeSheet
+                activeSheet?.isWebImporter == true ? nil : activeSheet
                 #endif
             },
             set: { activeSheet = $0 }
@@ -1153,8 +1161,8 @@ private struct RootPresentationsModifier: ViewModifier {
     #if !os(macOS)
     private var isShowingWebImporter: Binding<Bool> {
         Binding(
-            get: { activeSheet == .createFromWeb },
-            set: { if !$0, activeSheet == .createFromWeb { activeSheet = nil } }
+            get: { activeSheet?.isWebImporter == true },
+            set: { if !$0, activeSheet?.isWebImporter == true { activeSheet = nil } }
         )
     }
     #endif
@@ -1207,8 +1215,26 @@ private struct RootPresentationsModifier: ViewModifier {
         // Show full screen cover on iOS; macOS will use window instead
         .fullScreenCover(isPresented: isShowingWebImporter) {
             if #available(iOS 26.0, *) {
-                CreateRecipeFromWebView()
+                CreateRecipeFromWebView(startURL: activeSheet?.webImportStartURL)
             }
+        }
+        #endif
+        // A page handed over by a salty://import link or the Shortcuts action: present Web Import on it
+        // the way the New Recipe menu does -- a full-screen cover here, its own window on macOS.
+        .onChange(of: viewModel.webImportRequest) { _, page in
+            guard let page else { return }
+            viewModel.webImportRequest = nil
+            #if os(macOS)
+            openWindow(id: "create-recipe-from-web-window", value: page)
+            #else
+            activeSheet = .createFromWeb(startURL: page)
+            #endif
+        }
+        #if !os(macOS)
+        // Whatever opened the cover (a link, the menu, the inbox), the view model learns here that it is
+        // up or down, so pages waiting in `ImportInbox` are opened one after another, not on top of each other.
+        .onChange(of: activeSheet?.isWebImporter ?? false) { _, isUp in
+            viewModel.isWebImporterPresented = isUp
         }
         #endif
         .sheet(isPresented: $viewModel.showingHTMLExportSettings) {
