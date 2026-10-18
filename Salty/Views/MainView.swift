@@ -25,6 +25,9 @@ struct MainView: View {
 
     @State private var autoSync = AutoSyncCoordinator.shared
 
+    /// Links an App Intent asked the app to open (Open Recipe, Import Recipe from Web); see `SaltyLinkInbox`.
+    @State private var linkInbox = SaltyLinkInbox.shared
+
     // Raised when a user-initiated sync stopped because this device isn't connected to the server yet.
     // Hosted here rather than at each trigger so pull-to-refresh, the "Last synced" footer and the Sync
     // Now menu command all get the same prompt -- the same one Settings uses, so the app asks for a
@@ -77,6 +80,11 @@ struct MainView: View {
                 Task { await manualSync.connectAndSync(password: password) }
             }
             .onOpenURL { handleIncomingURL($0) }
+            // The same requests from inside the app, for the frontmost window: as they arrive, or once
+            // a window comes to the front (an intent can run before the app has finished opening).
+            .onAppear { openRequestedLink() }
+            .onChange(of: linkInbox.pending) { openRequestedLink() }
+            .onChange(of: isFrontmostWindow) { openRequestedLink() }
             .alert("Import Recipe", isPresented: $showingImportConfirm) {
                 Button("Cancel", role: .cancel) { importConfirmURL = nil }
                 Button("Add") {
@@ -117,6 +125,12 @@ struct MainView: View {
         open(.importFromWeb(page))
     }
     #endif
+
+    /// Opens what an App Intent left in `SaltyLinkInbox`, in the frontmost window only.
+    private func openRequestedLink() {
+        guard isFrontmostWindow, let link = linkInbox.take() else { return }
+        open(link)
+    }
 
     private var showingLinkProblem: Binding<Bool> {
         Binding(

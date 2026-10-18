@@ -47,6 +47,10 @@ struct RecipeSelectionCommands {
     var setLastMadeDate: @MainActor () -> Void
     var clearLastMade: @MainActor () -> Void
     var showInfo: @MainActor () -> Void
+    /// Exactly one saved recipe is selected: a link names one recipe, and an unsaved one has none yet.
+    var canCopyPrivateLink: Bool
+    /// Edit ▸ Copy Private Link.
+    var copyPrivateLink: @MainActor () -> Void
     /// macOS only; nil where recipes can't open in windows of their own.
     var openInNewWindows: (@MainActor () -> Void)?
 
@@ -58,6 +62,7 @@ extension RecipeSelectionCommands: Equatable {
         lhs.selectedRecipeCount == rhs.selectedRecipeCount
             && lhs.lastPreparedSummary == rhs.lastPreparedSummary
             && lhs.isSheetShown == rhs.isSheetShown
+            && lhs.canCopyPrivateLink == rhs.canCopyPrivateLink
             && (lhs.openInNewWindows == nil) == (rhs.openInNewWindows == nil)
     }
 }

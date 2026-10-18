@@ -2,12 +2,14 @@
 //  ShareViewController.swift
 //  SaltyShareExtension
 //
+//  Created by Robert on 10/16/2026
+//
 //  The "Salty" item in the share sheet (iOS) and the Share menu (macOS): sends the page being viewed
 //  to Web Import. The extension's principal class; one per platform, both named for Info.plist.
 //
-//  Only an http(s) page can be imported, and only its address travels: the page is loaded again in
+//  Only an http(s) page can be imported, and only its address (not content) comes through -- page is loaded again in
 //  Salty's own browser and scanned there, exactly as a `salty://import` link does, so there is one
-//  import path to keep working. (That means a page behind a login shows its login wall in Salty; see
+//  (Also means a page behind a login shows its login wall in Salty; see
 //  FEATURE_PLANS "Browser hand-off" for the in-extension import that would avoid it.)
 //
 

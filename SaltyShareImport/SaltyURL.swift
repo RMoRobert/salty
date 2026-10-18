@@ -3,7 +3,7 @@
 //  Salty
 //
 //  The `salty://` links the app opens, parsed into what they ask for -- and built back, so every
-//  place that hands one out (the Shortcuts action, a future Copy Link) spells it the same way.
+//  place that hands one out (the Shortcuts actions, Copy Private Link) spells it the same way.
 //
 //  The host is the verb or resource; the rest is its argument:
 //

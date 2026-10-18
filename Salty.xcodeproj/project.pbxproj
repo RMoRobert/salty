@@ -210,6 +210,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = D47F90012DF35EB400A64304 /* Build configuration list for PBXNativeTarget "Salty" */;
 			buildPhases = (
+				D4A5E0102F1000000000B010 /* Check Version Settings */,
 				D47F8FDB2DF35EB300A64304 /* Sources */,
 				D47F8FDC2DF35EB300A64304 /* Frameworks */,
 				D47F8FDD2DF35EB300A64304 /* Resources */,
@@ -290,6 +291,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = D4A5E0082F1000000000B008 /* Build configuration list for PBXNativeTarget "SaltyShareExtension" */;
 			buildPhases = (
+				D4A5E0112F1000000000B011 /* Check Version Settings */,
 				D4A5E0052F1000000000B005 /* Sources */,
 				D4A5E0062F1000000000B006 /* Frameworks */,
 				D4A5E0072F1000000000B007 /* Resources */,
@@ -399,6 +401,47 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		D4A5E0102F1000000000B010 /* Check Version Settings */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Check Version Settings";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Version and build live in the project-level SALTY_VERSION / SALTY_BUILD settings (Project > Build Settings > User-Defined).\n# This prevents a target carrying its own number being edited (on target's General tab) and drifting from other.\nif [ \"${MARKETING_VERSION}\" != \"${SALTY_VERSION}\" ] || [ \"${CURRENT_PROJECT_VERSION}\" != \"${SALTY_BUILD}\" ]; then\n  echo \"error: ${TARGET_NAME} has Version/Build (${MARKETING_VERSION} / ${CURRENT_PROJECT_VERSION}) set but project variables say ${SALTY_VERSION} / ${SALTY_BUILD}. In this target's General tab set Version to \\$(SALTY_VERSION) and Build to \\$(SALTY_BUILD); bump SALTY_VERSION/SALTY_BUILD in project's Build Settings (User-Defined) instead.\"\n  exit 1\nfi\n";
+		};
+		D4A5E0112F1000000000B011 /* Check Version Settings */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Check Version Settings";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Version and build live in the project-level SALTY_VERSION / SALTY_BUILD settings (Project > Build Settings > User-Defined).\n# This prevents a target carrying its own number being edited (on target's General tab) and drifting from other.\nif [ \"${MARKETING_VERSION}\" != \"${SALTY_VERSION}\" ] || [ \"${CURRENT_PROJECT_VERSION}\" != \"${SALTY_BUILD}\" ]; then\n  echo \"error: ${TARGET_NAME} has Version/Build (${MARKETING_VERSION} / ${CURRENT_PROJECT_VERSION}) set but project variables say ${SALTY_VERSION} / ${SALTY_BUILD}. In this target's General tab set Version to \\$(SALTY_VERSION) and Build to \\$(SALTY_BUILD); bump SALTY_VERSION/SALTY_BUILD in project's Build Settings (User-Defined) instead.\"\n  exit 1\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		D47F8FDB2DF35EB300A64304 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -507,6 +550,9 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				SALTY_BUILD = 69;
+				SALTY_DISPLAY_NAME = "Salty Dev";
+				SALTY_VERSION = 3.4.3;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -564,6 +610,9 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				SALTY_BUILD = 69;
+				SALTY_DISPLAY_NAME = Salty;
+				SALTY_VERSION = 3.4.3;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
@@ -579,7 +628,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Salty/Salty-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 68;
+				CURRENT_PROJECT_VERSION = "$(SALTY_BUILD)";
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 56L8942MP2;
 				ENABLE_APP_SANDBOX = YES;
@@ -598,7 +647,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -618,7 +667,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.4.2;
+				MARKETING_VERSION = "$(SALTY_VERSION)";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.inuvro.salty-dev";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -645,7 +694,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Salty/Salty-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 68;
+				CURRENT_PROJECT_VERSION = "$(SALTY_BUILD)";
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 56L8942MP2;
 				ENABLE_APP_SANDBOX = YES;
@@ -664,7 +713,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -684,7 +733,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.4.2;
+				MARKETING_VERSION = "$(SALTY_VERSION)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.inuvro.salty;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -803,7 +852,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "SaltyShareExtension/SaltyShareExtension-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 68;
+				CURRENT_PROJECT_VERSION = "$(SALTY_BUILD)";
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 56L8942MP2;
 				ENABLE_APP_SANDBOX = YES;
@@ -812,7 +861,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SaltyShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Salty Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
@@ -823,7 +872,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.4.2;
+				MARKETING_VERSION = "$(SALTY_VERSION)";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.inuvro.salty-dev.shareext";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -847,7 +896,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "SaltyShareExtension/SaltyShareExtension-iOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 68;
+				CURRENT_PROJECT_VERSION = "$(SALTY_BUILD)";
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 56L8942MP2;
 				ENABLE_APP_SANDBOX = YES;
@@ -856,7 +905,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SaltyShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Salty;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
@@ -867,7 +916,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 3.4.2;
+				MARKETING_VERSION = "$(SALTY_VERSION)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.inuvro.salty.shareext;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

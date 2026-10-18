@@ -21,6 +21,8 @@ Salty registers the `salty://` link scheme, so a recipe page can be sent from a 
 - `salty://import?url=<web address>` opens Web Import on that page. Percent-encode the address if it contains `&` or `#`.
 - `salty://recipe/<id>` shows the recipe with that id, so a recipe can be linked to from notes or other apps.
 
+To get a recipe's link, choose **Copy Private Link** from its context menu (or Edit ▸ Copy Private Link on Mac and iPad). The link is *private* because it only opens in your own library: on your devices, once the recipe has synced to them. To send a recipe to someone else, use Share or Export instead. In the Shortcuts app, Salty's **Open Recipe** action shows a recipe you pick, and a recipe's *Private Link* detail is the same link. On the Mac, Automator can run such a shortcut with its Run Shortcut action.
+
 **iPhone and iPad:** Salty is in the share sheet of Safari, Chrome, Firefox and any other app that shares links. Tap it, and the next time you open Salty, Web Import opens on that page. (Apple doesn't let a share extension open its app. For a one-tap version that switches to Salty immediately, make a shortcut in the Shortcuts app containing Salty's **Import Recipe from Web** action with its Web Page set to *Shortcut Input*, and turn on **Show in Share Sheet** in the shortcut's details.)
 
 **Mac:** choose Salty from Safari's Share button, or from File ▸ Share in Chrome and Firefox, and Web Import opens on the page. Turn the extension on once in System Settings ▸ General ▸ Login Items & Extensions ▸ Sharing. A bookmarklet works in any browser too: add a bookmark whose address is the line below and click it while viewing a recipe page (the browser asks once whether to allow the page to open Salty).

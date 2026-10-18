@@ -192,6 +192,16 @@ struct Menus: Commands {
            .disabled(!serverUse || syncService.isSyncing)
            Divider()
        }
+       // Edit ▸ Copy Private Link, after Copy and Paste -- where OmniFocus keeps "Copy as Link". The
+       // context menu's item, for the selection: one saved recipe (see RecipeSelectionCommands).
+       // Not sheet-guarded like the File items: it opens nothing.
+       CommandGroup(after: .pasteboard) {
+           Divider()
+           Button("Copy Private Link") {
+               selection?.copyPrivateLink()
+           }
+           .disabled(selection?.canCopyPrivateLink != true)
+       }
        // ⌘F, where the Edit menu's Find items belong. No ellipsis: it moves focus to the search
        // field rather than opening a dialog. Disabled without a recipe list to search — which also
        // hands ⌘F back to the standard Find bar in windows that are only text editing.

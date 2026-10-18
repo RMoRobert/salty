@@ -2,6 +2,8 @@
 //  SharedPage.swift
 //  SaltyShareExtension
 //
+//  Created by Robert on 10/16/2026
+//
 //  The web page a host app handed to the share extension.
 //
 

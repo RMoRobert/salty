@@ -754,11 +754,22 @@ don't reach a running app — so everything funnels through one `salty://` entry
   synchronized folder in both targets. The App Group is iOS-only: `Salty/Salty-iOS.entitlements` via
   `CODE_SIGN_ENTITLEMENTS[sdk=iphone*]`, with the id from the `SALTY_APP_GROUP` build setting on both
   targets (`group.com.inuvro.salty-dev` / `group.com.inuvro.salty`) and surfaced to code through the
-  `SaltyAppGroup` Info.plist key. **Bump the extension's Version/Build (General tab) together with the
-  app's**: they are set per target in the pbxproj. A mismatch isn't a rejection -- App Store Connect only
-  sends an ITMS-90473 warning email after the upload -- but the convention is for an appex to carry its
-  app's version. (Project-level `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` would make it one edit, at
-  the cost of bumping in Project ▸ Build Settings instead of the General tab.)
+  `SaltyAppGroup` Info.plist key. **Version and build number live in one place: the project-level
+  user-defined settings `SALTY_VERSION` / `SALTY_BUILD`** (Project ▸ Build Settings ▸ User-Defined, or
+  the two `SALTY_*` lines in each project-level configuration of the pbxproj). The app and the extension
+  set `MARKETING_VERSION = $(SALTY_VERSION)` and `CURRENT_PROJECT_VERSION = $(SALTY_BUILD)`. Note that
+  a target's General tab *resolves* these and shows plain numbers, with nothing to say they are
+  inherited -- bump at the project level, never by typing into a target's General tab (that writes a
+  per-target literal and forks them again; the Build Settings tab is where the `$(…)` is visible). A
+  "Check Version Settings" run-script phase on both targets fails the build with directions the moment a
+  target's resolved `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` differs from `SALTY_VERSION`/`SALTY_BUILD`,
+  so a slip in the General tab is caught at the next build rather than at upload. The point:
+  an appex carries its app's version by convention; a mismatch isn't a rejection, App Store Connect
+  only sends an ITMS-90473 warning email after the upload. The display name uses the same trick:
+  project-level `SALTY_DISPLAY_NAME` ("Salty Dev" in Debug, `Salty` in Release) is what every
+  `INFOPLIST_KEY_CFBundleDisplayName` line in the app and the extension points at, so the Info tab's
+  habit of rewriting that key into both configurations can no longer turn the Release app into
+  "Salty Dev" (it had, for the fourth time, right before this change).
 
 ### Known limits
 - Web Import reloads the page in its own WebView: no shared cookies with the browser, so paywalled or
@@ -773,17 +784,45 @@ don't reach a running app — so everything funnels through one `salty://` entry
 - The responder-chain `UIApplication.open` trick that would let the iOS extension open the app is
   unsupported and may break or be rejected; deliberately not used.
 
-### Next
-1. "Copy Link" on recipes is deliberately *not* built (2026-10-16): a `salty://recipe/<id>` link only
-   resolves in the user's own library, so next to Share it would read as a sharing feature. Precedent
-   (Things "Copy Link", OmniFocus "Copy as Link", 1Password "Copy Private Link" vs. "Share") says: add it
-   when something consumes it (Meal Planner notes, Shortcuts), name the scope, keep it out of Share --
-   or build an `OpenRecipeIntent` with a `RecipeEntity` instead, which is the Apple-idiomatic form.
-2. Importing inside the share extension (JS preprocessing reads the live page's JSON-LD and writes a
-   `.saltyRecipe` into the inbox) gets past login walls without opening the app -- the Paprika/Mela
-   model. Needs SaltyCore in the extension and an inbox import path in the app.
-3. Universal Links only if a public domain appears. The KMP and Uno clients should register the same
-   `salty://` grammar (Android intent filter, Windows protocol registration).
+### Recipe links -- Copy Private Link and Open Recipe (2026-10-17)
+Earlier (2026-10-16) "Copy Link" was held back: a `salty://recipe/<id>` link only resolves in the
+user's own library, so next to Share it would read as a sharing feature. Built once the name says so
+and Shortcuts consumes it -- 1Password's "Copy Private Link" vs. "Share" is the model.
+- **Copy Private Link** (`RecipeLinkPasteboard`): in the recipe context menu with Get Info (not with
+  Share/Export), and Edit ▸ Copy Private Link after the pasteboard group (OmniFocus keeps "Copy as
+  Link" there), enabled for exactly one selected, saved recipe via `RecipeSelectionCommands`. Writes
+  the link as both URL and plain text. No keyboard shortcut yet.
+- **Open Recipe** (`OpenRecipeIntent`, an `OpenIntent`) over **`RecipeEntity`** (`Salty/Intents/`):
+  properties Name, Private Link, Favorite, Want to Make; the picker shows the thumbnail and the first
+  line of the summary. `RecipeEntityQuery` (an `EntityStringQuery`) reads through `RecipeEntityLookup`:
+  ids in the order asked, name search with `localizedStandardContains` (case- and
+  diacritic-insensitive, unlike the list's `LIKE`), suggestions = favorites by name then most recently
+  modified, 50 at most. `perform()` (in the app's process, after the system has brought it forward)
+  leaves `.recipe(id:)` in `SaltyLinkInbox`; the frontmost `MainView` takes it and runs the same
+  `open(_:)` as `onOpenURL`, so a pasted link and the action share one handler and one "isn't in this
+  library" alert. Returning `OpenURLIntent` on the link does NOT work: Shortcuts fails the action with
+  "The provided URL scheme `salty` is unsupported; launch is prohibited" (LNURLLaunchRequestErrorDomain
+  1, iOS 27 simulator, 2026-10-17). `URLRepresentableIntent` would need no `perform()`, but it takes
+  universal links only. Verified end to end in Shortcuts on the iOS simulator (picker lists library
+  recipes with thumbnails; running it shows the recipe).
+- **Import Recipe from Web had the same bug, fixed the same way.** `ImportRecipeFromWebIntent`
+  returned `OpenURLIntent` on its `salty://import` link and failed with the same error. That is the
+  route the README gives for a one-tap iOS share-sheet shortcut, so it was broken since it shipped.
+  It now opens the app (`openAppWhenRun`, plus `supportedModes = .foreground` on OS 26, where
+  `openAppWhenRun` is deprecated) and leaves the link in `SaltyLinkInbox`. Verified in Shortcuts on the
+  iOS simulator: Web Import opened on the page and ran its scan. Not tried from Safari's share sheet
+  itself, nor on the Mac.
+- Not done: Spotlight (`IndexedEntity` + `CSSearchableIndex`; the `OpenIntent` is already the piece it
+  needs), an `EntityPropertyQuery` for Shortcuts' "Find Recipes where…", App Shortcuts phrases.
+
+### Considered and not planned
+- Importing inside the share extension (Safari's JS preprocessing reads the live page's JSON-LD, so
+  paywalled/signed-in pages import without a login wall). Judged overkill on 2026-10-17: the current
+  reload-in-Web-Import behavior is fine. If it comes back, send the JSON-LD through the App Group inbox
+  and let the app scan it with `SchemaOrgRecipeJSONLDImporter`, rather than putting SaltyCore (and its
+  database rules) in the extension.
+- Universal Links only if a public domain appears. Registering the same `salty://` grammar in the KMP
+  and Uno clients (Android intent filter, Windows protocol registration) is set aside for now.
 
 ---
 

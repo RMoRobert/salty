@@ -859,7 +859,7 @@ private struct RecipeListColumnView: View {
         #if !os(macOS)
         .refreshable { await ManualSyncRunner.shared.sync() }
         #endif
-        // The selection-bound menu commands (Last Made, Get Info, Open in New Window), scene-scoped
+        // The selection-bound menu commands (Last Made, Get Info, Copy Private Link, Open in New Window), scene-scoped
         // like Find above so they act on this window's selection and no other's.
         .focusedSceneValue(\.recipeSelectionCommands, recipeSelectionCommands)
     }
@@ -872,6 +872,9 @@ private struct RecipeListColumnView: View {
         #else
         let openInNewWindows: (@MainActor () -> Void)? = nil
         #endif
+        // An unsaved new recipe has no link yet: nothing would open it.
+        let canCopyPrivateLink = viewModel.selectedRecipeIDs.count == 1
+            && !viewModel.isDraftRecipe(viewModel.selectedRecipeIDs.first)
         return RecipeSelectionCommands(
             selectedRecipeCount: viewModel.selectedRecipeIDs.count,
             lastPreparedSummary: viewModel.lastPreparedSummaryForSelection,
@@ -898,6 +901,11 @@ private struct RecipeListColumnView: View {
                 if let recipeId = viewModel.selectedRecipeIDs.first {
                     recipeIDForInspector = recipeId
                 }
+            },
+            canCopyPrivateLink: canCopyPrivateLink,
+            copyPrivateLink: {
+                guard canCopyPrivateLink, let recipeId = viewModel.selectedRecipeIDs.first else { return }
+                RecipeLinkPasteboard.copyPrivateLink(forRecipeId: recipeId)
             },
             openInNewWindows: openInNewWindows
         )
@@ -1021,6 +1029,10 @@ private struct RecipeListColumnView: View {
 
         lastMadeMenu(for: [recipe.id])
 
+        // With Get Info, not beside Share: the link only opens in this library (see RecipeLinkPasteboard).
+        Button("Copy Private Link", systemImage: "link") {
+            RecipeLinkPasteboard.copyPrivateLink(forRecipeId: recipe.id)
+        }
         Button("Get Info", systemImage: "info.circle") {
             recipeIDForInspector = recipe.id
         }

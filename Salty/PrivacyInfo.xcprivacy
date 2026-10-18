@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Privacy manifest for the Salty app. Salty collects nothing and tracks nothing. The "required
+	  reason" APIs it touches:
+	    - UserDefaults: its own preferences (@AppStorage / UserDefaults.standard), reason CA92.1, and the
+	      App Group inbox it shares with SaltyShareExtension (ImportInbox), reason 1C8F.1.
+	    - File timestamps: creation dates of its own database backups (DatabaseBackupManager), reason
+	      C617.1 for files inside the app container and 3B52.1 for a library folder the user chose.
+	  SaltyShareExtension carries its own manifest. macOS is not scanned for this; the file is for the
+	  iOS/iPadOS uploads.
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+				<string>1C8F.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+				<string>3B52.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
