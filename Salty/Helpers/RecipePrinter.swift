@@ -318,8 +318,9 @@ final class RecipePrinter: NSObject, WKNavigationDelegate {
             }
             self?.finish()
         }
-        if UIDevice.current.userInterfaceIdiom == .pad, let host = hostView {
-            // iPad shows the print sheet as a popover anchored to a rect; the phone form is modal.
+        if let host = hostView, host.traitCollection.horizontalSizeClass == .regular {
+            // At regular width the print sheet is a popover anchored to a rect; at compact width
+            // (iPhone or a narrow window) it's modal. Use host traits and not device idiom to determine.
             let anchor = CGRect(x: host.bounds.midX, y: host.bounds.midY, width: 1, height: 1)
             controller.present(from: anchor, in: host, animated: true, completionHandler: completion)
         } else {

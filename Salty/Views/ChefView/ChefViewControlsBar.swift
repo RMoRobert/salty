@@ -24,8 +24,8 @@ struct ChefViewControlsBar: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
-    /// An iPhone bar can't carry two titled buttons alongside the progress. The chevrons drop their
-    /// titles there — still the biggest targets in the bar, and still labelled for VoiceOver.
+    /// A compact-width bar can't carry two titled buttons alongside the progress. The chevrons drop
+    /// their titles there. Still the biggest targets in the bar, and still labeled for VoiceOver.
     private var isCompact: Bool {
         #if os(macOS)
         false

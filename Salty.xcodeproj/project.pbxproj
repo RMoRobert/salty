@@ -215,6 +215,7 @@
 				D47F8FDC2DF35EB300A64304 /* Frameworks */,
 				D47F8FDD2DF35EB300A64304 /* Resources */,
 				D4A5E00E2F1000000000B00E /* Embed Foundation Extensions */,
+				D4A5E0122F1000000000B012 /* Check Share Extension Version */,
 			);
 			buildRules = (
 			);
@@ -440,6 +441,26 @@
 			shellPath = /bin/sh;
 			shellScript = "# Version and build live in the project-level SALTY_VERSION / SALTY_BUILD settings (Project > Build Settings > User-Defined).\n# This prevents a target carrying its own number being edited (on target's General tab) and drifting from other.\nif [ \"${MARKETING_VERSION}\" != \"${SALTY_VERSION}\" ] || [ \"${CURRENT_PROJECT_VERSION}\" != \"${SALTY_BUILD}\" ]; then\n  echo \"error: ${TARGET_NAME} has Version/Build (${MARKETING_VERSION} / ${CURRENT_PROJECT_VERSION}) set but project variables say ${SALTY_VERSION} / ${SALTY_BUILD}. In this target's General tab set Version to \\$(SALTY_VERSION) and Build to \\$(SALTY_BUILD); bump SALTY_VERSION/SALTY_BUILD in project's Build Settings (User-Defined) instead.\"\n  exit 1\nfi\n";
 		};
+		D4A5E0122F1000000000B012 /* Check Share Extension Version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(PLUGINS_FOLDER_PATH)/SaltyShareExtension.appex/$(BUNDLE_CONTENTS_FOLDER_PATH)Info.plist",
+			);
+			name = "Check Share Extension Version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# An extension must carry its app's version and build. Both targets take them from the project's SALTY_VERSION /\n# SALTY_BUILD, but a copy set on one target (Build Settings edited with that target selected instead of the project)\n# passes \"Check Version Settings\" while splitting the two. So compare the app with the extension it has just embedded.\n# The input is the embedded copy inside this app's bundle, a real file in every kind of build. The extension's own product\n# path is a symlink in archives, and the script sandbox won't read through it.\next_version=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - \"${SCRIPT_INPUT_FILE_0}\") || { echo \"error: couldn't read the share extension's version from ${SCRIPT_INPUT_FILE_0}\"; exit 1; }\next_build=$(/usr/bin/plutil -extract CFBundleVersion raw -o - \"${SCRIPT_INPUT_FILE_0}\") || { echo \"error: couldn't read the share extension's build from ${SCRIPT_INPUT_FILE_0}\"; exit 1; }\nif [ \"${ext_version}\" != \"${MARKETING_VERSION}\" ] || [ \"${ext_build}\" != \"${CURRENT_PROJECT_VERSION}\" ]; then\n  echo \"error: ${TARGET_NAME} is Version/Build ${MARKETING_VERSION} / ${CURRENT_PROJECT_VERSION} but its share extension built as ${ext_version} / ${ext_build}. One target has its own SALTY_VERSION or SALTY_BUILD: delete it from that target's Build Settings (User-Defined), then set the value with the PROJECT selected.\"\n  exit 1\nfi\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -550,8 +571,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SALTY_BUILD = 69;
-				SALTY_DISPLAY_NAME = "Salty Dev";
+				SALTY_BUILD = 70;
 				SALTY_VERSION = 3.4.3;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
@@ -610,8 +630,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SALTY_BUILD = 69;
-				SALTY_DISPLAY_NAME = Salty;
+				SALTY_BUILD = 70;
 				SALTY_VERSION = 3.4.3;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -647,7 +666,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = Salty;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -713,7 +732,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Salty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = Salty;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -861,7 +880,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SaltyShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = Salty;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
@@ -905,7 +924,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SaltyShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(SALTY_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = Salty;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
